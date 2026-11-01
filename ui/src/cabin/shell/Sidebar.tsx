@@ -1,6 +1,6 @@
 import { formatGameTime } from '../../shared/format'
 import { useAppIcon, useScreenProfile } from '../state/hooks'
-import { type AppId, APPS } from '../state/apps'
+import { type AppId, APPS, isReleasedApp } from '../state/apps'
 import { LAUNCH_STYLE, useCarriesLaunch } from '../state/launch'
 import { homeButtonTarget } from '../state/navigation'
 import { go, useCabin, useLive } from '../state/store'
@@ -29,9 +29,13 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="recent" aria-label="Recent apps">
-        {recents.slice(0, shown).map((app) => (
-          <RecentApp key={app} app={app} current={route.kind === 'app' && route.app === app} />
-        ))}
+        {/* Those this screen has (the phone's has no YouTube: state/apps.ts). */}
+        {recents
+          .filter(isReleasedApp)
+          .slice(0, shown)
+          .map((app) => (
+            <RecentApp key={app} app={app} current={route.kind === 'app' && route.app === app} />
+          ))}
       </nav>
       <div className="sidebar-actions">
         <button

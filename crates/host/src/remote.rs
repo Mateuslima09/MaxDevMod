@@ -4,10 +4,13 @@
 //! page does through WebView2's (the phone page puts a stand-in for `chrome.webview` over it).
 //!
 //! The phone hears what the cab hears ([`Remote::broadcast`], every message the host posts to the cab page),
-//! less what is the cab's alone (its screen, cursor, keyboard and keybinds: [`CAB_ONLY`]) and answers to the cab's
-//! own questions. It may say little ([`Remote::take`]): that it's ready (the host sends the state again, as for
-//! the cab page loading), and the music players' playback controls ([`PLAYBACK`]); nothing that signs in, asks
-//! questions or places a player on the cab's screen.
+//! less what is the cab's alone (its screen, cursor, keyboard and keybinds: [`CAB_ONLY`]). It's the cab's panel
+//! in the player's hand (owner 2026-11-01: "what I change on the phone changes on the truck's panel"), so it may
+//! say what the cab's pages say to use it ([`Remote::take`]): that it's ready (the host sends the state again,
+//! as for the cab page loading), the music apps' questions and controls ([`COMMANDS`]), the Maps app's route
+//! requests, and a volume it set, for the cab to show. Not signing in or out, nor YouTube's videos (the phone has
+//! no YouTube app), nor placing a player on the cab's screen. Its questions' ids are its own (`firstRequestId` in
+//! ui/src/shared/host.ts), so each page takes only the answers to its own.
 //!
 //! Only on the PC's network, and only with the key in the phone page's address (the companion's QR code): the
 //! WebSocket is refused without it. The key is kept in WestPlay's data folder, so a phone that saved the page
@@ -29,29 +32,20 @@ use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 pub const PORT: u16 = 47800;
 
 /// Host messages the phone isn't sent: the cab's screen, its cursor, its keyboard and the player's keybinds (the
-/// cab page acts on those; the phone acting too would act twice), the companion's switch, the Equalizer's
-/// spectrum, and answers to the cab's own questions (their ids are the cab's).
-const CAB_ONLY: &[&str] = &[
-    "screen",
-    "cursor",
-    "typed",
-    "typingState",
-    "keybind",
-    "westplay",
-    "spectrum",
-    "routeAnswer",
-    "routes",
-    "followed",
-    "detours",
-    "youtubeAnswer",
-    "spotifyAnswer",
-    "appleMusicAnswer",
-    "youtubeMusicAnswer",
-];
+/// cab page acts on those; the phone acting too would act twice), the companion's switch, and the Equalizer's
+/// spectrum.
+const CAB_ONLY: &[&str] = &["screen", "cursor", "typed", "typingState", "keybind", "westplay", "spectrum"];
 
-/// The music players the phone may control, and the playback commands it may give them.
-const PLAYERS: &[&str] = &["spotify", "appleMusic", "youtubeMusic", "youtube"];
-const PLAYBACK: &[&str] = &["play", "pause", "next", "previous", "jump", "volume", "seek", "shuffle", "repeat"];
+/// The music players' commands the phone may give: their apps' questions and controls, their libraries kept.
+const MUSIC_PLAYERS: &[&str] = &["spotify", "appleMusic", "youtubeMusic"];
+const COMMANDS: &[&str] = &[
+    "start", "ask", "play", "pause", "next", "previous", "jump", "seek", "volume", "shuffle", "repeat", "save",
+    "favorite", "add", "like", "queue",
+];
+/// YouTube's, whose videos the phone doesn't show: what plays, paused or played on, and its volume.
+const YOUTUBE: &[&str] = &["play", "pause", "seek", "volume"];
+/// The Maps app's route requests, and the volume the phone set (for the cab to show).
+const PAGE_MESSAGES: &[&str] = &["ready", "route", "routes", "follow", "detours", "volumeShown"];
 
 /// Messages from the phones not taken yet, at most this many (a phone sending more than the host takes loses
 /// the oldest).
@@ -241,15 +235,15 @@ impl Served {
     }
 }
 
-/// Whether a phone may send this: that it's ready, or a playback command for a music player ([`PLAYBACK`]).
+/// Whether a phone may send this ([`PAGE_MESSAGES`], [`COMMANDS`], [`YOUTUBE`]).
 fn allowed(json: &str) -> bool {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else { return false };
     let kind = value.get("type").and_then(|kind| kind.as_str()).unwrap_or_default();
-    if kind == "ready" {
+    if PAGE_MESSAGES.contains(&kind) {
         return true;
     }
     let action = value.pointer("/command/action").and_then(|action| action.as_str()).unwrap_or_default();
-    PLAYERS.contains(&kind) && PLAYBACK.contains(&action)
+    (MUSIC_PLAYERS.contains(&kind) && COMMANDS.contains(&action)) || (kind == "youtube" && YOUTUBE.contains(&action))
 }
 
 /// A host message's `type`, read without parsing the rest (`""`: none found).
@@ -340,15 +334,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_phone_may_say_its_ready_and_control_playback_only() {
+    fn a_phone_may_use_the_music_apps_and_maps_but_not_sign_in_nor_youtubes_videos() {
         assert!(allowed(r#"{"type":"ready"}"#));
         assert!(allowed(r#"{"type":"spotify","command":{"action":"next"}}"#));
         assert!(allowed(r#"{"type":"youtubeMusic","command":{"action":"volume","percent":40}}"#));
+        assert!(allowed(r#"{"type":"appleMusic","command":{"action":"ask","id":1000000001}}"#));
+        assert!(allowed(r#"{"type":"route","id":1000000001,"action":"end"}"#));
+        assert!(allowed(r#"{"type":"volumeShown","volume":0.4}"#));
+        assert!(allowed(r#"{"type":"youtube","command":{"action":"pause"}}"#));
         assert!(!allowed(r#"{"type":"spotify","command":{"action":"signOut"}}"#));
-        assert!(!allowed(r#"{"type":"spotify","command":{"action":"show","x":0}}"#));
-        assert!(!allowed(r#"{"type":"youtube","command":{"action":"ask","id":1}}"#));
-        assert!(!allowed(r#"{"type":"route","id":1,"action":"end"}"#));
+        assert!(!allowed(r#"{"type":"youtubeMusic","command":{"action":"show","x":0}}"#));
+        assert!(!allowed(r#"{"type":"youtube","command":{"action":"load","video":"x"}}"#));
+        assert!(!allowed(r#"{"type":"youtube","command":{"action":"signIn"}}"#));
         assert!(!allowed(r#"{"type":"wallpaper","id":"x"}"#));
+        assert!(!allowed(r#"{"type":"typing","selection":1}"#));
         assert!(!allowed("not json"));
     }
 

@@ -1,4 +1,11 @@
-import { isInHost, type PlannedRoute, postToHost, type RouteAction, type RouteAnswer } from '../../shared/host'
+import {
+  firstRequestId,
+  isInHost,
+  type PlannedRoute,
+  postToHost,
+  type RouteAction,
+  type RouteAnswer,
+} from '../../shared/host'
 
 /**
  * Changes the game's own GPS route (Maps' search): the host passes the request to the game plugin, which
@@ -6,7 +13,7 @@ import { isInHost, type PlannedRoute, postToHost, type RouteAction, type RouteAn
  * the game's answer comes back. Outside the host (a browser preview) there is no game: `noAnswer`.
  */
 
-let nextId = 1
+let nextId = firstRequestId()
 const waiting = new Map<number, (answer: RouteAnswer) => void>()
 
 /** Asks the game to change its route: at `node` (a map node's uid, hex) to go there or add a stop. */

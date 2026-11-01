@@ -54,6 +54,7 @@ import type { OemMode } from './oem'
 import { INITIAL_POWER, power, type PowerEvent, type PowerState } from './power'
 import { isScreenLayoutId, type ScreenLayoutId } from './screen'
 import { DEFAULT_TEXT_SIZE, STEPS_ADDED_BELOW, toTextSize } from './textSize'
+import { showVolume } from '../shell/volumeShown'
 
 /** The Dashboard's widgets the player can turn off (turn-by-turn always shows while there's a route). */
 export type DashboardWidget = 'nowPlaying' | 'destination' | 'weather'
@@ -488,6 +489,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'menuGone':
         useLive.setState({ menuGone: message.gone })
+        break
+      case 'volumeShown':
+        showVolume(message.volume)
         break
       case 'keybind':
         useLive.setState((live) => ({ keybind: { action: message.action, count: (live.keybind?.count ?? 0) + 1 } }))

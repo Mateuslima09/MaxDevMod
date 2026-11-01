@@ -41,7 +41,13 @@ export function isAppId(value: unknown): value is AppId {
 
 /** Not in this release: Podcasts, Phone and Messages come in the one after 1.0 (PLAN.md). Their ids stay (their
  * icons, players' icon sets), but they're not on Home, and a saved screen or recent can't open them. */
-const NEXT_RELEASE: ReadonlySet<AppId> = new Set<AppId>(['podcasts', 'phone', 'messages'])
+const NEXT_RELEASE: ReadonlySet<AppId> = new Set<AppId>([
+  'podcasts',
+  'phone',
+  'messages',
+  // The phone page has no YouTube: its videos show only in the cab's own frames (crates/host remote.rs).
+  ...(typeof window !== 'undefined' && window.westplayPhone ? (['youtube'] as const) : []),
+])
 
 /** The apps this release has, in Home grid order. */
 export const RELEASED_APP_IDS: readonly AppId[] = APP_IDS.filter((id) => !NEXT_RELEASE.has(id))

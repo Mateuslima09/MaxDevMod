@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { firstRequestId } from '../../shared/host'
 
 /**
  * A music app's questions to its web player (Apple Music's, Spotify's, YouTube Music's): each asked of the host
@@ -34,7 +35,7 @@ export function createAsking<Q extends { ask: string }, A extends Record<Q['ask'
 ): Asking<Q, A> {
   const answers = new Map<string, unknown>()
   const waiting = new Map<number, { ask: Q['ask']; resolve(answer: unknown): void; reject(): void }>()
-  let nextQuestion = 1
+  let nextQuestion = firstRequestId()
 
   const askHost = (question: Q) => {
     const id = nextQuestion++

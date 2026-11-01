@@ -140,7 +140,7 @@ const SWITCH_MS = 420
  * launches are animated by View Transitions (state/launch.ts). A press during a switch starts the next one
  * from wherever things are.
  */
-function Screens({ route }: { route: Route }) {
+export function Screens({ route }: { route: Route }) {
   const [shown, setShown] = useState(route)
   const [leaving, setLeaving] = useState<{ route: Route; to: 'home' | 'dashboard' } | null>(null)
 

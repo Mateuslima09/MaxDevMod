@@ -1,5 +1,4 @@
-/* The phone page (PhoneApp.tsx): the cab's Dashboard in a phone's hand. Upright, the map on top and the widgets
-   under it; turned sideways, as in the cab. */
+/* The phone page (PhoneApp.tsx): upright, the cab's Dashboard in a phone's hand; sideways, the cab's panel. */
 
 html,
 body,
@@ -57,7 +56,8 @@ body,
   background: #30d158;
 }
 
-.phone .screen.dashboard {
+/* Upright: the Dashboard alone, the map on top and the widgets under it. */
+.phone-upright .screen.dashboard {
   position: relative;
   inset: auto;
   flex: 1;
@@ -66,25 +66,14 @@ body,
   padding: var(--edge);
 }
 
-.phone .screen.dashboard > .map-tile {
+.phone-upright .screen.dashboard > .map-tile {
   flex: 1 1 55%;
   min-height: 0;
 }
 
-.phone .widgets {
+.phone-upright .widgets {
   width: auto;
   flex: 0 0 42%;
-}
-
-@media (orientation: landscape) {
-  .phone .screen.dashboard {
-    flex-direction: row;
-  }
-
-  .phone .widgets {
-    width: 38%;
-    flex: none;
-  }
 }
 
 /* The volume of what plays (PhoneVolume.tsx): a slider, as wide as the bar leaves it. */
@@ -113,4 +102,29 @@ body,
   border-radius: 50%;
   background: var(--glass);
   color: var(--text);
+}
+
+/* Sideways: the cab's panel (PhonePanel.tsx), scaled to the phone's width; its lists follow a finger through the
+   cab's own drag (shell/dragScroll.ts), not the browser's. */
+.phone-sideways {
+  padding: 0;
+  overflow: hidden;
+}
+
+.phone-panel {
+  flex: none;
+  position: relative;
+  touch-action: none;
+}
+
+.phone-link-over {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.7);
+  color: #fff;
 }

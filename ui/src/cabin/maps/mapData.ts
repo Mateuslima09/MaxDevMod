@@ -55,10 +55,11 @@ const useMapFolder = create<{ base: string | null | undefined; built: number | n
   built: null,
 }))
 
-/** In WestPlay, not known until the host says; in a browser, the development map; elsewhere (tests), none. */
+/** In WestPlay (and on the phone), not known until the host says; in a browser, the development map; elsewhere
+ * (tests), none. */
 function firstBase(): string | null | undefined {
   if (typeof window === 'undefined') return null
-  return isInHost() ? undefined : `${location.origin}${DEV_MAP}`
+  return isInHost() || window.westplayPhone ? undefined : `${location.origin}${DEV_MAP}`
 }
 
 /** The host names the map's folder in its maps, and when it was built (`null`: none). */

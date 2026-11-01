@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <title>WestPlay</title>
+    <!-- Before any of the page's code: the code it shares with the cab (in chunks of their own, run first) asks
+         whether it runs on the phone as it loads (src/phone/socket.ts). -->
+    <script>
+      window.westplayPhone = true
+    </script>
   </head>
   <body>
     <div id="root"></div>

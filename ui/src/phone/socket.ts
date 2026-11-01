@@ -69,13 +69,24 @@ export function installPhoneSocket(): boolean {
       removeEventListener: (_type, listener) => listeners.delete(listener),
       postMessage: (message: PageMessage) => {
         const json = JSON.stringify(message)
-        if (socket?.readyState === WebSocket.OPEN) socket.send(json)
-        else if (message.type === 'ready') waiting.push(json)
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(json)
+          // A volume set here shows on the truck's screen too, as a keybind's does (owner 2026-11-01).
+          const volume = volumeSet(message)
+          if (volume !== null) socket.send(JSON.stringify({ type: 'volumeShown', volume } satisfies PageMessage))
+        } else if (message.type === 'ready') waiting.push(json)
       },
     },
   }
   connect()
   return true
+}
+
+/** The volume (0 to 1) a player's command sets, if it's one that sets it. */
+function volumeSet(message: PageMessage): number | null {
+  if (!('command' in message)) return null
+  const command: { action: string; percent?: number } = message.command
+  return command.action === 'volume' && typeof command.percent === 'number' ? command.percent / 100 : null
 }
 
 /** The key: the address's fragment (kept for next time), else the one kept. */

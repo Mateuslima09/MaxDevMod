@@ -4,14 +4,15 @@ import { useLook, useLookChanges } from '../cabin/state/hooks'
 import { connectHost, useLive } from '../cabin/state/store'
 import { type Language, languageOf } from '../cabin/state/strings'
 import { followTimeZone } from '../cabin/state/timeZone'
+import { PhonePanel } from './PhonePanel'
 import { PhoneVolume } from './PhoneVolume'
 import { connection } from './socket'
 
 /**
- * The phone page (owner 2026-11-01): the cab's Dashboard on the player's phone, beside the truck's screen, not
- * instead of it. The map following the truck, what plays with its controls and volume, and the delivery, from
- * the same host messages the cab has (phone/socket.ts). Nothing of the cab's own doing runs here (pausing with
- * the game, the keybinds, one player at a time): the cab does it, once.
+ * The phone page (owner 2026-11-01), beside the truck's screen, not instead of it: held upright, the cab's
+ * Dashboard (the map following the truck, what plays with its controls and volume, the delivery); held sideways,
+ * the cab's whole panel (PhonePanel.tsx). From the same host messages the cab has (phone/socket.ts). Nothing of
+ * the cab's own doing runs here (pausing with the game, the keybinds, one player at a time): the cab does it, once.
  */
 export function PhoneApp({ connects }: { connects: boolean }) {
   useEffect(() => connectHost(), [])
@@ -26,10 +27,22 @@ export function PhoneApp({ connects }: { connects: boolean }) {
   const { appearance } = useLook()
   const connected = useConnected()
   const full = useFullScreen()
+  const sideways = useSideways()
   const words = WORDS[language]
 
+  if (sideways) {
+    return (
+      <main className={`phone phone-sideways appearance-${appearance}`}>
+        <PhonePanel />
+        {(!connects || !connected) && (
+          <span className="phone-link phone-link-over">{!connects ? words.noKey : words.connecting}</span>
+        )}
+      </main>
+    )
+  }
+
   return (
-    <main className={`phone shell appearance-${appearance}`}>
+    <main className={`phone phone-upright shell appearance-${appearance}`}>
       <header className="phone-bar">
         <span className="phone-name">WestPlay</span>
         <span className={`phone-link${connected ? ' on' : ''}`}>
@@ -80,6 +93,18 @@ function useFullScreen(): boolean {
     }
   }, [])
   return full
+}
+
+/** Whether the phone is held sideways (wider than tall). */
+function useSideways(): boolean {
+  return useSyncExternalStore(
+    (changed) => {
+      const query = window.matchMedia('(orientation: landscape)')
+      query.addEventListener('change', changed)
+      return () => query.removeEventListener('change', changed)
+    },
+    () => window.matchMedia('(orientation: landscape)').matches,
+  )
 }
 
 /** Whether the phone is connected to the PC now. */

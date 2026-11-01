@@ -174,6 +174,8 @@ export type HostMessage =
   | { type: 'menuGone'; gone: boolean }
   /** A keybind of the player's (the companion's Controls), pressed in the game. */
   | { type: 'keybind'; action: KeybindAction }
+  /** A volume the player's phone set (0 to 1), for the cab to show as for a keybind (crates/host remote.rs). */
+  | { type: 'volumeShown'; volume: number }
   /** Whether the game runs. As it closes, the host closes the web players; the page powers off and forgets
    * its last telemetry. */
   | { type: 'game'; running: boolean }
@@ -282,6 +284,8 @@ export type PageMessage =
   | { type: 'spectrum'; on: boolean }
   /** Whether what's under the cursor is light: the host draws it dark there. */
   | { type: 'cursorLight'; light: boolean }
+  /** A volume the phone page set (0 to 1): the host has the cab show it (crates/host remote.rs). */
+  | { type: 'volumeShown'; volume: number }
   /** A change to the game's GPS route (Maps' search), at a map node (its uid, hex) for going or adding a
    * stop; the host answers with `routeAnswer` and the same `id`. */
   | { type: 'route'; id: number; action: RouteAction; node?: string }
@@ -995,6 +999,14 @@ declare global {
 /** The cabin page as a live demo in the companion's onboarding (`cabin.html?demo`): never the host's page,
  * even inside a WebView2 (the companion's own). See cabin/demo.ts. */
 export const IS_DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')
+
+/**
+ * The first id of the page's requests to the host (the music apps' questions, the Maps app's routes): the phone
+ * page's from far above the cab's, so the answers each gets, the cab's and the phone's alike, are told apart by id.
+ */
+export function firstRequestId(): number {
+  return typeof window !== 'undefined' && window.westplayPhone ? 1_000_000_000 : 1
+}
 
 /** Whether the page runs inside the WestPlay host (and not in a plain browser preview, nor as the demo). */
 export function isInHost(): boolean {

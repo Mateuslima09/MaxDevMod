@@ -825,6 +825,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 }
                 Some(PageMessage::Spectrum { on }) => spectrum = on,
                 Some(PageMessage::CursorLight { light }) => cursor.set_light(light, Instant::now()),
+                Some(PageMessage::VolumeShown { volume }) => {
+                    let _ = webview.post_json(&format!(r#"{{"type":"volumeShown","volume":{}}}"#, volume.clamp(0.0, 1.0)));
+                }
                 Some(PageMessage::Equalizer { equalizer: curve, custom }) => {
                     let sound = settings::SoundSettings { equalizer: curve.clamped(), custom };
                     equalizer = sound.playing();
@@ -2025,6 +2028,8 @@ enum PageMessage {
     Spectrum { on: bool },
     /// Whether what's under the cursor is light (it's drawn dark there: `cursor`).
     CursorLight { light: bool },
+    /// A volume the player's phone set (remote.rs, 0 to 1): the cab shows it, as for a keybind.
+    VolumeShown { volume: f64 },
     /// A command for YouTube's player (`youtube`): what to play, where it shows, and so on.
     Youtube { command: youtube::Command },
     /// A command for Spotify's web player (`spotify`): its sign-in, a question, its controls.
