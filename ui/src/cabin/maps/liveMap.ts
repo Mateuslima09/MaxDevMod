@@ -75,8 +75,8 @@ import { type Area, type OtherPlayer, trackAt } from './truckersmpFeed'
 // pre-bundled it.
 maplibregl.setWorkerUrl(workerUrl)
 
-/** The driving view's tilt, degrees. */
-const PITCH = 52
+/** The driving view's tilt, degrees: none, the map flat and seen from above (style.ts RAISED_BUILDINGS). */
+const PITCH = 0
 /** The truck sits this far down the map (share of its height above it), leaving the road ahead in view. */
 const PUCK_FROM_TOP = 0.66
 /** How quickly the map turns after the truck (ms): slow enough to feel calm, quick enough to keep up. */
@@ -237,7 +237,9 @@ function create(data: MapData, appearance: Appearance): LiveMap {
     pitchWithRotate: false,
     attributionControl: false,
     fadeDuration: 0,
-    canvasContextAttributes: { antialias: true },
+    // No multisampling: on a flat map its lines are as clear without, and the game needs the GPU (style.ts
+    // RAISED_BUILDINGS).
+    canvasContextAttributes: { antialias: false },
   })
 
   // Added to the map when in range and clear of more important names (showLabels). Each says what

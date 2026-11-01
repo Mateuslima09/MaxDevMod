@@ -28,6 +28,12 @@ export const MAP_SOURCE = 'westplay-map'
 /** The raised buildings' layer (`building` in the tiles: crates/mapdata buildings.rs). */
 export const BUILDING_LAYER = 'building'
 /**
+ * Whether the buildings are raised. Not in this build: the map is flat, seen from above, its buildings their flat
+ * shapes on the ground; the raised ones redrew every building in view each frame, on a GPU the game is short of
+ * (owner 2026-11-01: "make the map flat", an RTX 2050 at 99%).
+ */
+const RAISED_BUILDINGS = false
+/**
  * The light on the raised buildings: MapLibre's own direction, at 0.15 of full strength. At its default (0.5)
  * the walls came out near black (#656563 under #e9eae3 roofs, measured in the cab); at 0.15 they're a few steps
  * darker than the roofs (#cdcdc7 and #babab5 under #e9e9e2), as Apple's are.
@@ -683,7 +689,7 @@ export function mapStyle(appearance: Appearance, data: MapData | null): StyleSpe
       roads.rail,
       ...ground,
       ...areaLayers(palette, true),
-      buildingLayer(palette),
+      ...(RAISED_BUILDINGS ? [buildingLayer(palette)] : []),
       ...routeLayers(palette, 0),
       // Each raised level's roads over everything on the levels below, and the route on them over those.
       ...raised.flatMap((level, index) => [...level, ...routeLayers(palette, index + 1)]),

@@ -1,5 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { DEMO_CHANNEL, type DemoCommand, type DemoReport } from '../../cabin/demo'
+import { IN_APP } from '../bridge'
 
 /** A box on the screen, in its own pixels (1280x720). */
 export interface Rect {
@@ -9,9 +10,14 @@ export interface Rect {
   height: number
 }
 
+/** Whether the window has Windows' focus, as Windows last said (in the app; a browser's page has only its own). The
+ * page's own focus didn't always go when the game took Windows': the room animated on behind the game, a GPU's and a
+ * processor thread's worth (a player's log, 2026-11-01: the companion's share 1.3 of 16 threads). */
+let windowFocused = true
+
 /** Whether the companion's window is in front now: focused, and not minimised. */
 function inFront(): boolean {
-  return document.hasFocus() && document.visibilityState === 'visible'
+  return windowFocused && document.hasFocus() && document.visibilityState === 'visible'
 }
 
 /** The live WestPlay in the screen (cabin.html in demo mode, cabin/demo.ts): commands to it, its icons'
@@ -62,7 +68,24 @@ export function useDemo(): {
     window.addEventListener('focus', follow)
     window.addEventListener('blur', follow)
     document.addEventListener('visibilitychange', follow)
+    let stopWindow: (() => void) | undefined
+    let stopped = false
+    if (IN_APP) {
+      void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
+        const current = getCurrentWindow()
+        windowFocused = await current.isFocused()
+        follow()
+        const stop = await current.onFocusChanged(({ payload }) => {
+          windowFocused = payload
+          follow()
+        })
+        if (stopped) stop()
+        else stopWindow = stop
+      })
+    }
     return () => {
+      stopped = true
+      stopWindow?.()
       window.removeEventListener('focus', follow)
       window.removeEventListener('blur', follow)
       document.removeEventListener('visibilitychange', follow)
