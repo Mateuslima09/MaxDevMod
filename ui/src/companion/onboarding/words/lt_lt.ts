@@ -22,7 +22,8 @@ export const words: Words = {
     titleMissing: 'Kur tavo žaidimas?',
     found: 'WestPlay rado American Truck Simulator šiame kompiuteryje.',
     foundMany: 'American Truck Simulator įdiegtas keliose vietose. Pasirink tą, kurį žaidi.',
-    missing: 'WestPlay nerado American Truck Simulator. Pasirink aplanką, į kurį jį įdiegei, – tą, kuriame yra base.scs.',
+    missing:
+      'WestPlay nerado American Truck Simulator. Pasirink aplanką, į kurį jį įdiegei, – tą, kuriame yra base.scs.',
     chooseAnother: 'Naudoti kitą aplanką…',
     chooseFolder: 'Pasirinkti aplanką…',
     picker: 'Pasirink American Truck Simulator aplanką',

@@ -23,6 +23,7 @@ mod planner;
 mod play_log;
 mod player;
 mod pointer;
+mod remote;
 pub mod route;
 mod route_change;
 pub mod settings;
@@ -88,6 +89,10 @@ pub struct Status {
     pub adapters: Vec<graphics::Adapter>,
     pub frames_per_second: u64,
     pub dropped_total: u64,
+    /// The phone page's address, with its key, and it as a QR code (an SVG image), for the companion to show
+    /// (remote.rs); `None` when it isn't served.
+    pub phone_url: Option<String>,
+    pub phone_qr: Option<String>,
     pub game_connected: bool,
     pub screen_drawing: bool,
     /// Whether the truck the player is in is one WestPlay shows in, as the plugin last saw (`None`: not known yet,
@@ -277,11 +282,23 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut customize_posted: Option<u64> = None;
     let mut customize_message: Option<String> = None;
     let map_watch = maps::MapWatch::start(maps_dir.clone(), config.game.clone());
+    // The player's phone as a second screen (remote.rs): told what the cab is, and its playback controls taken.
+    let ui_root = match &config.content {
+        Content::Folder { root, .. } => Some(root.clone()),
+        _ => None,
+    };
+    let remote = std::rc::Rc::new(remote::Remote::start(ui_root, maps_dir.clone(), &config.data_dir));
+    {
+        let remote = remote.clone();
+        webview.set_mirror(move |json| remote.broadcast(json));
+    }
     let mut map_shown: (Option<String>, Option<u64>) = (None, None);
     let mut status = Status {
         webview_version: webview.version.clone(),
         cab_adapter: cab_gpu.and_then(|luid| graphics::name_of(luid, &adapters)),
         adapters: adapters.clone(),
+        phone_url: remote.url.clone(),
+        phone_qr: remote.qr.clone(),
         ..Default::default()
     };
 
@@ -736,7 +753,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             part_speakers = Some(found);
         }
 
-        for message in webview.take_page_messages() {
+        for message in webview.take_page_messages().into_iter().chain(remote.take()) {
             match parse_page_message(&message) {
                 // The page announces itself when it (re)loads; it missed everything sent before, so send the
                 // current state again (some of it is otherwise only sent when it changes).

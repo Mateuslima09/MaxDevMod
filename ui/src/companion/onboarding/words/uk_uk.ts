@@ -22,7 +22,8 @@ export const words: Words = {
     titleMissing: 'Де ваша гра?',
     found: 'WestPlay знайшов American Truck Simulator на цьому комп’ютері.',
     foundMany: 'American Truck Simulator встановлено в кількох місцях. Виберіть ту, у яку ви граєте.',
-    missing: 'WestPlay не знайшов American Truck Simulator. Виберіть теку, у яку ви встановили гру, — ту, де є base.scs.',
+    missing:
+      'WestPlay не знайшов American Truck Simulator. Виберіть теку, у яку ви встановили гру, — ту, де є base.scs.',
     chooseAnother: 'Вибрати іншу теку…',
     chooseFolder: 'Вибрати теку…',
     picker: 'Виберіть теку American Truck Simulator',

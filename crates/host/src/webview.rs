@@ -200,6 +200,8 @@ pub struct OffscreenWebView {
     /// The worst process failure since last taken (`take_failure`).
     failure: Rc<Cell<Option<Failure>>>,
     pub version: String,
+    /// Also given every message posted to the page (`set_mirror`): the cab's, for the player's phones.
+    mirror: RefCell<Option<Box<dyn Fn(&str)>>>,
 }
 
 impl OffscreenWebView {
@@ -314,7 +316,18 @@ impl OffscreenWebView {
         // SAFETY: the handler and the token are locals for the call; WebView2 keeps its own reference to the handler.
         unsafe { webview.add_ProcessFailed(&handler, &mut token)? };
 
-        Ok(Self { environment, root, host, composition, controller, webview, page_messages, failure, version })
+        Ok(Self {
+            environment,
+            root,
+            host,
+            composition,
+            controller,
+            webview,
+            page_messages,
+            failure,
+            version,
+            mirror: RefCell::new(None),
+        })
     }
 
     /// The worst WebView2 process failure since the last call, if any.
@@ -627,8 +640,16 @@ impl OffscreenWebView {
     }
 
     pub fn post_json(&self, json: &str) -> windows::core::Result<()> {
+        if let Some(mirror) = self.mirror.borrow().as_ref() {
+            mirror(json);
+        }
         // SAFETY: the WebView is alive as long as `self`; the message lives through the call.
         unsafe { self.webview.PostWebMessageAsJson(&HSTRING::from(json)) }
+    }
+
+    /// Gives `mirror` every message posted to the page from now on, as well as the page.
+    pub fn set_mirror(&self, mirror: impl Fn(&str) + 'static) {
+        *self.mirror.borrow_mut() = Some(Box::new(mirror));
     }
 
     /// Mouse input for the page, at `point` in page pixels (`data`: wheel delta, or which X button).

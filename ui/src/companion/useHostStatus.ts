@@ -38,6 +38,10 @@ export interface HostStatus {
    * `null`: none yet). */
   mapFolder: string | null
   mapBuilt: number | null
+  /** The phone page's address, with its key, and it as a QR code (an SVG image), for the player's phone (crates/host
+   * remote.rs); `null` when it isn't served. */
+  phoneUrl: string | null
+  phoneQr: string | null
   /** Every profile's map (mirrors `westplay_host::maps::ProfileMap`): WestPlay makes one for each, one by
    * one, the profile played first. */
   profileMaps: ProfileMap[]

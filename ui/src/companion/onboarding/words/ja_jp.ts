@@ -28,7 +28,8 @@ export const words: Words = {
     chooseFolder: 'フォルダを選ぶ…',
     picker: 'American Truck Simulator のフォルダを選んでください',
     bannerMissing: '続けるにはフォルダを選んでください',
-    notTheGame: 'このフォルダには American Truck Simulator がありません。base.scs が入っているフォルダを選んでください。',
+    notTheGame:
+      'このフォルダには American Truck Simulator がありません。base.scs が入っているフォルダを選んでください。',
     gameGone: 'ゲームはもうこのフォルダにありません。',
     closeToGoOn: {
       title: 'ゲームを終了してください。',

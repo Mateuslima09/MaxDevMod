@@ -139,6 +139,8 @@ function status(): HostStatus {
     map,
     mapFolder: null,
     mapBuilt: map.state === 'ready' ? Math.floor(Date.now() / 1000) - 3 * 86_400 : null,
+    phoneUrl: null,
+    phoneQr: null,
     // The played profile's map, then the other profile's: made after it, or waiting its turn.
     profileMaps: [
       {

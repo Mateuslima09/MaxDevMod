@@ -22,7 +22,8 @@ export const words: Words = {
     titleMissing: 'Hvor er dit spil?',
     found: 'WestPlay fandt American Truck Simulator på denne pc.',
     foundMany: 'American Truck Simulator er installeret flere steder. Vælg det, du spiller.',
-    missing: 'WestPlay kunne ikke finde American Truck Simulator. Vælg mappen, du installerede det i – den med base.scs.',
+    missing:
+      'WestPlay kunne ikke finde American Truck Simulator. Vælg mappen, du installerede det i – den med base.scs.',
     chooseAnother: 'Brug en anden mappe …',
     chooseFolder: 'Vælg mappe …',
     picker: 'Vælg din mappe til American Truck Simulator',

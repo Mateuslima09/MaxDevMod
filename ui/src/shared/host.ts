@@ -987,6 +987,8 @@ interface WebViewBridge {
 declare global {
   interface Window {
     chrome?: { webview?: WebViewBridge }
+    /** The phone page (phone/socket.ts): its host is the PC it was served from, not WebView2's. */
+    westplayPhone?: boolean
   }
 }
 

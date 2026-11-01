@@ -9,7 +9,7 @@ import { type PageProps, screenState } from './page'
  * connection from WestPlay to the game to the screen. On the room's screen, Home, and WestPlay saying the
  * same in a banner.
  */
-export function ScreenPage({ status, settings, cw }: PageProps) {
+export function ScreenPage({ status, settings, setup, cw }: PageProps) {
   const w = cw.screen
   const state = screenState(status)
   // Known once the cabin page has said (it owns the state): the switch waits for it.
@@ -88,6 +88,7 @@ export function ScreenPage({ status, settings, cw }: PageProps) {
           <b>{w.elevated.title}</b> {w.elevated.text}
         </Note>
       )}
+      <PhoneCode status={status} language={setup.language} />
       <GpuChooser status={status} settings={settings} cw={cw} />
       {status?.error && <Note tone="bad">{status.error}</Note>}
     </Panel>
@@ -131,4 +132,39 @@ function GpuChooser({ status, settings: state, cw }: Pick<PageProps, 'status' | 
       <Note tone="calm">{w.gpuNote}</Note>
     </>
   )
+}
+
+/**
+ * The player's phone as a second screen (crates/host remote.rs, owner 2026-11-01): the QR code that opens it, on
+ * the PC's network. Its words in English, Portuguese and Turkish for now (the rest English), not yet in the
+ * companion's own words: those are every language's at once.
+ */
+function PhoneCode({ status, language }: { status: PageProps['status']; language: string | null }) {
+  if (!status?.phoneUrl || !status.phoneQr) return null
+  const w = PHONE_WORDS[language?.startsWith('pt') ? 'pt' : language?.startsWith('tr') ? 'tr' : 'en']
+  return (
+    <>
+      <Group title={w.title} place={6}>
+        <div className="phone-code ob-in">
+          <img src={`data:image/svg+xml;utf8,${encodeURIComponent(status.phoneQr)}`} alt={status.phoneUrl} />
+        </div>
+      </Group>
+      <Note tone="calm">{w.text}</Note>
+    </>
+  )
+}
+
+const PHONE_WORDS: Record<'en' | 'pt' | 'tr', { title: string; text: string }> = {
+  en: {
+    title: 'Your phone',
+    text: 'Scan it with your phone’s camera, on the same Wi-Fi as this PC: the map, what plays and your delivery, on your phone as on the truck’s screen.',
+  },
+  pt: {
+    title: 'Seu celular',
+    text: 'Escaneie com a câmera do celular, na mesma rede Wi-Fi deste PC: o mapa, o que está tocando e sua entrega, no celular e na tela do caminhão ao mesmo tempo.',
+  },
+  tr: {
+    title: 'Telefonunuz',
+    text: 'Bu bilgisayarla aynı Wi-Fi ağındayken telefonunuzun kamerasıyla okutun: harita, çalan müzik ve teslimatınız, hem telefonunuzda hem tırın ekranında.',
+  },
 }

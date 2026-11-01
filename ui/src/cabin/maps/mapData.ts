@@ -13,6 +13,8 @@ import { isInHost } from '../../shared/host'
  */
 const DEV_MAP = '/dev-map'
 const MAPS = 'https://westplay.maps'
+/** The phone page's maps: served by the PC it was served from (crates/host remote.rs). */
+const PHONE_MAPS = '/maps'
 
 export interface MapLabel {
   /** The place's own name, in its own language and script. */
@@ -61,7 +63,8 @@ function firstBase(): string | null | undefined {
 
 /** The host names the map's folder in its maps, and when it was built (`null`: none). */
 export function receiveMapFolder(folder: string | null, built: number | null): void {
-  useMapFolder.setState({ base: folder ? `${MAPS}/${encodeURIComponent(folder)}` : null, built })
+  const maps = window.westplayPhone ? `${location.origin}${PHONE_MAPS}` : MAPS
+  useMapFolder.setState({ base: folder ? `${maps}/${encodeURIComponent(folder)}` : null, built })
 }
 
 /** The onboarding's demo names the map's address itself (served by the companion, not the host). */

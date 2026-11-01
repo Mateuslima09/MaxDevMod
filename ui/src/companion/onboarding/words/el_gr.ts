@@ -21,7 +21,8 @@ export const words: Words = {
     title: 'Το παιχνίδι σου',
     titleMissing: 'Πού είναι το παιχνίδι σου;',
     found: 'Το WestPlay βρήκε το American Truck Simulator σε αυτόν τον υπολογιστή.',
-    foundMany: 'Το American Truck Simulator είναι εγκατεστημένο σε περισσότερα από ένα σημεία. Διάλεξε αυτό που παίζεις.',
+    foundMany:
+      'Το American Truck Simulator είναι εγκατεστημένο σε περισσότερα από ένα σημεία. Διάλεξε αυτό που παίζεις.',
     missing:
       'Το WestPlay δεν βρήκε το American Truck Simulator. Διάλεξε τον φάκελο όπου το εγκατέστησες, αυτόν που περιέχει το base.scs.',
     chooseAnother: 'Χρήση άλλου φακέλου…',
