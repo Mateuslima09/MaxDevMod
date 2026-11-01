@@ -157,7 +157,7 @@ pub enum Question {
         id: String,
     },
     /// A list of the Library: sorted by `sort` (one of the sorts it said it has), a folder's (playlists), the
-    /// sorts' names in `language` (the cab's: `en`, `tr`).
+    /// sorts' names in `language` (the cab's: `en`, `pt`, `tr`).
     Library {
         shelf: Shelf,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -190,7 +190,7 @@ impl Question {
                         (1..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.')
                     })
                 }),
-                language: language.filter(|language| matches!(language.as_str(), "en" | "tr")),
+                language: language.filter(|language| matches!(language.as_str(), "en" | "pt" | "tr")),
             },
             // A song of Apple Music's (its number) or of the Library (`i.` and letters); else none (no words).
             Question::Lyrics { id } => {

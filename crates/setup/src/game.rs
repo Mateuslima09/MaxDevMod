@@ -1,4 +1,4 @@
-//! Finding the game: every install of Euro Truck Simulator 2 on the PC (Steam's, in any of its libraries, and
+//! Finding the game: every install of American Truck Simulator on the PC (Steam's, in any of its libraries, and
 //! others Windows lists as installed), each with its version (its executable's) and its DLCs.
 
 use std::fmt;
@@ -12,11 +12,11 @@ use windows::core::{HSTRING, w};
 use crate::{places, vdf};
 
 /// The game's app id on Steam (its manifest, its Workshop folder, its Steam Cloud folder).
-pub const STEAM_APP: &str = "227300";
+pub const STEAM_APP: &str = "270880";
 /// The game's executable, in its folder.
-const EXECUTABLE: &str = "bin/win_x64/eurotrucks2.exe";
+const EXECUTABLE: &str = "bin/win_x64/amtrucks.exe";
 /// The game's process, as Windows names it (TruckersMP's client runs the same).
-const PROCESS: &str = "eurotrucks2.exe";
+const PROCESS: &str = "amtrucks.exe";
 /// The game versions WestPlay has been tried with. Others may well work (the plugin finds what it needs in
 /// the game by its shape), but haven't been tried.
 pub const TESTED_VERSIONS: &str = "1.61.*";
@@ -97,7 +97,7 @@ impl Game {
     /// Where Steam keeps the game's Workshop mods, for an install in a Steam library (however it was found:
     /// a folder chosen there too).
     pub fn workshop(&self) -> Option<PathBuf> {
-        // `<library>/steamapps/common/<game>` → `<library>/steamapps/workshop/content/227300`.
+        // `<library>/steamapps/common/<game>` → `<library>/steamapps/workshop/content/270880`.
         let common = self.dir.parent()?;
         let steamapps = common.parent()?;
         let named = |path: &Path, name: &str| path.file_name().is_some_and(|n| n.eq_ignore_ascii_case(name));
@@ -171,7 +171,7 @@ pub fn running() -> bool {
     found
 }
 
-/// The game's folder name in its Steam library, from its `appmanifest_227300.acf`.
+/// The game's folder name in its Steam library, from its `appmanifest_270880.acf`.
 pub fn steam_install_dir(manifest: &str) -> Option<String> {
     let file = vdf::parse(manifest)?;
     let state = file.get("AppState")?;
@@ -179,10 +179,10 @@ pub fn steam_install_dir(manifest: &str) -> Option<String> {
     Some(state.get("installdir")?.text()?.to_owned())
 }
 
-/// Whether a program Windows lists is the game (not its demo, nor American Truck Simulator).
+/// Whether a program Windows lists is the game (not its demo, nor Euro Truck Simulator 2).
 pub fn is_the_game(name: &str) -> bool {
     let name = name.to_lowercase();
-    name.contains("euro truck simulator 2") && !name.contains("demo")
+    name.contains("american truck simulator") && !name.contains("demo")
 }
 
 fn same_folder(a: &Path, b: &Path) -> bool {
@@ -236,9 +236,9 @@ mod tests {
         std::fs::create_dir_all(&workshop).unwrap();
         let game = |dir: PathBuf| Game { dir, found_by: FoundBy::Chosen, version: None, dlcs: vec![] };
         // Chosen there by hand, it's still that library's game.
-        assert_eq!(game(library.join("common").join("Euro Truck Simulator 2")).workshop(), Some(workshop));
+        assert_eq!(game(library.join("common").join("American Truck Simulator")).workshop(), Some(workshop));
         // Anywhere else, there's none.
-        assert_eq!(game(root.join("Games").join("Euro Truck Simulator 2")).workshop(), None);
+        assert_eq!(game(root.join("Games").join("American Truck Simulator")).workshop(), None);
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -252,17 +252,18 @@ mod tests {
 
     #[test]
     fn reads_the_folder_steam_installed_the_game_in() {
-        let manifest = "\"AppState\"\n{\n\t\"appid\"\t\t\"227300\"\n\t\"installdir\"\t\t\"Euro Truck Simulator 2\"\n}";
-        assert_eq!(steam_install_dir(manifest).as_deref(), Some("Euro Truck Simulator 2"));
+        let manifest =
+            "\"AppState\"\n{\n\t\"appid\"\t\t\"270880\"\n\t\"installdir\"\t\t\"American Truck Simulator\"\n}";
+        assert_eq!(steam_install_dir(manifest).as_deref(), Some("American Truck Simulator"));
         // Another game's manifest.
-        assert_eq!(steam_install_dir("\"AppState\" { \"appid\" \"270880\" \"installdir\" \"American\" }"), None);
+        assert_eq!(steam_install_dir("\"AppState\" { \"appid\" \"227300\" \"installdir\" \"Euro\" }"), None);
     }
 
     #[test]
     fn knows_the_game_in_windows_list_of_programs() {
-        assert!(is_the_game("Euro Truck Simulator 2"));
-        assert!(!is_the_game("Euro Truck Simulator 2 Demo"));
-        assert!(!is_the_game("American Truck Simulator"));
+        assert!(is_the_game("American Truck Simulator"));
+        assert!(!is_the_game("American Truck Simulator Demo"));
+        assert!(!is_the_game("Euro Truck Simulator 2"));
     }
 
     #[test]

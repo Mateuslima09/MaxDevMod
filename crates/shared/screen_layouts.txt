@@ -37,3 +37,17 @@ travego-16-23     ui/dashboard/westplay_travego_16_23_gps.sii
 setra-516         ui/dashboard/gps.dlc_toys.sii
 setra-531         ui/dashboard/westplay_setra_531_gps.sii
 man-lions-coach   ui/dashboard/westplay_man_lions_coach_gps.sii
+# Freightliner Cascadia 2019 and 2024 (ATS DLCs), their digital interiors (interior/computers_digital.sui): the
+# same 1440 x 540 screen in both, only its stock background differs.
+freightliner-cascadia ui/dashboard/freightliner_cascadia_icc5_gps.sii ui/dashboard/freightliner_cascadia_2024_gps.sii
+# The other ATS trucks with screens of their own (their interiors' interior/computers.sui), each its own shape:
+# Kenworth T680 (2022), 1280 x 720.
+kenworth-t680-2022 ui/dashboard/kenworth_t680_2022_gps.sii
+# Volvo VNL (2018) and VNR Electric: the same 800 x 480 screen.
+volvo-vnl-2018    ui/dashboard/volvo_vnl2018_gps.sii ui/dashboard/volvo_vnr_e_gps.sii
+# Volvo VNL (2025), 1280 x 720.
+volvo-vnl-2025    ui/dashboard/volvo_vnl2025_gps.sii
+# Western Star 5700XE: 512 x 300 of a 512 x 512 script.
+westernstar-5700xe ui/dashboard/westernstar_5700xe_gps.sii
+# Western Star 57X: the Cascadias' 1440 x 540 screen, its script a little different.
+westernstar-57x   ui/dashboard/westernstar_57x_gps.sii

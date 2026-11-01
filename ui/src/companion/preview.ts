@@ -26,7 +26,7 @@ const query = new URLSearchParams(location.search)
 const gameState = query.get('game') ?? 'live'
 
 const GAME: GameInfo = {
-  dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Euro Truck Simulator 2',
+  dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\American Truck Simulator',
   foundBy: 'steam',
   version: '1.61.1.9',
   tested: true,

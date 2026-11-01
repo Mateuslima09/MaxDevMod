@@ -405,7 +405,7 @@ pub fn latest_of(documents: &Path, steam_userdata: Option<&Path>, profile: impl 
     let mut profile_dirs = vec![documents.join("profiles"), documents.join("steam_profiles")];
     if let Some(userdata) = steam_userdata {
         for user in std::fs::read_dir(userdata).into_iter().flatten().flatten() {
-            profile_dirs.push(user.path().join("227300/remote/profiles"));
+            profile_dirs.push(user.path().join("270880/remote/profiles"));
         }
     }
     let saves = profile_dirs

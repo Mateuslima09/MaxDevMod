@@ -436,7 +436,7 @@ mod tests {
         let game = crate::places::steam()
             .into_iter()
             .flat_map(|steam| crate::places::steam_libraries(&steam))
-            .map(|library| library.join("steamapps").join("common").join("Euro Truck Simulator 2"))
+            .map(|library| library.join("steamapps").join("common").join("American Truck Simulator"))
             .find_map(|dir| Game::recognise(&dir));
         for named in installed(&documents, game.as_ref()) {
             println!("{named}");

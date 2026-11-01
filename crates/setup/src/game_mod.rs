@@ -681,6 +681,9 @@ fn field<'a>(lines: &[&'a str], block: &Block, name: &str) -> Option<&'a str> {
 /// Adds the WestPlay screen image `texture` as the top layer of the GPS script's "screen on" group (id 100):
 /// a child of the group, over the whole of it, or over the part of it the display shows (`shown`). The rest
 /// of the script stays as it is.
+///
+/// A group whose own box is a small corner of what its children cover (ATS's Freightliner Cascadia and Western
+/// Star 57X: a 128 x 128 box, children over the whole 1440 x 540 screen) is taken as the children's extent.
 pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) -> Result<String, String> {
     let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
     let lines: Vec<&str> = text.split(newline).collect();
@@ -693,6 +696,24 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) ->
         field(&lines, group, "my_children").unwrap_or("0").parse().map_err(|_| "my_children isn't a count")?;
     let coord = |name| field(&lines, group, name).ok_or_else(|| format!("the group has no {name}"));
     let (left, right, top, bottom) = (coord("coords_l")?, coord("coords_r")?, coord("coords_t")?, coord("coords_b")?);
+    let boxed = |block: &Block| -> Option<[f64; 4]> {
+        let at = |name| field(&lines, block, name)?.parse::<f64>().ok();
+        Some([at("coords_l")?, at("coords_r")?, at("coords_t")?, at("coords_b")?])
+    };
+    let area = |[l, r, t, b]: [f64; 4]| (r - l) * (t - b);
+    let extent = blocks
+        .iter()
+        .filter(|block| field(&lines, block, "my_parent") == Some(group.name))
+        .filter_map(boxed)
+        .reduce(|[l, r, t, b], [l2, r2, t2, b2]| [l.min(l2), r.max(r2), t.max(t2), b.min(b2)]);
+    let (left, right, top, bottom) = match (boxed(group), extent) {
+        (Some(own), Some(extent)) if area(own) * 4.0 < area(extent) => {
+            let at = |value: f64| format!("{}", value.round() as i64);
+            (at(extent[0]), at(extent[1]), at(extent[2]), at(extent[3]))
+        }
+        _ => (left.to_owned(), right.to_owned(), top.to_owned(), bottom.to_owned()),
+    };
+    let (left, right, top, bottom) = (left.as_str(), right.as_str(), top.as_str(), bottom.as_str());
     let (left, right, top, bottom) = match shown {
         None => (left.to_owned(), right.to_owned(), top.to_owned(), bottom.to_owned()),
         Some(part) => {
@@ -997,6 +1018,30 @@ mod tests {
     }
 
     #[test]
+    fn a_corner_sized_group_gets_the_screen_over_its_childrens_extent() {
+        // ATS's Cascadia: a 128 x 128 group in the corner, its children over the whole 1440 x 540 screen.
+        let children = |l: u32, r: u32| format!(" coords_l: {l}\n coords_r: {r}\n coords_t: 540\n coords_b: 0\n");
+        let script = SCRIPT
+            .replace(
+                " coords_r: 1279\n coords_t: 719\n coords_b: 0\n",
+                " coords_r: 128\n coords_t: 540\n coords_b: 412\n",
+            )
+            .replace("ui::text : _nameless.3 {\n", &format!("ui::text : _nameless.3 {{\n{}", children(0, 124)))
+            .replace("ui::text : _nameless.4 {\n", &format!("ui::text : _nameless.4 {{\n{}", children(124, 1440)));
+        let patched = patch_gps_script(&script, "screen_cascadia", None).unwrap();
+        let placed = "screen_cascadia.mat xscale=stretch yscale=stretch>\"\n coords_l: 0\n coords_r: 1440\n coords_t: 540\n coords_b: 0\n";
+        assert!(patched.contains(placed), "{patched}");
+        // A group as large as its children keeps its own box.
+        let kept =
+            SCRIPT.replace("ui::text : _nameless.3 {\n", &format!("ui::text : _nameless.3 {{\n{}", children(0, 1300)));
+        assert!(
+            patch_gps_script(&kept, "x", None)
+                .unwrap()
+                .contains("x.mat xscale=stretch yscale=stretch>\"\n coords_l: 0\n coords_r: 1279\n")
+        );
+    }
+
+    #[test]
     fn the_s_bevs_screens_file_gets_the_sharp_size() {
         let root = std::env::temp_dir().join(format!("westplay-sharp-bev-{}", std::process::id()));
         let dir = root.join("def/vehicle/truck/scania.s_2024e/interior");
@@ -1118,8 +1163,8 @@ mod tests {
         }
         // The tablet, in the game's trucks.
         assert!(built.patched.contains(&TABLET));
-        let actros = "def/vehicle/truck/mercedes.actros2014/accessory/toyhang/westplay_tablet.sii";
-        assert!(archive.read(actros).unwrap().is_some());
+        let w900 = "def/vehicle/truck/kenworth.w900/accessory/toyhang/westplay_tablet.sii";
+        assert!(archive.read(w900).unwrap().is_some());
         assert!(archive.read("vehicle/truck/upgrade/westplay_tablet/westplay_tablet_hang.pmg").unwrap().is_some());
     }
 

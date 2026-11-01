@@ -37,7 +37,7 @@ pub fn roaming() -> Option<PathBuf> {
 }
 
 /// The game's folder's name in Documents.
-const GAME_FOLDER: &str = "Euro Truck Simulator 2";
+const GAME_FOLDER: &str = "American Truck Simulator";
 
 /// Every folder that may be the player's Documents, Windows' first: Windows' own (wherever it's moved, to
 /// OneDrive say), the user's `Documents`, and each OneDrive's folders (OneDrive names Documents in the
@@ -335,7 +335,7 @@ mod tests {
             } } } } }"#,
         )
         .unwrap();
-        assert_eq!(launch_options(&config).and_then(homedir), Some(PathBuf::from(r"D:\My Games\ETS2")));
+        assert_eq!(launch_options(&config).and_then(homedir), Some(PathBuf::from(r"E:\ATS")));
     }
 
     #[test]

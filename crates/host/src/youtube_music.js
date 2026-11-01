@@ -1000,7 +1000,7 @@
       setTimeout(tellPlayback, 300)
     },
     language: ({ code }) => {
-      language = code === 'tr' || code === 'en' ? code : null
+      language = code === 'tr' || code === 'pt' || code === 'en' ? code : null
       return Promise.resolve()
     },
   }

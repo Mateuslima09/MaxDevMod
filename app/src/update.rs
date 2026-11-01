@@ -9,7 +9,7 @@
 //! The plugin and the mod in the game are the new WestPlay's once it's started again: the companion puts
 //! them in (setup's `updated`).
 //!
-//! A development build is never updated: it looks for nothing.
+//! A development build is never updated: it looks for nothing. Nor is this ATS build ([`RELEASES`]).
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -19,6 +19,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use westplay_host::log;
 
+/// Whether this build looks for updates: this ATS build has no releases of its own, and WestPlay's (the
+/// updater's endpoint) are ETS2's, which would replace it.
+const RELEASES: bool = false;
 /// The first look, once WestPlay has started (not to slow its start).
 const FIRST_LOOK: Duration = Duration::from_secs(30);
 /// Then this often.
@@ -61,7 +64,7 @@ struct Progress {
 
 /// Looks for updates in the background, from now on: a little after the start, then every few hours.
 pub fn watch(app: &AppHandle) {
-    if cfg!(debug_assertions) {
+    if cfg!(debug_assertions) || !RELEASES {
         return;
     }
     let app = app.clone();
@@ -80,6 +83,9 @@ pub fn watch(app: &AppHandle) {
 /// Looks for an update: one found is kept for [`install_update`] and told to the companion (`update-found`).
 /// `Err` when the look couldn't be made.
 async fn look(app: &AppHandle) -> Result<Option<Offer>, ()> {
+    if !RELEASES {
+        return Ok(None);
+    }
     // The host stopped before the installer runs, as when WestPlay quits: the installer replaces its files.
     let handle = app.clone();
     let updater = match app.updater_builder().on_before_exit(move || crate::stop_host(&handle)).build() {

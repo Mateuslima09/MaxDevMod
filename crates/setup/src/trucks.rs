@@ -88,6 +88,56 @@ pub const TRUCKS: &[Truck] = &[
         source: Source::Game("volvo.fh_2024"),
         layout: Some("volvo-fh"),
     },
+    // ATS: the Freightliner Cascadias' digital interiors (`interior/computers_digital.sui`), and the other trucks
+    // whose interiors name a screen of their own.
+    Truck {
+        id: "freightliner-cascadia-2019",
+        name: "Freightliner Cascadia (2019)",
+        source: Source::Game("freightliner.cascadia2019"),
+        layout: Some("freightliner-cascadia"),
+    },
+    Truck {
+        id: "freightliner-cascadia-2024",
+        name: "Freightliner Cascadia (2024)",
+        source: Source::Game("freightliner.cascadia2024"),
+        layout: Some("freightliner-cascadia"),
+    },
+    Truck {
+        id: "kenworth-t680-2022",
+        name: "Kenworth T680 (2022)",
+        source: Source::Game("kenworth.t680_2022"),
+        layout: Some("kenworth-t680-2022"),
+    },
+    Truck {
+        id: "volvo-vnl-2018",
+        name: "Volvo VNL (2018)",
+        source: Source::Game("volvo.vnl2018"),
+        layout: Some("volvo-vnl-2018"),
+    },
+    Truck {
+        id: "volvo-vnr-electric",
+        name: "Volvo VNR Electric",
+        source: Source::Game("volvo.vnr_e"),
+        layout: Some("volvo-vnl-2018"),
+    },
+    Truck {
+        id: "volvo-vnl-2025",
+        name: "Volvo VNL (2025)",
+        source: Source::Game("volvo.vnl2025"),
+        layout: Some("volvo-vnl-2025"),
+    },
+    Truck {
+        id: "westernstar-5700xe",
+        name: "Western Star 5700XE",
+        source: Source::Game("westernstar.5700xe"),
+        layout: Some("westernstar-5700xe"),
+    },
+    Truck {
+        id: "westernstar-57x",
+        name: "Western Star 57X",
+        source: Source::Game("westernstar.57x"),
+        layout: Some("westernstar-57x"),
+    },
     // Oyuncuyusbis' coaches (mods), WestPlay on their own screens (owner 2026-10-24).
     Truck {
         id: "travego-16-shd",

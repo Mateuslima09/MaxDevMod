@@ -582,7 +582,7 @@ export type AppleMusicQuestion =
   | { ask: 'search'; query: string }
   | { ask: 'collection'; id: string }
   | { ask: 'artist'; id: string }
-  | { ask: 'library'; shelf: AppleMusicShelf; sort?: string; folder?: string; language?: 'en' | 'tr' }
+  | { ask: 'library'; shelf: AppleMusicShelf; sort?: string; folder?: string; language?: 'en' | 'pt' | 'tr' }
   | { ask: 'lyrics'; id: string }
 
 export interface AppleMusicAnswers {
@@ -638,7 +638,7 @@ export type YouTubeMusicCommand =
   | { action: 'signIn' }
   | { action: 'signOut' }
   | { action: 'ask'; id: number; question: YouTubeMusicQuestion }
-  | { action: 'language'; code: 'en' | 'tr' }
+  | { action: 'language'; code: 'en' | 'pt' | 'tr' }
   | { action: 'play'; watch?: YouTubeMusicWatch }
   | { action: 'pause' }
   | { action: 'next' }

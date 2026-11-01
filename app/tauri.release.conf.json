@@ -3,7 +3,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "resources": {
       "../target/release/westplay.dll": "westplay.dll",
       "../LICENSE": "LICENSE.txt",

@@ -69,7 +69,10 @@ pub fn screen_layouts() -> &'static [ScreenLayout] {
 /// model's: crates/setup tablet.rs): laid out at 1280 x 898. Oyuncuyusbis' coaches' displays, each the shape of its model's screen (its corners,
 /// 2026-10-24): the Travego 16 SHD's 16.2 x 9.6 cm (1.691:1, both its bands), the Setra S 531 DT's 15.2 x 9.0 cm
 /// (1.682:1), the MAN Lion's Coach's 15.3 x 9.3 cm (1.646:1); the Setra S 516 HD's tablet's, its own screen's no
-/// more, 20.1 x 12.2 cm (1.648:1, 2026-10-26).
+/// more, 20.1 x 12.2 cm (1.648:1, 2026-10-26). ATS's trucks' own screens, by their scripts' screen areas until
+/// measured in the cab: the Cascadias' and the Western Star 57X's 1440 x 540 (2.667:1, laid out 1280 x 480), the
+/// Volvo VNL 2018's and VNR Electric's 800 x 480 (1.667:1), the Western Star 5700XE's 512 x 300 (1.707:1); the
+/// Kenworth T680 2022's and the Volvo VNL 2025's are 16:9.
 pub fn page_height(index: usize) -> u32 {
     match screen_layouts().get(index).map(|layout| layout.id) {
         Some("generic") => 793,
@@ -78,6 +81,9 @@ pub fn page_height(index: usize) -> u32 {
         Some("setra-516") => 777,
         Some("setra-531") => 761,
         Some("man-lions-coach") => 778,
+        Some("freightliner-cascadia" | "westernstar-57x") => 480,
+        Some("volvo-vnl-2018") => 768,
+        Some("westernstar-5700xe") => 750,
         _ => SCREEN_HEIGHT,
     }
 }
@@ -144,10 +150,31 @@ pub const TRUCK_UNSUPPORTED: u32 = 2;
 
 /// The trucks WestPlay shows in on a layout that trucks it doesn't support share (SDK model ids, without the
 /// `vehicle.` prefix): most trucks' interiors name the stock GPS screen (`generic`, `ui/gps.sii`), and of
-/// those only the Scania S and R's and the S BEV's (the S's 7" display) are WestPlay's. The other layouts are
-/// their own trucks' scripts.
+/// those only the Scania S and R's and the S BEV's (the S's 7" display) are WestPlay's in ETS2. In ATS every truck
+/// whose interiors name it is (the Cascadias' analogue interiors too), shown on the 7"'s part of it until each
+/// truck's display is measured. The other layouts are their own trucks' scripts.
 const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
-    ("generic", &["scania.s_2016", "scania.r_2016", "scania.s_2024e"]),
+    (
+        "generic",
+        &[
+            "scania.s_2016",
+            "scania.r_2016",
+            "scania.s_2024e",
+            "freightliner.cascadia2019",
+            "freightliner.cascadia2024",
+            "intnational.9900i",
+            "intnational.lonestar",
+            "intnational.lt",
+            "kenworth.t680",
+            "kenworth.w900",
+            "mack.anthem",
+            "mack.pinnacle",
+            "peterbilt.389",
+            "peterbilt.579",
+            "volvo.vnl",
+            "westernstar.49x",
+        ],
+    ),
     // The game's toy GPS (Cabin Accessories), WestPlay's only on Oyuncuyusbis' Setra S 516 HD/2's tablet part.
     ("setra-516", &["setra516hd"]),
 ];
@@ -861,6 +888,12 @@ mod tests {
             ("setra-516", 777),
             ("setra-531", 761),
             ("man-lions-coach", 778),
+            // ATS's own screens.
+            ("freightliner-cascadia", 480),
+            ("westernstar-57x", 480),
+            ("volvo-vnl-2018", 768),
+            ("westernstar-5700xe", 750),
+            ("kenworth-t680-2022", SCREEN_HEIGHT),
         ] {
             assert_eq!(page_height(index(layout)), height, "{layout}");
         }

@@ -17,6 +17,7 @@ import {
   postToHost,
 } from '../../../shared/host'
 import type { MediaSource } from '../../../shared/media'
+import type { Language } from '../../state/text'
 import { createAsking } from '../asking'
 import { positionOf, type Timed } from '../music/time'
 import { keptAccount } from '../youtube/account'
@@ -799,7 +800,7 @@ export function useNow(running: boolean): number {
 
 /** While the app is open: YouTube Music's web player runs (hidden, under the page), answering in the cab's
  * language, and says whether it's signed in. */
-export function useWebPlayer(language: 'en' | 'tr'): void {
+export function useWebPlayer(language: Language): void {
   useEffect(() => {
     if (!isInHost()) return
     // The volume kept from last time, for when the player says its own (receivePlayback).

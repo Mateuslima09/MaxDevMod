@@ -20,6 +20,12 @@ export const SCREEN_LAYOUT_IDS = [
   'setra-516',
   'setra-531',
   'man-lions-coach',
+  'freightliner-cascadia',
+  'kenworth-t680-2022',
+  'volvo-vnl-2018',
+  'volvo-vnl-2025',
+  'westernstar-5700xe',
+  'westernstar-57x',
 ] as const
 
 export type ScreenLayoutId = (typeof SCREEN_LAYOUT_IDS)[number]
