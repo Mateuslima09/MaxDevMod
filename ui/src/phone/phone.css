@@ -23,8 +23,7 @@ body,
 
 .phone-bar {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   padding: 12px 16px 4px;
   font-size: 15px;
@@ -36,8 +35,12 @@ body,
 }
 
 .phone-link {
+  flex: 1;
   color: var(--text-dim);
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .phone-link::before {
@@ -82,4 +85,32 @@ body,
     width: 38%;
     flex: none;
   }
+}
+
+/* The volume of what plays (PhoneVolume.tsx): a slider, as wide as the bar leaves it. */
+.phone-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 220px;
+  min-width: 120px;
+  color: var(--text-dim);
+}
+
+.phone-volume input {
+  flex: 1;
+  min-width: 0;
+  accent-color: #0a84ff;
+}
+
+.phone-full {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glass);
+  color: var(--text);
 }
