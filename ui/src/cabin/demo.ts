@@ -1,5 +1,6 @@
 import type { Customizations, IconStyle } from '../shared/customize'
 import { IS_DEMO } from '../shared/host'
+import { holdLiveMap } from './maps/liveMap'
 import { showMapAt } from './maps/mapData'
 import type { AppId } from './state/apps'
 import { setIcons, useLooks } from './state/looks'
@@ -118,6 +119,7 @@ export function installDemo(): void {
         break
       case 'away':
         document.documentElement.toggleAttribute('data-away', data.away)
+        holdLiveMap(data.away)
         break
       case 'language':
         useLive.setState({ gameLanguage: data.code })

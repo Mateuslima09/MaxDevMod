@@ -647,6 +647,17 @@ function redrawPlaceIcons({ map, painted }: LiveMap) {
 /** The screens showing the map, latest last: it's in the latest, and goes back when that one closes. */
 const hosts: { element: HTMLElement; interactive: boolean }[] = []
 let frame: number | null = null
+/** Held still: nothing followed or drawn until let go ([`holdLiveMap`]). */
+let held = false
+
+/**
+ * Holds the map still, or lets it go on: the companion's demo while its window isn't in front (its CSS animations
+ * pause then, but the map drew on, every 3D building, behind the game: a player's log, 2026-11-01, the companion's
+ * share 1.3 of 16 threads and the game down from 53 to 28 fps).
+ */
+export function holdLiveMap(hold: boolean) {
+  held = hold
+}
 
 /**
  * Shows the live map in `host` and follows the truck there (letting the player move it if `interactive`),
@@ -701,7 +712,8 @@ function place() {
     let due = lastFrame
     frame = requestAnimationFrame(function step(now) {
       frame = requestAnimationFrame(step)
-      // At most 60 a second (frameCap.ts): the game is handed no more, and each frame drawn here redraws every 3D
+      if (held) return
+      // At most MAP_FPS a second (frameCap.ts): the game is handed no more, and each frame drawn here redraws every 3D
       // building in view (a player's log, 2026-10-27: the cab page's share up to 4x in towns).
       const next = mapFrameDue(now, due)
       if (next === null) return

@@ -162,6 +162,11 @@ const PROFILES: readonly ProfileEntry[] = [
   { layout: 'setra-516', profile: { name: 'Setra S 516 HD/2', oemStrip: null, scale: 1 } },
   { layout: 'setra-531', profile: { name: 'Setra S 531 DT', oemStrip: null, scale: 1 } },
   { layout: 'man-lions-coach', profile: { name: "MAN Lion's Coach", oemStrip: null, scale: 1 } },
+  // ATS's Freightliner Cascadia and Western Star 57X: a wide, short screen (1440 x 540, the page laid out 1280 x 480:
+  // crates/shared page_height), a large one in the real trucks. At 1, Home held one row of four and YouTube Music
+  // went to a second page (owner 2026-11-01: "it doesn't have YouTube Music"); smaller, every app is on one.
+  { layout: 'freightliner-cascadia', profile: { name: 'Freightliner Cascadia', oemStrip: null, scale: 0.75 } },
+  { layout: 'westernstar-57x', profile: { name: 'Western Star 57X', oemStrip: null, scale: 0.75 } },
 ]
 
 /** Screens not tuned yet: CarPlay on the whole screen, its layout adapting to the space (responsive). */
