@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Појачај',
     volumeDown: 'Утишај',
     playPause: 'Пусти/Паузирај',
+    phone: 'Phone',
     pressKey: 'Притисните тастер…',
     keybindsNote:
       'Кликните на пречицу, па притисните нови тастер. Ако притом држите {key}, ради само док користите екран. Esc отказује.',

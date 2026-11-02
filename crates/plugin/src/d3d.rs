@@ -434,6 +434,7 @@ unsafe fn on_present(swapchain: *mut c_void) {
         // The interaction key's toggle, then the keybinds (which may need it).
         crate::input::on_frame();
         crate::keybinds::on_frame();
+        crate::handset::on_present(swapchain);
         if let Some(bridge) = bridge::get() {
             bridge.plugin.heartbeat.store(frame, Ordering::Release);
         }

@@ -27,7 +27,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 24;
+pub const BRIDGE_VERSION: u32 = 25;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -220,6 +220,16 @@ pub fn frame_texture_name(generation: u32) -> String {
     format!("Local\\WestPlay.Frame.v8.{generation}")
 }
 
+/// The phone in the game (owner 2026-11-01: "a phone that shows up in the game at a key"): its page's size, the
+/// size of its own shared frame, which the plugin draws over the game's picture while it's out.
+pub const PHONE_WIDTH: u32 = 340;
+pub const PHONE_HEIGHT: u32 = 720;
+
+/// Name of the phone's shared frame texture ([`PHONE_WIDTH`] x [`PHONE_HEIGHT`]), as [`frame_texture_name`].
+pub fn phone_texture_name(generation: u32) -> String {
+    format!("Local\\WestPlay.Phone.v1.{generation}")
+}
+
 #[repr(C)]
 pub struct Bridge {
     pub magic: AtomicU32,
@@ -383,6 +393,11 @@ pub struct HostBlock {
     pub interaction_toggle: AtomicU32,
     /// Each [`Keybind`]'s key ([`keybind_value`]): 0 until the app has set them, meaning none.
     pub keybinds: [AtomicU32; KEYBIND_COUNT],
+    /// The phone's shared frame ([`phone_texture_name`]), as `frame_generation` and `frame_seq` the screen's.
+    pub phone_generation: AtomicU32,
+    pub phone_seq: AtomicU64,
+    /// 1 while the phone is out: the plugin draws it over the game.
+    pub phone_shown: AtomicU32,
 }
 
 /// What WestPlay does from the game by a key of the player's choosing (the app's settings).
@@ -392,13 +407,16 @@ pub enum Keybind {
     VolumeUp = 0,
     VolumeDown = 1,
     PlayPause = 2,
+    /// Takes the phone out, or puts it away.
+    Phone = 3,
 }
 
 impl Keybind {
-    pub const ALL: [Keybind; KEYBIND_COUNT] = [Keybind::VolumeUp, Keybind::VolumeDown, Keybind::PlayPause];
+    pub const ALL: [Keybind; KEYBIND_COUNT] =
+        [Keybind::VolumeUp, Keybind::VolumeDown, Keybind::PlayPause, Keybind::Phone];
 }
 
-pub const KEYBIND_COUNT: usize = 3;
+pub const KEYBIND_COUNT: usize = 4;
 
 /// A keybind as the bridge carries it: its key's virtual-key code, and whether it's pressed while holding the
 /// interaction key (using the screen) rather than alone.

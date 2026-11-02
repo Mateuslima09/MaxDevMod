@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Volume +',
     volumeDown: 'Volume −',
     playPause: 'Lecture/Pause',
+    phone: 'Téléphone',
     pressKey: 'Appuyez sur une touche…',
     keybindsNote:
       'Cliquez sur un raccourci, puis appuyez sur sa nouvelle touche. Maintenez {key} en même temps, et il ne marche que lorsque vous utilisez l’écran. Échap annule.',

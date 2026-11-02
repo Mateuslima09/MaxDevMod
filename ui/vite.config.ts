@@ -76,8 +76,9 @@ function devMap(): Plugin {
   }
 }
 
-// Three pages: the companion window (index.html, shown by Tauri), the in-cabin screen (cabin.html, rendered
-// offscreen by the WestPlay host and streamed onto the truck's GPS screen), and the phone page (phone.html).
+// Four pages: the companion window (index.html, shown by Tauri), the in-cabin screen (cabin.html, rendered
+// offscreen by the WestPlay host and streamed onto the truck's GPS screen), the phone page (phone.html), and the
+// phone in the game (handset.html).
 /** WestPlay's version: the workspace's (Cargo.toml), for the page outside the app (the preview). */
 const VERSION = /^version = "([^"]+)"/m.exec(readFileSync(resolve(import.meta.dirname, '../Cargo.toml'), 'utf8'))?.[1]
 
@@ -104,6 +105,8 @@ export default defineConfig({
         cabin: resolve(import.meta.dirname, 'cabin.html'),
         // The cab's Dashboard on the player's phone, served by the host on the PC's network (crates/host remote.rs).
         phone: resolve(import.meta.dirname, 'phone.html'),
+        // The phone in the game, drawn over the game's picture by the plugin (crates/plugin handset.rs).
+        handset: resolve(import.meta.dirname, 'handset.html'),
       },
     },
   },

@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'ხმის აწევა',
     volumeDown: 'ხმის დაწევა',
     playPause: 'დაკვრა/პაუზა',
+    phone: 'Phone',
     pressKey: 'დააჭირეთ კლავიშს…',
     keybindsNote:
       'დააწკაპუნეთ მინიჭებაზე და დააჭირეთ ახალ კლავიშს. თუ ამ დროს {key}-ს გეჭირებათ, ის მხოლოდ ეკრანის გამოყენებისას იმუშავებს. Esc აუქმებს.',

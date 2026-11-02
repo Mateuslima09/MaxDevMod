@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WestPlay</title>
+    <!-- Before any of the page's code: the code it shares with the cab (in chunks of their own, run first) asks
+         which page it runs in as it loads (shared/host.ts firstRequestId). -->
+    <script>
+      window.westplayHandset = true
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/handset/main.tsx"></script>
+  </body>
+</html>

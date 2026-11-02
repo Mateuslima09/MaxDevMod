@@ -48,6 +48,13 @@ const POOL_FRAMES: i32 = 3;
 /// (as often as a fast game takes frames, and its fades smoothly).
 const CURSOR_INTERVAL: Duration = Duration::from_millis(6);
 
+/// Which of the game's frames a capture publishes: the cab screen's, or the phone's in the game.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Published {
+    Screen,
+    Phone,
+}
+
 pub struct Capture {
     pool: Direct3D11CaptureFramePool,
     session: GraphicsCaptureSession,
@@ -55,6 +62,7 @@ pub struct Capture {
     context: ID3D11DeviceContext,
     shared: Arc<SharedFrame>,
     bridge: Arc<BridgeMapping>,
+    published: Published,
     pub frames: Arc<AtomicU64>,
     /// Frames Windows Graphics Capture delivered (each the page drawn anew; some replaced before they're due).
     pub arrived: Arc<AtomicU64>,
@@ -75,7 +83,13 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub fn start(gpu: &Gpu, visual: &Visual, shared: Arc<SharedFrame>, bridge: Arc<BridgeMapping>) -> Result<Self> {
+    pub fn start(
+        gpu: &Gpu,
+        visual: &Visual,
+        shared: Arc<SharedFrame>,
+        bridge: Arc<BridgeMapping>,
+        published: Published,
+    ) -> Result<Self> {
         let item = GraphicsCaptureItem::CreateFromVisual(visual)?;
         let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
             &gpu.winrt_device,
@@ -116,6 +130,7 @@ impl Capture {
             context: gpu.context.clone(),
             shared,
             bridge,
+            published,
             frames: Arc::new(AtomicU64::new(0)),
             arrived,
             dropped: Arc::new(AtomicU64::new(0)),
@@ -189,7 +204,11 @@ impl Capture {
 
     /// A frame went out, with `cursor` on it.
     fn sent(&self, cursor: Option<Look>, now: Instant) {
-        self.bridge.bridge().host.frame_seq.fetch_add(1, Ordering::Release);
+        let host = &self.bridge.bridge().host;
+        match self.published {
+            Published::Screen => host.frame_seq.fetch_add(1, Ordering::Release),
+            Published::Phone => host.phone_seq.fetch_add(1, Ordering::Release),
+        };
         self.frames.fetch_add(1, Ordering::Relaxed);
         self.drawn.set(cursor);
         self.cursor_at.set(now);

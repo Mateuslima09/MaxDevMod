@@ -99,6 +99,7 @@ export const words: CompanionWords = {
     volumeUp: 'Hangerő fel',
     volumeDown: 'Hangerő le',
     playPause: 'Lejátszás/Szünet',
+    phone: 'Phone',
     pressKey: 'Nyomj meg egy billentyűt…',
     keybindsNote:
       'Kattints egy parancsra, majd nyomd meg az új billentyűt. Ha közben nyomva tartod a(z) {key} billentyűt, csak a képernyő használata közben működik. Az Esc mégsem.',

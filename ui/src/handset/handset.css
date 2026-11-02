@@ -1,0 +1,169 @@
+/* The phone in the game (HandsetApp.tsx): a phone of the page's size, its corners left transparent so the game
+   shows around them; the plugin draws it over the game's picture. */
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.handset {
+  position: fixed;
+  inset: 0;
+  padding: 7px;
+  border-radius: 54px;
+  background: linear-gradient(145deg, #3a3b40, #121216 40%, #26272c);
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.18);
+  --edge: 12px;
+  --tile-gap: 10px;
+  --panel-radius: 22px;
+}
+
+.handset-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: 47px;
+  overflow: hidden;
+  background: var(--app-background);
+  color: var(--text);
+}
+
+.handset-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 46px;
+  padding: 0 26px 0 32px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.handset-island {
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  width: 96px;
+  height: 28px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #000;
+}
+
+.handset-signal svg {
+  display: block;
+  fill: currentColor;
+}
+
+.handset-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tile-gap);
+  padding: 4px var(--edge) 0;
+}
+
+.handset-map {
+  position: relative;
+  flex: 1 1 44%;
+  min-height: 0;
+  display: flex;
+}
+
+.handset-map > .map-tile {
+  flex: 1;
+  border-radius: var(--panel-radius);
+}
+
+.handset-card {
+  flex: none;
+  padding: 14px 16px;
+  border-radius: var(--panel-radius);
+  background: var(--glass);
+}
+
+.handset-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.handset-none {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+
+.handset-cargo {
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.handset-facts {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #30d158;
+}
+
+.handset-route {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.handset-route span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.handset-arrow {
+  font-size: 11px;
+}
+
+/* What plays: the Dashboard's Now Playing card, as tall as it needs. */
+.handset-music {
+  flex: none;
+  display: flex;
+  min-height: 96px;
+}
+
+.handset-music .widget-slot,
+.handset-music .widget {
+  flex: 1;
+  margin: 0;
+}
+
+.handset-music .widget {
+  padding: 12px 14px;
+  gap: 12px;
+}
+
+.handset-home {
+  flex: none;
+  width: 120px;
+  height: 5px;
+  margin: 12px auto 9px;
+  border-radius: 999px;
+  background: var(--text);
+  opacity: 0.6;
+}

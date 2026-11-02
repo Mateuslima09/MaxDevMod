@@ -993,6 +993,8 @@ declare global {
     chrome?: { webview?: WebViewBridge }
     /** The phone page (phone/socket.ts): its host is the PC it was served from, not WebView2's. */
     westplayPhone?: boolean
+    /** The phone in the game's page (handset.html): beside the cab's, on its browser. */
+    westplayHandset?: boolean
   }
 }
 
@@ -1005,7 +1007,8 @@ export const IS_DEMO = typeof location !== 'undefined' && new URLSearchParams(lo
  * page's from far above the cab's, so the answers each gets, the cab's and the phone's alike, are told apart by id.
  */
 export function firstRequestId(): number {
-  return typeof window !== 'undefined' && window.westplayPhone ? 1_000_000_000 : 1
+  if (typeof window === 'undefined') return 1
+  return window.westplayHandset ? 2_000_000_000 : window.westplayPhone ? 1_000_000_000 : 1
 }
 
 /** Whether the page runs inside the WestPlay host (and not in a plain browser preview, nor as the demo). */

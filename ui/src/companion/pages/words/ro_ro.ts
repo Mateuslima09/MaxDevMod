@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Volum mai tare',
     volumeDown: 'Volum mai încet',
     playPause: 'Redare/Pauză',
+    phone: 'Phone',
     pressKey: 'Apasă o tastă…',
     keybindsNote:
       'Dă clic pe o tastă rapidă, apoi apasă noua tastă. Dacă ții apăsat {key} în timp ce o apeși, merge doar cât folosești ecranul. Esc anulează.',

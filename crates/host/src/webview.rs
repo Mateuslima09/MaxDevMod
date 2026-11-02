@@ -207,6 +207,26 @@ pub struct OffscreenWebView {
 impl OffscreenWebView {
     /// A WebView of `width` x `height` on `stage`'s compositor (not on the frame until [`Stage::add`]).
     pub fn new(stage: &Stage, width: u32, height: u32, user_data: &Path) -> Result<Self, Error> {
+        Self::in_environment(stage, width, height, create_environment(user_data)?)
+    }
+
+    /// Another WebView of `width` x `height` on this one's profile and browser (no browser of its own), as
+    /// [`Self::new`]: the phone in the game's, beside the cab's.
+    pub fn beside(&self, stage: &Stage, width: u32, height: u32) -> Result<Self, Error> {
+        Self::in_environment(stage, width, height, self.environment.clone())
+    }
+
+    /// This WebView's own visual, to capture it apart from the frame (the phone's: it's on no frame).
+    pub fn visual(&self) -> windows::core::Result<Visual> {
+        self.root.cast()
+    }
+
+    fn in_environment(
+        stage: &Stage,
+        width: u32,
+        height: u32,
+        environment: ICoreWebView2Environment,
+    ) -> Result<Self, Error> {
         let root = stage.compositor.CreateContainerVisual()?;
         root.SetSize(Vector2 { X: width as f32, Y: height as f32 })?;
 
@@ -241,7 +261,6 @@ impl OffscreenWebView {
             let _ = EnableWindow(host, false);
         }
 
-        let environment = create_environment(user_data)?;
         // SAFETY: WebView2 writes a CoTaskMem string into `version`, read before it's dropped.
         let version = unsafe {
             let mut version = PWSTR::null();

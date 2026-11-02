@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Głośniej',
     volumeDown: 'Ciszej',
     playPause: 'Odtwórz/Wstrzymaj',
+    phone: 'Phone',
     pressKey: 'Naciśnij klawisz…',
     keybindsNote:
       'Kliknij skrót, a potem naciśnij nowy klawisz. Jeśli przytrzymasz przy tym {key}, zadziała tylko podczas używania ekranu. Esc anuluje.',

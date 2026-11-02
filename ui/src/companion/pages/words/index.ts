@@ -104,6 +104,7 @@ export interface CompanionWords {
     volumeUp: string
     volumeDown: string
     playPause: string
+    phone: string
     /** A keybind listening for its new key. */
     pressKey: string
     /** `{key}`: the screen's key. */

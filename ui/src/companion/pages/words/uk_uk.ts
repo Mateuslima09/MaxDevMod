@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Гучніше',
     volumeDown: 'Тихіше',
     playPause: 'Відтворення/Пауза',
+    phone: 'Phone',
     pressKey: 'Натисніть клавішу…',
     keybindsNote:
       'Клацніть сполучення й натисніть нову клавішу. Якщо при цьому утримувати {key}, воно працює лише поки ви користуєтеся екраном. Esc — скасувати.',

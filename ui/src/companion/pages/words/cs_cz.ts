@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Zesílit',
     volumeDown: 'Zeslabit',
     playPause: 'Přehrát/Pozastavit',
+    phone: 'Phone',
     pressKey: 'Stiskněte klávesu…',
     keybindsNote:
       'Klikněte na zkratku a stiskněte novou klávesu. Pokud přitom držíte {key}, funguje jen při používání obrazovky. Esc zruší.',

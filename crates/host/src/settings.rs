@@ -202,6 +202,8 @@ pub struct Keybinds {
     pub volume_up: Binding,
     pub volume_down: Binding,
     pub play_pause: Binding,
+    /// Takes the phone out in the game, or puts it away (owner 2026-11-01).
+    pub phone: Binding,
 }
 
 impl<'de> Deserialize<'de> for Keybinds {
@@ -217,16 +219,22 @@ impl<'de> Deserialize<'de> for Keybinds {
             volume_up: binding("volumeUp", defaults.volume_up),
             volume_down: binding("volumeDown", defaults.volume_down),
             play_pause: binding("playPause", defaults.play_pause),
+            phone: binding("phone", defaults.phone),
         })
     }
 }
 
 impl Default for Keybinds {
     /// The interaction key with 1, 2 and 3 (as promised to the players who asked: Alt+1, Alt+2, Alt+3), in a
-    /// row as on a stereo (owner 2026-10-21): volume down, play/pause between, volume up.
+    /// row as on a stereo (owner 2026-10-21): volume down, play/pause between, volume up; the phone next, with 4.
     fn default() -> Self {
         let with_key = |code| Binding { key: KeyCode(code), with_interaction_key: true };
-        Self { volume_down: with_key(0x31), play_pause: with_key(0x32), volume_up: with_key(0x33) }
+        Self {
+            volume_down: with_key(0x31),
+            play_pause: with_key(0x32),
+            volume_up: with_key(0x33),
+            phone: with_key(0x34),
+        }
     }
 }
 
@@ -238,6 +246,7 @@ impl Keybinds {
                 Keybind::VolumeUp => self.volume_up,
                 Keybind::VolumeDown => self.volume_down,
                 Keybind::PlayPause => self.play_pause,
+                Keybind::Phone => self.phone,
             };
             keybind_value(binding.key.virtual_key(), binding.with_interaction_key)
         })

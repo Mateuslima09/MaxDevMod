@@ -96,6 +96,7 @@ export const words: CompanionWords = {
     volumeUp: '調高音量',
     volumeDown: '調低音量',
     playPause: '播放/暫停',
+    phone: 'Phone',
     pressKey: '請按一個鍵…',
     keybindsNote: '點一下按鍵設定，然後按下新的鍵。按下時按住 {key}，就只會在使用螢幕時生效。按 Esc 取消。',
     inUse: '這個鍵已用於「{action}」。',

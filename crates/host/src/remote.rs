@@ -107,6 +107,11 @@ impl Remote {
         Self { phones, incoming, url: Some(url), qr }
     }
 
+    /// Whether a host message (JSON) is for the phones too: all but the cab's alone ([`CAB_ONLY`]).
+    pub fn mirrored(json: &str) -> bool {
+        !CAB_ONLY.contains(&message_type(json).as_str())
+    }
+
     /// Sends a host message (JSON) to every phone, unless it's the cab's alone ([`CAB_ONLY`]).
     pub fn broadcast(&self, json: &str) {
         let Ok(mut phones) = self.phones.lock() else { return };
@@ -236,7 +241,7 @@ impl Served {
 }
 
 /// Whether a phone may send this ([`PAGE_MESSAGES`], [`COMMANDS`], [`YOUTUBE`]).
-fn allowed(json: &str) -> bool {
+pub fn allowed(json: &str) -> bool {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else { return false };
     let kind = value.get("type").and_then(|kind| kind.as_str()).unwrap_or_default();
     if PAGE_MESSAGES.contains(&kind) {

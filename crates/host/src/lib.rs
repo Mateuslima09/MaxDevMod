@@ -37,7 +37,7 @@ mod webview;
 mod youtube;
 mod youtube_music;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
@@ -47,7 +47,7 @@ use windows::Win32::Foundation::LUID;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage};
 
-use capture::Capture;
+use capture::{Capture, Published};
 use gpu::{Gpu, SharedFrame};
 use player::{PartSpeakers, Player, PlayerWatch};
 use pointer::Pointer;
@@ -228,6 +228,8 @@ struct Pipeline {
     gpu: Gpu,
     /// Holds the shared frame texture (and its name) alive.
     capture: Capture,
+    /// The phone in the game's frame, as `capture` the screen's (`None`: no phone).
+    phone: Option<Capture>,
 }
 
 /// Runs until `stop` is set. Blocks the calling thread, which becomes the WebView2 UI thread.
@@ -287,10 +289,30 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         Content::Folder { root, .. } => Some(root.clone()),
         _ => None,
     };
-    let remote = std::rc::Rc::new(remote::Remote::start(ui_root, maps_dir.clone(), &config.data_dir));
+    let remote = std::rc::Rc::new(remote::Remote::start(ui_root.clone(), maps_dir.clone(), &config.data_dir));
+    // The phone in the game (owner 2026-11-01), out at its keybind: its own page beside the cab's, on the cab's
+    // browser, told what the cab is as the player's phones are, and captured into a frame of its own the plugin
+    // draws over the game. Hidden (drawing nothing) while it's put away.
+    let handset = match ui_root.as_deref().map(|root| open_handset(&webview, &stage, root, &maps_dir)) {
+        Some(Ok(handset)) => Some(std::rc::Rc::new(handset)),
+        Some(Err(e)) => {
+            log!("[handset] couldn't open: {e}");
+            None
+        }
+        None => None,
+    };
+    let mut handset_shown = false;
     {
         let remote = remote.clone();
-        webview.set_mirror(move |json| remote.broadcast(json));
+        let handset = handset.clone();
+        webview.set_mirror(move |json| {
+            remote.broadcast(json);
+            if let Some(handset) = &handset
+                && remote::Remote::mirrored(json)
+            {
+                let _ = handset.post_json(json);
+            }
+        });
     }
     let mut map_shown: (Option<String>, Option<u64>) = (None, None);
     let mut status = Status {
@@ -440,6 +462,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         if let Some(pipeline) = &pipeline {
             let squeeze = config.height as f32 / page_height.max(1) as f32;
             pipeline.capture.flush(cursor.look(Instant::now()), squeeze);
+            if let Some(phone) = &pipeline.phone
+                && handset_shown
+            {
+                phone.flush(None, 1.0);
+            }
         }
         // The page told whether the host draws the cursor (it draws its own where the host can't).
         let drawn = pipeline.as_ref().is_some_and(|pipeline| pipeline.capture.draws_cursor());
@@ -568,10 +595,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             };
             if needs_rebuild {
                 host.frame_generation.store(0, Ordering::Release);
+                host.phone_generation.store(0, Ordering::Release);
                 pipeline = None;
                 generation_counter = generation_counter.wrapping_add(1);
                 let generation = ((std::process::id() & 0x00ff_ffff) << 8) | (generation_counter & 0xff);
-                match build_pipeline(&config, &stage, &bridge, wanted, generation) {
+                match build_pipeline(&config, &stage, handset.as_deref(), &bridge, wanted, generation) {
                     Ok(built) => {
                         startup::mark(if wanted.is_some() {
                             "host: capturing for the game's GPU"
@@ -581,6 +609,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         host.frame_width.store(config.width, Ordering::Relaxed);
                         host.frame_height.store(config.height, Ordering::Relaxed);
                         host.frame_generation.store(generation, Ordering::Release);
+                        if built.phone.is_some() {
+                            host.phone_generation.store(generation, Ordering::Release);
+                        }
                         status.adapter = Some(built.gpu.adapter_name.clone());
                         status.error = None;
                         pipeline = Some(built);
@@ -677,9 +708,23 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let new = presses.wrapping_sub(keybind_presses[keybind as usize]);
             keybind_presses[keybind as usize] = presses;
             // More at once than a player presses in a moment: another plugin's count (the game restarted).
-            if new <= MOST_KEYBIND_PRESSES {
-                for _ in 0..new {
-                    let _ = webview.post_json(&keybind_message(keybind));
+            if new > MOST_KEYBIND_PRESSES {
+                continue;
+            }
+            for _ in 0..new {
+                match keybind_message(keybind) {
+                    Some(message) => {
+                        let _ = webview.post_json(&message);
+                    }
+                    // The phone's is the host's own: out, or put away.
+                    None => {
+                        if let Some(handset) = &handset {
+                            handset_shown = !handset_shown;
+                            let _ = handset.show(handset_shown);
+                            host.phone_shown.store(u32::from(handset_shown), Ordering::Release);
+                            log!("[handset] {}", if handset_shown { "out" } else { "put away" });
+                        }
+                    }
                 }
             }
         }
@@ -753,7 +798,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             part_speakers = Some(found);
         }
 
-        for message in webview.take_page_messages().into_iter().chain(remote.take()) {
+        for message in
+            webview.take_page_messages().into_iter().chain(remote.take()).chain(handset_messages(handset.as_deref()))
+        {
             match parse_page_message(&message) {
                 // The page announces itself when it (re)loads; it missed everything sent before, so send the
                 // current state again (some of it is otherwise only sent when it changes).
@@ -826,7 +873,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 Some(PageMessage::Spectrum { on }) => spectrum = on,
                 Some(PageMessage::CursorLight { light }) => cursor.set_light(light, Instant::now()),
                 Some(PageMessage::VolumeShown { volume }) => {
-                    let _ = webview.post_json(&format!(r#"{{"type":"volumeShown","volume":{}}}"#, volume.clamp(0.0, 1.0)));
+                    let _ =
+                        webview.post_json(&format!(r#"{{"type":"volumeShown","volume":{}}}"#, volume.clamp(0.0, 1.0)));
                 }
                 Some(PageMessage::Equalizer { equalizer: curve, custom }) => {
                     let sound = settings::SoundSettings { equalizer: curve.clamped(), custom };
@@ -1531,6 +1579,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     }
 
     host.frame_generation.store(0, Ordering::Release);
+    host.phone_generation.store(0, Ordering::Release);
+    host.phone_shown.store(0, Ordering::Release);
     host.screen_enabled.store(0, Ordering::Release);
     host.pid.store(0, Ordering::Release);
     drop(pipeline);
@@ -1839,14 +1889,32 @@ fn stops_message(id: Option<u32>, route: Option<&[u64]>, waypoints: &[u64], hidd
 /// The most presses of a keybind the page is told of at once.
 const MOST_KEYBIND_PRESSES: u32 = 10;
 
-/// `{"type":"keybind","action":"volumeUp"|"volumeDown"|"playPause"}`: the player pressed a keybind in the game.
-fn keybind_message(keybind: Keybind) -> String {
+/// `{"type":"keybind","action":"volumeUp"|"volumeDown"|"playPause"}`: the player pressed a keybind in the game
+/// (`None`: the phone's, which the host acts on itself).
+fn keybind_message(keybind: Keybind) -> Option<String> {
     let action = match keybind {
         Keybind::VolumeUp => "volumeUp",
         Keybind::VolumeDown => "volumeDown",
         Keybind::PlayPause => "playPause",
+        Keybind::Phone => return None,
     };
-    serde_json::json!({ "type": "keybind", "action": action }).to_string()
+    Some(serde_json::json!({ "type": "keybind", "action": action }).to_string())
+}
+
+/// The phone in the game's page (ui/handset.html), beside the cab's on its browser, with the cab's folders.
+fn open_handset(cab: &OffscreenWebView, stage: &Stage, root: &Path, maps: &Path) -> Result<OffscreenWebView, Error> {
+    let handset = cab.beside(stage, westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT)?;
+    handset.map_folder("westplay.cabin", root)?;
+    handset.map_folder_to_any_page("westplay.maps", maps)?;
+    handset.navigate("https://westplay.cabin/handset.html")?;
+    handset.show(false)?;
+    Ok(handset)
+}
+
+/// What the phone in the game's page posted since last taken: what a player's phone may send (remote.rs).
+fn handset_messages(handset: Option<&OffscreenWebView>) -> Vec<String> {
+    let Some(handset) = handset else { return Vec::new() };
+    handset.take_page_messages().into_iter().filter(|message| remote::allowed(message)).collect()
 }
 
 /// `{"type":"gameShown","shown":…}`: whether the game's window shows (`is_shown`).
@@ -1948,14 +2016,26 @@ fn start_spotify<'a>(
 fn build_pipeline(
     config: &Config,
     stage: &Stage,
+    handset: Option<&OffscreenWebView>,
     bridge: &Arc<BridgeMapping>,
     luid: Option<LUID>,
     generation: u32,
 ) -> Result<Pipeline, Error> {
     let gpu = Gpu::new(luid)?;
-    let shared = Arc::new(SharedFrame::new(&gpu, config.width, config.height, generation)?);
-    let capture = Capture::start(&gpu, &stage.visual()?, shared, bridge.clone())?;
-    Ok(Pipeline { gpu, capture })
+    let name = westplay_shared::frame_texture_name(generation);
+    let shared = Arc::new(SharedFrame::new(&gpu, config.width, config.height, &name)?);
+    let capture = Capture::start(&gpu, &stage.visual()?, shared, bridge.clone(), Published::Screen)?;
+    // The phone's frame, the cab's without it if it can't be had.
+    let phone = handset.and_then(|handset| {
+        let started = (|| -> Result<Capture, Error> {
+            let (width, height) = (westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT);
+            let name = westplay_shared::phone_texture_name(generation);
+            let shared = Arc::new(SharedFrame::new(&gpu, width, height, &name)?);
+            Ok(Capture::start(&gpu, &handset.visual()?, shared, bridge.clone(), Published::Phone)?)
+        })();
+        started.map_err(|e| log!("[handset] no frame: {e}")).ok()
+    });
+    Ok(Pipeline { gpu, capture, phone })
 }
 
 /// The GPU the game renders on, once the plugin has published it.

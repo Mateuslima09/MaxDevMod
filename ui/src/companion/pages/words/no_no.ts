@@ -98,6 +98,7 @@ export const words: CompanionWords = {
     volumeUp: 'Volum opp',
     volumeDown: 'Volum ned',
     playPause: 'Spill av/Pause',
+    phone: 'Phone',
     pressKey: 'Trykk en tast…',
     keybindsNote:
       'Klikk på en hurtigtast, og trykk så den nye tasten. Holder du {key} nede samtidig, virker den bare mens du bruker skjermen. Esc avbryter.',

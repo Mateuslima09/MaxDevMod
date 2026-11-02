@@ -99,6 +99,7 @@ export const words: CompanionWords = {
     volumeUp: 'Volume omhoog',
     volumeDown: 'Volume omlaag',
     playPause: 'Afspelen/Pauze',
+    phone: 'Phone',
     pressKey: 'Druk op een toets…',
     keybindsNote:
       'Klik op een sneltoets en druk dan op de nieuwe toets. Houd je daarbij {key} ingedrukt, dan werkt hij alleen terwijl je het scherm gebruikt. Esc annuleert.',
