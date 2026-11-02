@@ -3,6 +3,22 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.2.0 (2026-11-02)
+- Euro Truck Simulator 2, as American Truck Simulator: its trucks' screens and the tablet, its map, mods, the phone
+  and Nupay. Set up in both, WestPlay works with the one you play and switches to it as it starts (Setup, Other
+  Games). The Truck Screen page lists both games, the one open green.
+- The cars you can drive in ATS, the Ford Bronco and F-150: WestPlay on their screens.
+- Mod trucks' own screens are found and used on their own, for any mod with a GPS screen.
+- Adjust Screen, in the cab's Settings and on the phone: edges, proportion and size of WestPlay on each vehicle's
+  screen, kept per vehicle.
+- The phone in the game, its key (Alt+4), the volume and play/pause keys work in any truck, WestPlay on its screen
+  or not.
+- Go on a route WestPlay planned reaches the game's GPS on a short route too: it said the game didn't answer.
+- Without a map of your profile (a protected map mod, such as Mapa Eldorado's), Maps still follows the truck: a
+  grid, the way it came and the game's GPS route, instead of a still picture. The Map page says the mod is
+  protected, rather than "has no roads".
+- Nupay in dollars, reais or euros (the phone's Settings): the game's own currency by default.
+
 ## 2.1.4 (2026-10-28)
 - The cursor on WestPlay's screen stays where you left it when you let go of the interaction key, and fades away
   five seconds after you last moved it, as it does when you stop moving it: it went the moment you let go.
