@@ -17,6 +17,8 @@ export interface Strings {
   decimal: string
   /** The trip pill: "15:40 arrival · 12 min · 9.4 km". */
   arrival: string
+  /** Over the map without a map of the player's (a protected map mod), while the game's GPS has no route. */
+  noMap: string
   minutes: (minutes: number) => string
   hours: (hours: number, minutes: string) => string
   speedLimit: (limit: number) => string
@@ -485,6 +487,7 @@ export const STRINGS: Record<Language, Strings> = {
   en: {
     decimal: '.',
     arrival: 'arrival',
+    noMap: 'No map for this profile: set the destination on the game’s map (M)',
     minutes: (minutes) => `${minutes} min`,
     hours: (hours, minutes) => `${hours}:${minutes} hrs`,
     speedLimit: (limit) => `Speed limit ${limit}`,
@@ -979,6 +982,7 @@ export const STRINGS: Record<Language, Strings> = {
   pt: {
     decimal: ',',
     arrival: 'chegada',
+    noMap: 'Sem mapa deste perfil: marque o destino no mapa do jogo (M)',
     minutes: (minutes) => `${minutes} min`,
     hours: (hours, minutes) => `${hours}h${minutes}`,
     speedLimit: (limit) => `Limite de velocidade ${limit}`,
@@ -1477,6 +1481,7 @@ export const STRINGS: Record<Language, Strings> = {
   tr: {
     decimal: ',',
     arrival: 'varış',
+    noMap: 'Bu profilin haritası yok: hedefi oyunun haritasında belirleyin (M)',
     minutes: (minutes) => `${minutes} dk`,
     hours: (hours, minutes) => `${hours}:${minutes} sa`,
     speedLimit: (limit) => `Hız sınırı ${limit}`,

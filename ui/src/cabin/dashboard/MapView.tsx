@@ -5,7 +5,7 @@ import { GuidanceCard } from '../maps/GuidanceCard'
 import { DashboardMapControls, MapControls } from '../maps/MapControls'
 import { MapSearch } from '../maps/MapSearch'
 import { nextStop } from '../maps/nextStop'
-import { useMapData } from '../maps/mapData'
+import { NO_MAP, useMapData } from '../maps/mapData'
 import { RoadMap } from '../maps/RoadMap'
 import { useLive } from '../state/store'
 import { useText } from '../state/text'
@@ -15,10 +15,10 @@ import { cabClock } from '../../shared/host'
 /**
  * The map tile (Dashboard and the Maps app): the live map following the truck (with the game's GPS route),
  * the trip's arrival, time and distance left while there's a route, the road's speed limit and the live
- * speed; in the Maps app, turn-by-turn over the map (the Dashboard has its own widget for it). Without map
- * data it shows a drawn stand-in map (dark or daytime, following the appearance) tilted like CarPlay's
- * driving view. `interactive` (the Maps app): the player can move the map, with its buttons; on the
- * Dashboard, it only zooms (its buttons fading while unused).
+ * speed; in the Maps app, turn-by-turn over the map (the Dashboard has its own widget for it). Without a map
+ * of the player's (a protected map mod, or none built yet) the live map goes on without roads: the truck, the way
+ * it came and the game's GPS route (mapData.ts NO_MAP). `interactive` (the Maps app): the player can move the
+ * map, with its buttons; on the Dashboard, it only zooms (its buttons fading while unused).
  * On a map WestPlay doesn't allow (by HVT), it says so instead, in the game's language.
  */
 export function MapView({ interactive = false }: { interactive?: boolean }) {
@@ -26,6 +26,7 @@ export function MapView({ interactive = false }: { interactive?: boolean }) {
   const limit = useLive((state) => (state.telemetry ? speedKmh(state.telemetry.navigationSpeedLimit) : 0))
   const data = useMapData()
   const hvtMap = useLive((state) => state.hvtMap)
+  const hasRoute = useLive((state) => state.route !== null)
   const text = useText()
 
   if (hvtMap) {
@@ -40,24 +41,15 @@ export function MapView({ interactive = false }: { interactive?: boolean }) {
     )
   }
 
+  // No map of the player's (a protected map mod, or none built yet): the live map all the same, without roads
+  // (mapData.ts NO_MAP), the truck, the way it came and the game's route on it. With a map, that map.
+  const shown = data ?? (data === null ? NO_MAP : undefined)
+
   return (
     <div className="map-tile">
-      {data ? (
-        <RoadMap data={data} interactive={interactive} />
-      ) : (
-        data === null && (
-          <>
-            <div className="map-plane map-dark" />
-            <div className="map-plane map-light" />
-            <div className="puck" aria-hidden>
-              <svg viewBox="0 0 24 24" width="22" height="22">
-                <path d="M12 3 19 20l-7-4-7 4Z" fill="#fff" />
-              </svg>
-            </div>
-          </>
-        )
-      )}
+      {shown && <RoadMap data={shown} interactive={interactive} />}
       <div className="map-shade" />
+      {shown?.blank && !hasRoute && <div className="no-map-pill glass">{text.noMap}</div>}
       <TripPill />
       <div className="speed-stack">
         {limit > 0 && (
@@ -68,8 +60,9 @@ export function MapView({ interactive = false }: { interactive?: boolean }) {
         {speed > 0 && <div className={`speed-badge${limit > 0 && speed > limit ? ' over' : ''}`}>{speed}</div>}
       </div>
       {interactive && <GuidanceCard variant="banner" />}
-      {data && interactive && <MapControls />}
-      {data && !interactive && <DashboardMapControls />}
+      {shown && interactive && <MapControls />}
+      {shown && !interactive && <DashboardMapControls />}
+      {/* No places to search without a map. */}
       {data && interactive && <MapSearch />}
     </div>
   )

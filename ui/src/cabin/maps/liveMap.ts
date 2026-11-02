@@ -24,6 +24,7 @@ import {
   zoomForSpeed,
   zoomOffsetFor,
 } from './camera'
+import { answerBlankTiles, syncBlank } from './blankMap'
 import { buildingFilter, type Canopy, canopiesOver } from './buildings'
 import { labelLines, placeLabels } from './labels'
 import { drawPlaceIcon, parsePlaceIcon } from './placeIcons'
@@ -220,6 +221,7 @@ function collectSamples() {
 }
 
 function create(data: MapData, appearance: Appearance): LiveMap {
+  if (data.blank) answerBlankTiles()
   const element = document.createElement('div')
   element.className = 'road-map'
   const map = new maplibregl.Map({
@@ -727,6 +729,7 @@ function place() {
       syncPlayers(current, now)
       syncRouteTraffic(current, now)
       syncRoute(current, now)
+      if (current.data.blank) syncBlank(current.map, current.painted, truckAt(samples, now - FOLLOW_DELAY_MS))
       syncCanopies(current, now)
       updateCamera(current, now, dt)
       showLabels(current)

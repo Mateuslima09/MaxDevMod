@@ -45,6 +45,30 @@ export interface MapData {
   /** Which country each part of the map is in, and their time zones (state/timeZone.ts): the file's address,
    * `null` without one (a map built before WestPlay read them). */
   countries: string | null
+  /** No map of the player's: [`NO_MAP`]. */
+  blank?: boolean
+}
+
+/** The protocol [`NO_MAP`]'s tiles come from: each one empty (liveMap.ts answers it). */
+export const BLANK_TILES = 'westplay-blank'
+
+/**
+ * What the map shows without a map of the player's (owner 2026-11-02: a protected map mod, as Mapa Eldorado's,
+ * or none built yet): no roads, only plain ground with a grid, the truck, the way it came and the game's GPS
+ * route (the game says it as it plays: its route's nodes, liveMap.ts). Rather than a still picture. Its area
+ * the whole of any game's world.
+ */
+export const NO_MAP: MapData = {
+  tiles: `${BLANK_TILES}://{z}/{x}/{y}`,
+  signs: null,
+  minzoom: 0,
+  maxzoom: 14,
+  bounds: [-45, -45, 45, 45],
+  centre: [0, 0],
+  labels: [],
+  places: null,
+  countries: null,
+  blank: true,
 }
 
 /** Where the map is: its folder's address (absolute: MapLibre fetches tiles from its worker), and which
