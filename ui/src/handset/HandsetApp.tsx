@@ -42,7 +42,9 @@ const CAB_APPS: AppId[] = ['maps', 'youtubeMusic', 'spotify']
 export function HandsetApp({ remote }: { remote: boolean }) {
   useEffect(() => connectHost(), [])
   useEffect(() => followTimeZone(), [])
-  const language = languageOf(useLive((state) => state.gameLanguage))
+  // The game's language, else (the game not running) the device's: a phone in Portuguese said in English had its
+  // browser offer to translate it.
+  const language = languageOf(useLive((state) => state.gameLanguage) ?? navigator.language.toLowerCase())
   useEffect(() => {
     document.documentElement.lang = language
   }, [language])
