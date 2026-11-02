@@ -14,7 +14,7 @@ import { PhoneVolume } from '../phone/PhoneVolume'
 import { useNowPlaying } from '../cabin/dashboard/useNowPlaying'
 import { CommandsApp } from './CommandsApp'
 import { COMMAND_WORDS } from './commandWords'
-import { useFullScreen } from './fullScreen'
+import { goFullScreen, useFullScreen } from './fullScreen'
 import { Home } from './Home'
 import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
@@ -100,7 +100,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'commands' && <CommandsApp words={COMMAND_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'freight' && <FreightApp words={words} units={prefs.units} />}
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
-              {app === 'settings' && <SettingsApp words={words} prefs={prefs} />}
+              {app === 'settings' && <SettingsApp words={words} prefs={prefs} remote={remote} />}
               {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} />}
               {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
             </div>
@@ -286,7 +286,7 @@ function TruckApp({ words, units }: { words: Words; units: Prefs['units'] }) {
 const LITRES_PER_GALLON = 3.785411784
 
 /** The phone's look and units (prefs.ts), the volume of what plays, reloading it, and how it's used. */
-function SettingsApp({ words, prefs }: { words: Words; prefs: Prefs }) {
+function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; remote: boolean }) {
   return (
     <>
       {/* Each choice as wide as its row: its header names it. */}
@@ -341,6 +341,12 @@ function SettingsApp({ words, prefs }: { words: Words; prefs: Prefs }) {
         <button type="button" className="ios-row ios-row-action" onClick={() => location.reload()}>
           {words.reload}
         </button>
+        {/* On the player's phone: full screen again, once left. */}
+        {remote && document.fullscreenEnabled && (
+          <button type="button" className="ios-row ios-row-action" onClick={() => void goFullScreen()}>
+            {words.fullScreen}
+          </button>
+        )}
       </List>
       <List header={words.howTo} footer="WestPlay ATS">
         <Row label={<span className="ios-row-wrap">{words.howToText}</span>} />
@@ -430,6 +436,7 @@ const WORDS = {
     lookLight: 'Light',
     lookDark: 'Dark',
     units: 'Units',
+    fullScreen: 'Full screen',
     wallpaper: 'Wallpaper',
     wallpapers: { aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
     miles: 'Miles',
@@ -488,6 +495,7 @@ const WORDS = {
     lookLight: 'Claro',
     lookDark: 'Escuro',
     units: 'Unidades',
+    fullScreen: 'Tela cheia',
     wallpaper: 'Papel de parede',
     wallpapers: { aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
     miles: 'Milhas',

@@ -80,25 +80,44 @@ body,
   color: #fff;
 }
 
+/* The wallpaper on a layer of its own, drawn once: a gradient as big as the screen, drawn again with whatever
+   changed over it (the time, the speed) twenty times a second, was more than a phone could. */
+.handset-screen.at-home::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--wallpaper);
+  transform: translateZ(0);
+}
+
+.handset-screen.at-home > :not(.ios-home-indicator) {
+  position: relative;
+}
+
+/* The pickers in Settings show their wallpaper. */
+.ios-wallpaper {
+  background: var(--wallpaper) !important;
+}
+
 .wallpaper-aurora {
-  background:
+  --wallpaper:
     radial-gradient(90% 55% at 15% 10%, #3a6df0 0%, transparent 70%),
     radial-gradient(80% 60% at 95% 55%, #a443d8 0%, transparent 70%),
-    radial-gradient(90% 60% at 20% 100%, #e0566e 0%, transparent 70%), #141433 !important;
+    radial-gradient(90% 60% at 20% 100%, #e0566e 0%, transparent 70%), #141433;
 }
 
 .wallpaper-ocean {
-  background:
+  --wallpaper:
     radial-gradient(90% 60% at 80% 5%, #4fd1ff 0%, transparent 70%),
     radial-gradient(90% 60% at 10% 60%, #1a73e8 0%, transparent 70%),
-    radial-gradient(90% 60% at 80% 100%, #00b894 0%, transparent 70%), #04213f !important;
+    radial-gradient(90% 60% at 80% 100%, #00b894 0%, transparent 70%), #04213f;
 }
 
 .wallpaper-sunset {
-  background:
+  --wallpaper:
     radial-gradient(90% 55% at 20% 5%, #ffb547 0%, transparent 70%),
     radial-gradient(90% 60% at 90% 45%, #ff5e62 0%, transparent 70%),
-    radial-gradient(90% 60% at 15% 100%, #7b2ff7 0%, transparent 70%), #2a0f2e !important;
+    radial-gradient(90% 60% at 15% 100%, #7b2ff7 0%, transparent 70%), #2a0f2e;
 }
 
 /* On the player's own phone: the screen alone, the status bar in the band its notch leaves. */

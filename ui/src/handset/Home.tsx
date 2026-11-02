@@ -161,30 +161,35 @@ function ClockWidget({ days }: { days: string[] }) {
 /** The weather where the truck is (as the Dashboard's widget); where the game's isn't known, the truck's speed
  * and fuel instead. */
 function WeatherOrTruckWidget({ units, noGame }: { units: Prefs['units']; noGame: string }) {
+  const weather = useLive((state) => state.weather)
+  // What it shows, as it shows it: drawn again only as that changes, not at each of the game's twenty a second.
+  const fuel = useLive((state) => (state.telemetry ? Math.round(state.telemetry.fuel) : null))
+  const shownSpeed = useLive((state) => (state.telemetry ? speed(state.telemetry.speed, units) : null))
+  if (weather) return <WeatherWidget weather={weather} />
+  return (
+    <Small className="ios-widget-truck" kicker={fuel === null ? noGame : `${fuel} L`}>
+      <div className="ios-widget-big">{shownSpeed ?? '–'}</div>
+      <div className="ios-widget-line">{speedUnit(units)}</div>
+    </Small>
+  )
+}
+
+/** The weather and the nearest city: the map's names (the whole map's data, heavy on a phone) only for it. */
+function WeatherWidget({ weather }: { weather: NonNullable<ReturnType<typeof useLive.getState>['weather']> }) {
   const text = useText()
   const labels = useMapData()?.labels
-  const weather = useLive((state) => state.weather)
-  const telemetry = useLive((state) => state.telemetry)
   const gameTime = useLive((state) => (state.telemetry ? cabClock(state.telemetry, state.clockShift) : 0))
   const place = useLive((state) => {
     const t = state.telemetry
     return t && labels ? nearestCity([t.x, t.z], labels) : null
   })
-  const view = weather ? weatherView(weather, gameTime, place, text) : null
-  if (view) {
-    return (
-      <article className="ios-widget ios-widget-small ios-widget-weather">
-        <div className="ios-widget-kicker">{view.place}</div>
-        <WeatherGlyph symbol={view.symbol} size={46} />
-        <div className="ios-widget-line">{view.condition}</div>
-      </article>
-    )
-  }
+  const view = weatherView(weather, gameTime, place, text)
   return (
-    <Small className="ios-widget-truck" kicker={telemetry ? `${Math.round(telemetry.fuel)} L` : noGame}>
-      <div className="ios-widget-big">{telemetry ? speed(telemetry.speed, units) : '–'}</div>
-      <div className="ios-widget-line">{speedUnit(units)}</div>
-    </Small>
+    <article className="ios-widget ios-widget-small ios-widget-weather">
+      <div className="ios-widget-kicker">{view.place}</div>
+      <WeatherGlyph symbol={view.symbol} size={46} />
+      <div className="ios-widget-line">{view.condition}</div>
+    </article>
   )
 }
 
