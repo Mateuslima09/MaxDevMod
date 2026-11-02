@@ -30,6 +30,22 @@ export function reportHealth(send: (report: object) => void): void {
   // How much the page holds: its elements (a list grown without end would show here).
   const observer = new MutationObserver(() => renders++)
   observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  // The touches and what became of them (owner 2026-11-03: "impossible to use"): how many came down, how many
+  // made a click, what was under the last, and whether a page's handler kept the browser from it.
+  let touches: string[] = []
+  const name = (target: EventTarget | null) => {
+    const element = target instanceof Element ? target : null
+    return element ? `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}` : '?'
+  }
+  for (const kind of ['pointerdown', 'pointerup', 'pointercancel', 'click', 'touchstart'] as const) {
+    window.addEventListener(
+      kind,
+      (event) => {
+        if (touches.length < 12) touches.push(`${kind}:${name(event.target)}${event.defaultPrevented ? '!' : ''}`)
+      },
+      { capture: false, passive: true },
+    )
+  }
   setInterval(() => {
     const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory
     send({
@@ -44,10 +60,12 @@ export function reportHealth(send: (report: object) => void): void {
       full: document.fullscreenElement !== null,
       hidden: document.hidden,
       errors,
+      touches,
     })
     frames = 0
     busy = 0
     renders = 0
     errors = []
+    touches = []
   }, EVERY_MS)
 }
