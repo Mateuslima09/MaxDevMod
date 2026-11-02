@@ -248,6 +248,16 @@ pub fn mod_screens_current(screen_mods: &GameFiles, built: &Path) -> bool {
     })
 }
 
+/// Whether the mod built at `built` has every screen layout WestPlay knows: one added in an update (the Ford cars':
+/// owner 2026-11-02) is in it only once it's made again. Each layout's texture is in the mod, whether its script is.
+pub fn layouts_current(built: &Path) -> bool {
+    let Ok(archive) = Archive::open(built) else { return false };
+    let ours = GameFiles::new(vec![Mount::Archive(archive)]);
+    screen_layouts()
+        .iter()
+        .all(|layout| ours.read(&format!("{SCREEN_DIR}/{}.mat", texture_name(layout))).ok().flatten().is_some())
+}
+
 /// The quoted value of a definition's one `name:` line (`gps_path: "/ui/gps.sii"`, however spaced); `None` without
 /// one, or with more than one.
 fn quoted(text: &str, name: &str) -> Option<String> {
@@ -1154,6 +1164,9 @@ mod tests {
         let out = std::env::temp_dir().join(FILE_NAME);
         std::fs::write(&out, &bytes).unwrap();
         println!("{} bytes, patched {:?}, missing {:?}: {}", bytes.len(), built.patched, built.missing, out.display());
+        // Every layout's in it: the app doesn't make it again.
+        assert!(layouts_current(&out));
+        assert!(!layouts_current(&out.with_file_name("none.scs")));
         let archive = westplay_mapdata::archive::Archive::open(&out).unwrap();
         for layout in screen_layouts().iter().filter(|layout| built.patched.contains(&layout.id)) {
             for script in layout.gps_scripts.iter().filter_map(|script| archive.read(script).unwrap()) {

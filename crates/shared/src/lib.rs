@@ -72,7 +72,8 @@ pub fn screen_layouts() -> &'static [ScreenLayout] {
 /// more, 20.1 x 12.2 cm (1.648:1, 2026-10-26). ATS's trucks' own screens, by their scripts' screen areas until
 /// measured in the cab: the Cascadias' and the Western Star 57X's 1440 x 540 (2.667:1, laid out 1280 x 480), the
 /// Volvo VNL 2018's and VNR Electric's 800 x 480 (1.667:1), the Western Star 5700XE's 512 x 300 (1.707:1); the
-/// Kenworth T680 2022's and the Volvo VNL 2025's are 16:9.
+/// Kenworth T680 2022's and the Volvo VNL 2025's are 16:9. ATS's Ford cars' (the Bronco's, the F-150's), 1280 x 800
+/// shown whole (1.6:1).
 pub fn page_height(index: usize) -> u32 {
     match screen_layouts().get(index).map(|layout| layout.id) {
         Some("generic") => 793,
@@ -84,6 +85,7 @@ pub fn page_height(index: usize) -> u32 {
         Some("freightliner-cascadia" | "westernstar-57x") => 480,
         Some("volvo-vnl-2018") => 768,
         Some("westernstar-5700xe") => 750,
+        Some("ford-cars") => 800,
         _ => SCREEN_HEIGHT,
     }
 }
@@ -1016,6 +1018,7 @@ mod tests {
             ("volvo-vnl-2018", 768),
             ("westernstar-5700xe", 750),
             ("kenworth-t680-2022", SCREEN_HEIGHT),
+            ("ford-cars", 800),
         ] {
             assert_eq!(page_height(index(layout)), height, "{layout}");
         }

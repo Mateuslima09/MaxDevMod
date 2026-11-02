@@ -51,3 +51,7 @@ volvo-vnl-2025    ui/dashboard/volvo_vnl2025_gps.sii
 westernstar-5700xe ui/dashboard/westernstar_5700xe_gps.sii
 # Western Star 57X: the Cascadias' 1440 x 540 screen, its script a little different.
 westernstar-57x   ui/dashboard/westernstar_57x_gps.sii
+# ATS's drivable cars (owner 2026-11-02: "now it has cars"): the Ford Bronco (2024) and F-150 (2023), their
+# interiors' (interior/computers.sui) screens alike, 1280 x 800, shown whole (a player's Bronco, in the cab).
+# The Mustang (1967) and Crown Victoria (2006) have no screen.
+ford-cars         ui/dashboard/ford_bronco_gps_24.sii ui/dashboard/ford_f150_gps_23.sii

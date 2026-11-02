@@ -26,6 +26,7 @@ export const SCREEN_LAYOUT_IDS = [
   'volvo-vnl-2025',
   'westernstar-5700xe',
   'westernstar-57x',
+  'ford-cars',
 ] as const
 
 export type ScreenLayoutId = (typeof SCREEN_LAYOUT_IDS)[number]
@@ -167,6 +168,9 @@ const PROFILES: readonly ProfileEntry[] = [
   // went to a second page (owner 2026-11-01: "it doesn't have YouTube Music"); smaller, every app is on one.
   { layout: 'freightliner-cascadia', profile: { name: 'Freightliner Cascadia', oemStrip: null, scale: 0.75 } },
   { layout: 'westernstar-57x', profile: { name: 'Western Star 57X', oemStrip: null, scale: 0.75 } },
+  // ATS's Ford Bronco and F-150 (owner 2026-11-02): a 1280 x 800 screen (the page laid out at it: crates/shared
+  // page_height), at the DAF's sizing until tuned in the car.
+  { layout: 'ford-cars', profile: { name: 'Ford Bronco / F-150', oemStrip: null, scale: 1 } },
 ]
 
 /** Screens not tuned yet: CarPlay on the whole screen, its layout adapting to the space (responsive). */

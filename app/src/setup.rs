@@ -393,7 +393,8 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
     let screens_current = game_mod::mod_screens_current(&screen_mods, &ours);
     let marks = cab_mark::for_tablet(&files, &mods, &mod_trucks);
     let marks_current = cab_mark::current(&marks, &ours);
-    if wanted != present || !screens_current || !marks_current {
+    let layouts_current = game_mod::layouts_current(&ours);
+    if wanted != present || !screens_current || !marks_current || !layouts_current {
         let made = game_mod::build(&files, &mod_trucks, &screen_mods, &marks).map_err(|error| error.to_string());
         let made = made.and_then(|(bytes, built)| {
             let dir = ours.parent().ok_or("no folder")?;

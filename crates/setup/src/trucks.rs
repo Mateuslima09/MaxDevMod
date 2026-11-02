@@ -17,6 +17,8 @@ use crate::profiles::Profile;
 pub enum Source {
     /// The game's own (or a DLC's): its definition, `def/vehicle/truck/<id>/data.sii`.
     Game(&'static str),
+    /// One of the game's drivable cars (ATS, owner 2026-11-02): its definition, `def/vehicle/car/<id>/data.sii`.
+    Car(&'static str),
     /// A mod's, found by these words (all of them, in its name or file name): installed (in the game's `mod`
     /// folder or the Workshop), active in a profile or not.
     Mod(&'static [&'static str]),
@@ -138,6 +140,19 @@ pub const TRUCKS: &[Truck] = &[
         source: Source::Game("westernstar.57x"),
         layout: Some("westernstar-57x"),
     },
+    // ATS's drivable cars with a screen (owner 2026-11-02).
+    Truck {
+        id: "ford-bronco-2024",
+        name: "Ford Bronco (2024)",
+        source: Source::Car("ford.bronco_24"),
+        layout: Some("ford-cars"),
+    },
+    Truck {
+        id: "ford-f150-2023",
+        name: "Ford F-150 (2023)",
+        source: Source::Car("ford.f150_23"),
+        layout: Some("ford-cars"),
+    },
     // Oyuncuyusbis' coaches (mods), WestPlay on their own screens (owner 2026-10-24).
     Truck {
         id: "travego-16-shd",
@@ -192,6 +207,7 @@ pub fn fit(files: &GameFiles, patched: &[&str], profiles: &[Profile], installed:
         .map(|truck| {
             let in_game = match truck.source {
                 Source::Game(id) => files.read(&format!("def/vehicle/truck/{id}/data.sii")).ok().flatten().is_some(),
+                Source::Car(id) => files.read(&format!("def/vehicle/car/{id}/data.sii")).ok().flatten().is_some(),
                 Source::Mod(words) => {
                     let has = |named: &str| {
                         let named = named.to_lowercase();
