@@ -60,7 +60,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
       <div className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}`}>
         <StatusBar />
         {app === null ? (
-          <Home words={words} open={setApp} units={prefs.units} />
+          <Home words={words} open={setApp} units={prefs.units} remote={remote} />
         ) : (
           <section className={`ios-app-screen${compact ? ' compact' : ''}`} key={app}>
             <header className="ios-nav">
@@ -404,6 +404,7 @@ const WORDS = {
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
     noGame: 'The game isn’t running',
+    openMap: 'Tap to open the map',
     delivering: 'Delivering',
     pickingUp: 'Picking up',
     weight: 'Weight',
@@ -463,6 +464,7 @@ const WORDS = {
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',
     noGame: 'O jogo não está aberto',
+    openMap: 'Toque para abrir o mapa',
     delivering: 'Entregando',
     pickingUp: 'Indo buscar',
     weight: 'Peso',

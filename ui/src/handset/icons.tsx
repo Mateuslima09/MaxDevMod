@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react'
-import { type AppIconRole, appIcon } from '../shared/icons'
 
 /** The phone's apps (HandsetApp.tsx). */
 export type AppId =
   'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'commands' | 'freight' | 'truck' | 'settings' | 'nupay' | 'services'
 
-/** The apps that are the cab's too: their real icons, the cab's own (owner 2026-11-03: "the apps' real logos"). */
-const REAL: Partial<Record<AppId, AppIconRole>> = {
+/**
+ * The apps that are the cab's too: their real icons (owner 2026-11-03: "the apps' real logos"), the cab's light
+ * set drawn once into plain images (public/icons/phone, 180 px): drawn from their SVGs, with their blurred
+ * shadows, a phone's browser stalled on them (the owner's: its dock and Settings' icon never came).
+ */
+const REAL: Partial<Record<AppId, string>> = {
   maps: 'maps',
   music: 'music',
-  youtubeMusic: 'youtubeMusic',
+  youtubeMusic: 'youtube-music',
   spotify: 'spotify',
   settings: 'settings',
 }
@@ -17,9 +20,9 @@ const REAL: Partial<Record<AppId, AppIconRole>> = {
 /** An app's icon as iOS draws them (`small`: a list row's): its real one, or for the phone's own apps a rounded
  * square of its colours, its glyph in white. */
 export function AppIcon({ id, small = false }: { id: AppId; small?: boolean }) {
-  const role = REAL[id]
-  return role ? (
-    <RealIcon role={role} small={small} />
+  const file = REAL[id]
+  return file ? (
+    <RealIcon file={file} small={small} />
   ) : (
     <span className={`ios-icon ios-icon-${id}${small ? ' small' : ''}`} aria-hidden>
       <svg viewBox="0 0 24 24">{GLYPHS[id]}</svg>
@@ -27,9 +30,9 @@ export function AppIcon({ id, small = false }: { id: AppId; small?: boolean }) {
   )
 }
 
-/** A real icon in its colours, as the apps' own (the cab's light set), whatever the phone's look. */
-function RealIcon({ role, small }: { role: AppIconRole; small: boolean }) {
-  const src = appIcon(role, 'light')
+/** A real icon in its colours, as the apps' own, whatever the phone's look. */
+function RealIcon({ file, small }: { file: string; small: boolean }) {
+  const src = `/icons/phone/${file}.png`
   return (
     <span className={`ios-icon ios-icon-real${small ? ' small' : ''}`} aria-hidden>
       <img src={src} alt="" draggable={false} />

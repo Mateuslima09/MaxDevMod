@@ -30,6 +30,7 @@ export interface HomeWords {
   apps: Record<AppId, string>
   days: string[]
   noGame: string
+  openMap: string
 }
 
 /**
@@ -38,7 +39,17 @@ export interface HomeWords {
  * screen's key held), their dots, and the dock under them. The first page has the widgets (the time, the
  * weather or the truck, what plays, where the truck is headed) and the apps; the second, the map.
  */
-export function Home({ words, open, units }: { words: HomeWords; open: (app: AppId) => void; units: Prefs['units'] }) {
+export function Home({
+  words,
+  open,
+  units,
+  remote,
+}: {
+  words: HomeWords
+  open: (app: AppId) => void
+  units: Prefs['units']
+  remote: boolean
+}) {
   const [page, setPage] = useState(0)
   const swipe = useSwipe(page, setPage, 2)
   return (
@@ -58,14 +69,24 @@ export function Home({ words, open, units }: { words: HomeWords; open: (app: App
           </div>
           <div className="ios-page">
             {/* The map following the truck, its route on it (owner 2026-11-02: "a tiny minimap, the route"); drawn
-                only while its page shows (or is swiped to): a map costs the GPU, which the game needs. */}
-            <Scaled scale={MINIMAP_SCALE} className="ios-widget ios-widget-map">
-              {(page === 1 || swipe.offset !== 0) && (
-                <Suspense fallback={null}>
-                  <MapView />
-                </Suspense>
-              )}
-            </Scaled>
+                only while its page shows (or is swiped to): a map costs the GPU, which the game needs. On the
+                player's own phone, a card that opens Maps: the map drawn as the page was swiped held a phone for
+                seconds (its report: 2.7 s, 2 frames a second). */}
+            {remote ? (
+              <button type="button" className="ios-widget ios-widget-map ios-map-card" onClick={() => open('maps')}>
+                <AppIcon id="maps" />
+                <span className="ios-arrival-title">{words.apps.maps}</span>
+                <span className="ios-widget-kicker">{words.openMap}</span>
+              </button>
+            ) : (
+              <Scaled scale={MINIMAP_SCALE} className="ios-widget ios-widget-map">
+                {(page === 1 || swipe.offset !== 0) && (
+                  <Suspense fallback={null}>
+                    <MapView />
+                  </Suspense>
+                )}
+              </Scaled>
+            )}
             <Icons apps={PAGE_TWO} words={words} open={open} />
           </div>
         </div>

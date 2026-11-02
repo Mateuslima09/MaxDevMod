@@ -204,7 +204,6 @@ body,
   min-height: 0;
   display: flex;
   flex-direction: column;
-  animation: ios-home-in 260ms ease-out;
 }
 
 .ios-pages {
@@ -1196,4 +1195,15 @@ body,
 
 .handset .ios-widget-music .widget {
   background-color: var(--ios-material);
+}
+
+/* On the player's own phone, the map's card on the second page: it opens Maps. */
+.handset .ios-map-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  color: var(--ios-label);
 }
