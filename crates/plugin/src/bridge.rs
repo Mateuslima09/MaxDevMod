@@ -64,3 +64,14 @@ pub fn screen_on() -> bool {
         && crate::screens::on_supported_truck()
         && get().is_some_and(|bridge| bridge.host.screen_enabled.load(Ordering::Acquire) == 1)
 }
+
+/// Whether the phone is out (the app running): used with the mouse, typed into, as the screen is, in any truck
+/// (owner 2026-11-02: in a truck WestPlay's screen isn't in, the phone should still work, the music with it).
+pub fn phone_out() -> bool {
+    host_alive() && get().is_some_and(|bridge| bridge.host.phone_shown.load(Ordering::Acquire) == 1)
+}
+
+/// Whether there's WestPlay to use: on the truck's screen, or the phone out.
+pub fn usable() -> bool {
+    screen_on() || phone_out()
+}

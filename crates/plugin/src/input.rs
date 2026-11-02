@@ -583,7 +583,7 @@ fn to_screen(object: Option<MouseObject>, value: u32) {
 pub fn interaction_active() -> bool {
     // Never while the game is paused: its menu and its map are used with the mouse (owner 2026-10-21: toggled
     // on, the menu couldn't be used).
-    let active = bridge::screen_on() && !crate::telemetry::paused() && interaction_key_held();
+    let active = bridge::usable() && !crate::telemetry::paused() && interaction_key_held();
     if ACTIVE.swap(active, Ordering::AcqRel) != active {
         log!("screen interaction {}", if active { "on" } else { "off" });
         if !active {
@@ -606,7 +606,7 @@ fn interaction_key_held() -> bool {
 }
 
 /// Whether the interaction key is down.
-fn interaction_key_down() -> bool {
+pub fn interaction_key_down() -> bool {
     let key = match bridge::get().map(|bridge| bridge.host.interaction_key.load(Ordering::Acquire)) {
         Some(key) if key != 0 => key,
         _ => DEFAULT_INTERACTION_KEY,
@@ -631,8 +631,8 @@ pub fn on_frame() {
     let pressed = newly_down(&KEY_WAS_DOWN, interaction_key_down());
     let off = if !toggle_mode() {
         Some("held mode")
-    } else if !bridge::screen_on() {
-        Some("WestPlay not on the screen")
+    } else if !bridge::usable() {
+        Some("WestPlay not on the screen, the phone put away")
     } else if crate::telemetry::paused() {
         // Its menu wants the mouse; back in the game, a press uses the screen again.
         Some("the game paused")

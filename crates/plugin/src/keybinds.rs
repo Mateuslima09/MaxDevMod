@@ -1,6 +1,6 @@
 //! The player's keybinds (the app's settings, through the bridge): volume up, volume down, play/pause.
 //!
-//! Each press of a bound key, in the game with WestPlay on its screen, is counted for the app, which acts on
+//! Each press of a bound key, in the game with the app running (in any truck), is counted for the app, which acts on
 //! it. A binding with the interaction key counts only while the player uses the screen (the key held, or
 //! toggled on); one without it counts whenever, but not while the player types into WestPlay. While its
 //! binding counts, a bound key is kept from the game (the `keyboard` module asks [`taken`]), so the game
@@ -40,10 +40,21 @@ pub fn on_frame() {
     }
 }
 
-/// Whether a binding counts now: with WestPlay on the screen, and either the screen in use (one with the
-/// interaction key) or the player not typing into WestPlay (one without it).
+/// Whether a binding counts now: with the app running, in any truck (owner 2026-11-02: the phone and the music
+/// work in a truck WestPlay's screen isn't in), and either the interaction key used (one with it: the screen or the
+/// phone in use, or with neither to use, the key down, as the phone is taken out: toggling is off then) or the
+/// player not typing into WestPlay (one without it).
 fn counts(with_interaction_key: bool) -> bool {
-    bridge::screen_on() && if with_interaction_key { input::interaction_active() } else { !typing::typing() }
+    if !bridge::host_alive() {
+        return false;
+    }
+    if !with_interaction_key {
+        !typing::typing()
+    } else if bridge::usable() {
+        input::interaction_active()
+    } else {
+        !crate::telemetry::paused() && input::interaction_key_down()
+    }
 }
 
 /// Whether the game is kept from `key` (a virtual-key code; the generic Shift, Ctrl and Alt stand for both

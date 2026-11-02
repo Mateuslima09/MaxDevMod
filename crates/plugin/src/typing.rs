@@ -36,7 +36,7 @@ pub fn typing() -> bool {
 pub fn update(speed: f32, paused: bool) {
     let Some(bridge) = bridge::get() else { return };
     let block = &bridge.typing;
-    let selection = if bridge::screen_on() { block.selection.load(Ordering::Acquire) } else { 0 };
+    let selection = if bridge::usable() { block.selection.load(Ordering::Acquire) } else { 0 };
     let moving = speed.abs() * 3.6 > MOVING_KMH;
     let state = GATE.lock().unwrap_or_else(|e| e.into_inner()).update(selection, moving);
     // Paused (a menu, the game's map): its keys are its own, without letting go of the selection.
