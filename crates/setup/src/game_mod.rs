@@ -1190,27 +1190,39 @@ mod tests {
     #[test]
     #[ignore = "reads the PC's game"]
     fn builds_the_mod_from_the_installed_game() {
-        let game = crate::game::find().into_iter().next().expect("the game installed");
-        let files = GameFiles::install(&game.dir).unwrap();
-        let (bytes, built) = build(&files, &[], &GameFiles::new(Vec::new()), &cab_mark::Marks::default()).unwrap();
-        let out = std::env::temp_dir().join(FILE_NAME);
-        std::fs::write(&out, &bytes).unwrap();
-        println!("{} bytes, patched {:?}, missing {:?}: {}", bytes.len(), built.patched, built.missing, out.display());
-        // Every layout's in it: the app doesn't make it again.
-        assert!(layouts_current(&out));
-        assert!(!layouts_current(&out.with_file_name("none.scs")));
-        let archive = westplay_mapdata::archive::Archive::open(&out).unwrap();
-        for layout in screen_layouts().iter().filter(|layout| built.patched.contains(&layout.id)) {
-            for script in layout.gps_scripts.iter().filter_map(|script| archive.read(script).unwrap()) {
-                let script = String::from_utf8(script).unwrap();
-                assert!(script.contains("_nameless.westplay.screen"), "{}", layout.id);
+        // Each game installed (ATS's and ETS2's, owner 2026-11-02), its own trucks with the tablet.
+        for game in crate::game::find() {
+            let files = GameFiles::install(&game.dir).unwrap();
+            let (bytes, built) = build(&files, &[], &GameFiles::new(Vec::new()), &cab_mark::Marks::default()).unwrap();
+            let out = std::env::temp_dir().join(format!("{}-{FILE_NAME}", game.kind.sdk_id()));
+            std::fs::write(&out, &bytes).unwrap();
+            println!(
+                "{}: {} bytes, patched {:?}, missing {:?}: {}",
+                game.kind.name(),
+                bytes.len(),
+                built.patched,
+                built.missing,
+                out.display()
+            );
+            // Every layout's in it: the app doesn't make it again.
+            assert!(layouts_current(&out));
+            let archive = westplay_mapdata::archive::Archive::open(&out).unwrap();
+            for layout in screen_layouts().iter().filter(|layout| built.patched.contains(&layout.id)) {
+                for script in layout.gps_scripts.iter().filter_map(|script| archive.read(script).unwrap()) {
+                    let script = String::from_utf8(script).unwrap();
+                    assert!(script.contains("_nameless.westplay.screen"), "{}", layout.id);
+                }
             }
+            assert!(built.patched.contains(&TABLET));
+            let truck = match game.kind {
+                crate::game::Kind::Ats => "kenworth.w900",
+                crate::game::Kind::Ets2 => "mercedes.actros2014",
+            };
+            let tablet = format!("def/vehicle/truck/{truck}/accessory/toyhang/westplay_tablet.sii");
+            assert!(archive.read(&tablet).unwrap().is_some(), "{tablet}");
+            assert!(archive.read("vehicle/truck/upgrade/westplay_tablet/westplay_tablet_hang.pmg").unwrap().is_some());
         }
-        // The tablet, in the game's trucks.
-        assert!(built.patched.contains(&TABLET));
-        let w900 = "def/vehicle/truck/kenworth.w900/accessory/toyhang/westplay_tablet.sii";
-        assert!(archive.read(w900).unwrap().is_some());
-        assert!(archive.read("vehicle/truck/upgrade/westplay_tablet/westplay_tablet_hang.pmg").unwrap().is_some());
+        assert!(!layouts_current(&std::env::temp_dir().join("none.scs")));
     }
 
     /// A game folder with the Smart Dash's script and screens file, and an Advanced and a 10.1" interior in

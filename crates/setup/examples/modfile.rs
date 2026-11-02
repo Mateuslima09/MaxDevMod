@@ -7,7 +7,8 @@ fn main() {
     let game = westplay_setup::game::find().into_iter().next().expect("the game");
     let documents = westplay_setup::places::game_documents().expect("documents");
     for (file, _) in westplay_setup::profiles::installed_files(&documents, Some(&game)) {
-        let mount = if file.is_dir() { Mount::Folder(file.clone()) } else { Mount::Archive(Archive::open(&file).unwrap()) };
+        let mount =
+            if file.is_dir() { Mount::Folder(file.clone()) } else { Mount::Archive(Archive::open(&file).unwrap()) };
         if let Some(bytes) = GameFiles::new(vec![mount]).read(&path).ok().flatten() {
             println!("== {}", file.display());
             println!("{}", String::from_utf8_lossy(&bytes));

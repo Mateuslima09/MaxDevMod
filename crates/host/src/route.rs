@@ -838,7 +838,13 @@ mod tests {
         profile.mods =
             vec![a_mod("promods", &["europe"], true), a_mod("truck", &[], true), a_mod("gone", &["europe"], false)];
         // WestPlay set up in one install, the game running from another: the running one's files.
-        let set_up = Game { dir: "set-up".into(), found_by: FoundBy::Steam, version: None, dlcs: vec![] };
+        let set_up = Game {
+            kind: westplay_setup::game::Kind::Ats,
+            dir: "set-up".into(),
+            found_by: FoundBy::Steam,
+            version: None,
+            dlcs: vec![],
+        };
         let running = Path::new("running");
 
         let files = JunctionFiles::of(running, Some(&(set_up.clone(), profile.clone())));

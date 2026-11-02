@@ -3,6 +3,9 @@ import type { HostStatus } from './useHostStatus'
 
 /** An install of the game. Mirrors the app's `setup::GameInfo`. */
 export interface GameInfo {
+  /** Which game, and its name. */
+  kind: 'ats' | 'ets2'
+  name: string
   dir: string
   foundBy: 'steam' | 'installed' | 'chosen'
   version: string | null
@@ -17,6 +20,8 @@ export interface SetupState {
   finished: boolean
   /** The game WestPlay is set up in, if it is. */
   game: GameInfo | null
+  /** The other games it's set up in too: each the one it works with as it's played. */
+  others: GameInfo[]
   /** WestPlay was updated since it put its plugin and mod into that game: the new ones go in once it's
    * closed (`FinishUpdate`). */
   updated: boolean

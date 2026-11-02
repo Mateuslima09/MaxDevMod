@@ -15,8 +15,8 @@ mod input;
 mod keybinds;
 mod keyboard;
 mod log;
-mod money;
 mod mod_mount;
+mod money;
 mod navigation;
 mod screens;
 mod scs;
@@ -63,6 +63,7 @@ unsafe fn init(version: u32, params: *const TelemetryInitParamsV100) -> i32 {
         let game_name = cstr(params.common.game_name);
         let game_id = cstr(params.common.game_id);
         let game_version = params.common.game_version;
+        log::set_game(&game_id);
         log!(
             "westplay {} loaded: {game_name} ({game_id}), telemetry game version {}.{}, api {}.{}",
             env!("CARGO_PKG_VERSION"),

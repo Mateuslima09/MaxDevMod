@@ -146,6 +146,12 @@ export const words: CompanionWords = {
     closeGame: { title: 'Lütfen oyunu kapat.', text: 'WestPlay yalnızca oyun çalışmıyorken yeniden kurulabilir.' },
     checking: { title: 'Oyunun kontrol ediliyor', text: 'Sürüm, eklenti ve modlar' },
     checked: { title: 'Her şey kontrol edildi', text: 'WestPlay kurulu' },
+    otherGames: {
+      title: 'Diğer oyunlar',
+      footer: 'İkisinde de kuruluysa WestPlay oynadığın oyunla çalışır ve oyun açıldığında ona geçer.',
+      install: 'Yükle',
+      setUp: 'Kuruldu',
+    },
   },
   tutorial: {
     intro: {

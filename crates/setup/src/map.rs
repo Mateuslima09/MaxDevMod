@@ -52,7 +52,19 @@ const SAME_BUT_LEFT_OUT: u32 = 14;
 /// The folder of the map `profile` plays, in `maps` (WestPlay's maps folder): one per map and its map mods.
 pub fn folder(maps: &Path, profile: &Profile) -> PathBuf {
     let mods: Vec<&str> = profile.map_mods().map(|m| m.package.as_str()).collect();
-    maps.join(format!("{}-{:016x}", profile.map, fnv1a(mods.join("\n").as_bytes())))
+    let current = crate::game::current();
+    let game = GAME_PREFIXES.iter().find(|(kind, _)| *kind == current).map_or("", |(_, prefix)| prefix);
+    maps.join(format!("{game}{}-{:016x}", profile.map, fnv1a(mods.join("\n").as_bytes())))
+}
+
+/// The games whose maps' folders' names start with a prefix of their own (WestPlay in ETS2 beside ATS, owner
+/// 2026-11-02): ATS's, there first, have none. Each game's maps are kept while the other's is played.
+pub const GAME_PREFIXES: &[(crate::game::Kind, &str)] = &[(crate::game::Kind::Ets2, "ets2-")];
+
+/// The game whose map a map folder named `name` is ([`GAME_PREFIXES`]).
+pub fn game_of_folder(name: &str) -> crate::game::Kind {
+    let prefixed = GAME_PREFIXES.iter().find(|(_, prefix)| name.starts_with(prefix));
+    prefixed.map_or(crate::game::Kind::Ats, |(kind, _)| *kind)
 }
 
 /// What the map `profile` plays would be built from now.
@@ -277,6 +289,7 @@ mod tests {
 
     fn game() -> Game {
         Game {
+            kind: crate::game::Kind::Ats,
             dir: PathBuf::new(),
             found_by: FoundBy::Steam,
             version: Some(Version([1, 61, 1, 9])),

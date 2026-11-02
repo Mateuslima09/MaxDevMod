@@ -90,6 +90,13 @@ pub fn page_height(index: usize) -> u32 {
     }
 }
 
+/// The game's own folder in WestPlay's in Documents (`Documents\WestPlay`), by its SDK id: the mod built from it, its
+/// tablet's and its mod screens' files (owner 2026-11-02: WestPlay in ETS2 too). ATS's (`ats`) are in WestPlay's folder
+/// itself, where they were before ETS2 had them: `None`; ETS2's (`eut2`) in `ets2`.
+pub fn westplay_game_folder(game_id: &str) -> Option<&'static str> {
+    (game_id == "eut2").then_some("ets2")
+}
+
 /// Whether `id` is a slot for a mod vehicle's own screen found by setup (`screen_layouts.txt`'s `mod-1`...): which
 /// mod's is in it is setup's choice, the mod's shape in [`MOD_SCREENS_FILE`].
 pub fn is_mod_slot(id: &str) -> bool {

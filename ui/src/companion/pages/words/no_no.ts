@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Sjekker spillet ditt', text: 'Versjon, programtillegg og modifikasjoner' },
     checked: { title: 'Alt er sjekket', text: 'WestPlay er satt opp' },
+    otherGames: {
+      title: 'Andre spill',
+      footer: 'Satt opp i begge fungerer WestPlay med det du spiller, og bytter til det når det starter.',
+      install: 'Installer',
+      setUp: 'Satt opp',
+    },
   },
   tutorial: {
     intro: {

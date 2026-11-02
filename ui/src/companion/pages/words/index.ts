@@ -146,6 +146,9 @@ export interface CompanionWords {
     closeGame: { title: string; text: string }
     checking: { title: string; text: string }
     checked: { title: string; text: string }
+    /** The other games found, WestPlay set up in each or not (owner 2026-11-02: WestPlay in ETS2 as in ATS); a
+     * language without these has English's. */
+    otherGames?: { title: string; footer: string; install: string; setUp: string }
   }
   uninstall: UninstallWords
   tutorial: TutorialWords

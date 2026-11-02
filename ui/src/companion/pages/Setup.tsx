@@ -4,6 +4,7 @@ import { banner, explain, gameSummary, useGameRunning, useWords } from '../room/
 import { GLOW, useScreen, useScreenAt } from '../room/screen'
 import { checkGame, type InstallReport, installIntoGame } from '../setup'
 import { type PageProps, useGameCheck } from './page'
+import { companionWords } from './words'
 
 /**
  * Where WestPlay is installed and how to put it right: the game it's in, the plugin as it is
@@ -143,10 +144,68 @@ export function Setup(props: PageProps) {
         </Note>
       )}
       {(installError ?? error) && <Note tone="bad">{installError ?? error}</Note>}
+      <OtherGames props={props} running={running !== false} />
       <Group place={6}>
         <Row title={w.tutorial} link onClick={tutorial} />
         <Row title={cw.uninstall.row} danger onClick={uninstall} />
       </Group>
     </Panel>
+  )
+}
+
+/**
+ * The other games found (owner 2026-11-02: WestPlay in ETS2 as in ATS): each one set up ticked, the others with an
+ * install (the onboarding's, into that game, while it's closed). Installed, WestPlay works with it until the other one
+ * is played again; the companion reads what's set up anew.
+ */
+function OtherGames({ props, running }: { props: PageProps; running: boolean }) {
+  const { setup, cw } = props
+  const words = useWords()
+  const w = cw.setup.otherGames ?? companionWords('en_us').setup.otherGames
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const current = setup.game?.kind
+  const games = setup.found.filter((found) => found.kind !== current)
+  if (!w || games.length === 0) return null
+  const install = async (dir: string) => {
+    setInstalling(dir)
+    setError(null)
+    try {
+      const result = await installIntoGame(dir, false)
+      if (result.done) location.reload()
+      else setError(result.modError ?? (result.plugin.state === 'failed' ? result.plugin.error : result.plugin.state))
+    } catch (e) {
+      setError(explain(words, e))
+    } finally {
+      setInstalling(null)
+    }
+  }
+  return (
+    <>
+      <Group title={w.title} place={6}>
+        {games.map((game) => {
+          const setUp = setup.others.some((other) => other.dir === game.dir)
+          return (
+            <Row
+              key={game.dir}
+              title={game.name}
+              detail={gameSummary(words, game)}
+              value={setUp ? w.setUp : undefined}
+              accessory={
+                setUp ? (
+                  <Tick done />
+                ) : (
+                  <Button glass onClick={() => install(game.dir)} busy={installing === game.dir} disabled={running}>
+                    {w.install}
+                  </Button>
+                )
+              }
+            />
+          )
+        })}
+      </Group>
+      <Note>{w.footer}</Note>
+      {error && <Note tone="bad">{explain(words, error)}</Note>}
+    </>
   )
 }

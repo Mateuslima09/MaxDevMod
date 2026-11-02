@@ -62,9 +62,10 @@ impl PlayerWatch {
         let (speakers_sender, speakers) = mpsc::channel();
         let (trucks, truck_updates) = mpsc::channel::<TruckInfo>();
         let _ = std::thread::Builder::new().name("westplay-player".into()).spawn(move || {
-            let documents = places::game_documents();
-            // For the mods a profile plays: its Workshop folder and version, if the game is found.
-            let game = game::find().into_iter().next();
+            // The game WestPlay works with (`game::current`), its Documents folder and its install (for the mods a
+            // profile plays: its Workshop folder and version), found again as it changes.
+            let mut current: Option<game::Kind> = None;
+            let (mut documents, mut game) = (None, None);
             // Steam Cloud keeps the game's profiles under Steam's `userdata`.
             let userdata = places::steam().map(|dir| dir.join("userdata")).filter(|dir| dir.is_dir());
             let mut last: Option<(PathBuf, SystemTime, Option<SystemTime>)> = None;
@@ -75,15 +76,24 @@ impl PlayerWatch {
             let mut mod_files: Vec<PathBuf> = Vec::new();
             let mut found_from: Option<(TruckInfo, Option<SavedTruck>, Vec<PathBuf>)> = None;
             loop {
+                if current != Some(game::current()) {
+                    let kind = game::current();
+                    current = Some(kind);
+                    documents = places::game_documents();
+                    game = game::find().into_iter().find(|found| found.kind == kind);
+                    // Its saves and mods are another game's: all read again.
+                    last = None;
+                }
                 // The newest save of the profile the game has selected (its log), else the newest of all.
+                let steam_cloud = userdata.as_deref().map(|dir| (dir, game::current().steam_app()));
                 let latest = documents.as_deref().and_then(|dir| {
                     let selected = profiles::selected(dir);
                     let of_selected = selected.as_deref().and_then(|name| {
-                        save::latest_of(dir, userdata.as_deref(), |folder| {
+                        save::latest_of(dir, steam_cloud, |folder| {
                             profiles::name_from_folder(folder).as_deref() == Some(name)
                         })
                     });
-                    of_selected.or_else(|| save::latest(dir, userdata.as_deref()))
+                    of_selected.or_else(|| save::latest(dir, steam_cloud))
                 });
                 let stamped = latest.and_then(|path| Some((std::fs::metadata(&path).ok()?.modified().ok()?, path)));
                 // The profile's options (its time zones) are saved apart from its saves.

@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Перевіряємо вашу гру', text: 'Версія, плагін і моди' },
     checked: { title: 'Усе перевірено', text: 'WestPlay налаштовано' },
+    otherGames: {
+      title: 'Інші ігри',
+      footer: 'Налаштований в обох, WestPlay працює з тією, у яку ви граєте, і перемикається на неї під час запуску.',
+      install: 'Встановити',
+      setUp: 'Налаштовано',
+    },
   },
   tutorial: {
     intro: {

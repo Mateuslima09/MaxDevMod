@@ -147,6 +147,12 @@ export const words: CompanionWords = {
     },
     checking: { title: '正在檢查你的遊戲', text: '版本、外掛程式與 MOD' },
     checked: { title: '全部檢查完畢', text: 'WestPlay 已設定完成' },
+    otherGames: {
+      title: '其他遊戲',
+      footer: '在兩個遊戲中都設定後，WestPlay 會配合你正在玩的遊戲，並在它啟動時自動切換。',
+      install: '安裝',
+      setUp: '已設定',
+    },
   },
   tutorial: {
     intro: {

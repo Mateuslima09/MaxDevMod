@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Đang kiểm tra trò chơi', text: 'Phiên bản, plugin và mod' },
     checked: { title: 'Đã kiểm tra xong', text: 'WestPlay đã được thiết lập' },
+    otherGames: {
+      title: 'Trò chơi khác',
+      footer: 'Được thiết lập ở cả hai, WestPlay hoạt động với trò bạn đang chơi và chuyển sang nó khi khởi động.',
+      install: 'Cài đặt',
+      setUp: 'Đã thiết lập',
+    },
   },
   tutorial: {
     intro: {

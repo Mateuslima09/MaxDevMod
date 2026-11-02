@@ -26,6 +26,8 @@ const query = new URLSearchParams(location.search)
 const gameState = query.get('game') ?? 'live'
 
 const GAME: GameInfo = {
+  kind: 'ats',
+  name: 'American Truck Simulator',
   dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\American Truck Simulator',
   foundBy: 'steam',
   version: '1.61.1.9',
@@ -33,11 +35,22 @@ const GAME: GameInfo = {
   dlcs: 34,
 }
 
+const ETS2: GameInfo = {
+  kind: 'ets2',
+  name: 'Euro Truck Simulator 2',
+  dir: 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Euro Truck Simulator 2',
+  foundBy: 'steam',
+  version: '1.61.1.9',
+  tested: true,
+  dlcs: 40,
+}
+
 // A first run has no game set up until the onboarding installs into it.
 const setup: SetupState = {
   finished: !query.has('onboarding'),
   game: query.has('onboarding') ? null : GAME,
-  found: [GAME],
+  others: [],
+  found: [GAME, ETS2],
   updated: query.has('updated'),
   gameRunning: gameState !== 'off',
   language: query.get('lang'),

@@ -149,6 +149,12 @@ export const words: CompanionWords = {
     },
     checking: { title: '게임을 확인하는 중', text: '버전, 플러그인, MOD' },
     checked: { title: '모두 확인했어요', text: 'WestPlay 설정 완료' },
+    otherGames: {
+      title: '다른 게임',
+      footer: '두 게임 모두에 설정하면 WestPlay는 플레이 중인 게임에서 작동하고, 게임이 시작될 때 전환됩니다.',
+      install: '설치',
+      setUp: '설정됨',
+    },
   },
   tutorial: {
     intro: {

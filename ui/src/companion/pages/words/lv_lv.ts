@@ -149,6 +149,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Pārbaudām tavu spēli', text: 'Versija, spraudnis un modi' },
     checked: { title: 'Viss pārbaudīts', text: 'WestPlay ir iestatīts' },
+    otherGames: {
+      title: 'Citas spēles',
+      footer: 'Iestatīts abās, WestPlay darbojas ar to, kuru spēlē, un pārslēdzas uz to, kad tā sākas.',
+      install: 'Instalēt',
+      setUp: 'Iestatīts',
+    },
   },
   tutorial: {
     intro: {

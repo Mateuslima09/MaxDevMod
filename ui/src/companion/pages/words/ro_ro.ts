@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Se verifică jocul tău', text: 'Versiune, plugin și moduri' },
     checked: { title: 'Totul e verificat', text: 'WestPlay este configurat' },
+    otherGames: {
+      title: 'Alte jocuri',
+      footer: 'Configurat în ambele, WestPlay funcționează cu cel pe care îl joci și trece la el când pornește.',
+      install: 'Instalează',
+      setUp: 'Configurat',
+    },
   },
   tutorial: {
     intro: {

@@ -402,16 +402,21 @@ pub fn profile_of(save: &Path) -> Option<PathBuf> {
 
 /// The save the game wrote last, in any profile, in the game's documents folder or Steam Cloud's: the
 /// one being played, unless the game has loaded a profile that hasn't saved since (see [`latest_of`]).
-pub fn latest(documents: &Path, steam_userdata: Option<&Path>) -> Option<PathBuf> {
+pub fn latest(documents: &Path, steam_userdata: Option<(&Path, &str)>) -> Option<PathBuf> {
     latest_of(documents, steam_userdata, |_| true)
 }
 
-/// [`latest`], of the profiles whose folder's name (the profile's name in hexadecimal) `profile` takes.
-pub fn latest_of(documents: &Path, steam_userdata: Option<&Path>, profile: impl Fn(&str) -> bool) -> Option<PathBuf> {
+/// [`latest`], of the profiles whose folder's name (the profile's name in hexadecimal) `profile` takes. Steam Cloud's
+/// are in `steam_userdata`, Steam's `userdata` folder, under the game's app id, the pair's second.
+pub fn latest_of(
+    documents: &Path,
+    steam_userdata: Option<(&Path, &str)>,
+    profile: impl Fn(&str) -> bool,
+) -> Option<PathBuf> {
     let mut profile_dirs = vec![documents.join("profiles"), documents.join("steam_profiles")];
-    if let Some(userdata) = steam_userdata {
+    if let Some((userdata, app)) = steam_userdata {
         for user in std::fs::read_dir(userdata).into_iter().flatten().flatten() {
-            profile_dirs.push(user.path().join("270880/remote/profiles"));
+            profile_dirs.push(user.path().join(app).join("remote").join("profiles"));
         }
     }
     let saves = profile_dirs

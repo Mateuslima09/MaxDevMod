@@ -176,7 +176,7 @@ pub fn truck_changed(id: &str) {
     // no id (the game says one now and then while the player stays in theirs, as under TruckersMP, 2026-10-26)
     // leaves it as it was.
     if !id.is_empty() {
-        let path = crate::log::log_dir().parent().map(|dir| dir.join(westplay_shared::TABLET_APART_FILE));
+        let path = Some(crate::log::game_dir().join(westplay_shared::TABLET_APART_FILE));
         let marks =
             path.and_then(|path| std::fs::read_to_string(path).ok()).map(|text| westplay_shared::read_marks(&text));
         let blank = marks.is_some_and(|marks| westplay_shared::vehicle_marked(id, &marks));

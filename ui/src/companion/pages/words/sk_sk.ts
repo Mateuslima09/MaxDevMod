@@ -149,6 +149,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Kontrolujeme vašu hru', text: 'Verzia, plugin a módy' },
     checked: { title: 'Všetko skontrolované', text: 'WestPlay je nastavený' },
+    otherGames: {
+      title: 'Ďalšie hry',
+      footer: 'Nastavený v oboch, WestPlay funguje s tou, ktorú hráš, a prepne sa na ňu, keď sa spustí.',
+      install: 'Inštalovať',
+      setUp: 'Nastavené',
+    },
   },
   tutorial: {
     intro: {

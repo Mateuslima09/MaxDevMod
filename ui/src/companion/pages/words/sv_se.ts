@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Kontrollerar ditt spel', text: 'Version, plugin och moddar' },
     checked: { title: 'Allt är kontrollerat', text: 'WestPlay är konfigurerat' },
+    otherGames: {
+      title: 'Andra spel',
+      footer: 'Konfigurerat i båda fungerar WestPlay med det du spelar och växlar till det när det startar.',
+      install: 'Installera',
+      setUp: 'Konfigurerat',
+    },
   },
   tutorial: {
     intro: {

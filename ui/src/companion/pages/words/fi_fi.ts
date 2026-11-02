@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Peliäsi tarkistetaan', text: 'Versio, laajennus ja modit' },
     checked: { title: 'Kaikki tarkistettu', text: 'WestPlay on otettu käyttöön' },
+    otherGames: {
+      title: 'Muut pelit',
+      footer: 'Molempiin asennettuna WestPlay toimii pelaamasi pelin kanssa ja vaihtaa siihen, kun se käynnistyy.',
+      install: 'Asenna',
+      setUp: 'Asennettu',
+    },
   },
   tutorial: {
     intro: {

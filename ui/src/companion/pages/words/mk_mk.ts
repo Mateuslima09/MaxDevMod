@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Ја проверуваме вашата игра', text: 'Верзија, приклучок и модови' },
     checked: { title: 'Сè е проверено', text: 'WestPlay е поставен' },
+    otherGames: {
+      title: 'Други игри',
+      footer: 'Поставен во двете, WestPlay работи со онаа што ја играш и се префрла на неа кога ќе се стартува.',
+      install: 'Инсталирај',
+      setUp: 'Поставено',
+    },
   },
   tutorial: {
     intro: {

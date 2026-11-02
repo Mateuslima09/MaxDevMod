@@ -151,6 +151,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Zure jokoa egiaztatzen', text: 'Bertsioa, plugina eta mod-ak' },
     checked: { title: 'Dena egiaztatuta', text: 'WestPlay konfiguratuta dago' },
+    otherGames: {
+      title: 'Beste jokoak',
+      footer: 'Bietan konfiguratuta, WestPlayk jokatzen duzunarekin funtzionatzen du, eta hura irekitzean aldatzen da.',
+      install: 'Instalatu',
+      setUp: 'Konfiguratuta',
+    },
   },
   tutorial: {
     intro: {

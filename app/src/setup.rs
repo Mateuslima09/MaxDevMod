@@ -42,6 +42,10 @@ impl SetupStore {
     /// The record kept in `dir`, and the game it names for the host.
     pub fn load(dir: &Path, app: &AppHandle) -> Self {
         let record = Record::load(dir);
+        // The game set up is the one WestPlay works with (another one played: `follow_the_game_played`).
+        if let Some(kind) = record.game.as_deref().and_then(kind_of) {
+            game::set_current(kind);
+        }
         let game = Arc::new(SetUpGame::new(record.game.clone()));
         Self(Arc::new(Inner { dir: dir.to_path_buf(), record: Mutex::new(record), game, plugin: plugin_file(app) }))
     }
@@ -66,6 +70,67 @@ impl Inner {
     }
 }
 
+/// Which game is in `dir`, if one is.
+fn kind_of(dir: &Path) -> Option<game::Kind> {
+    Game::at(dir, FoundBy::Chosen).map(|game| game.kind)
+}
+
+/// Whether the games in `a` and `b` are the same game (two installs of one).
+fn same_game(a: &Path, b: &Path) -> bool {
+    kind_of(a).is_some_and(|kind| kind_of(b) == Some(kind))
+}
+
+/// WestPlay works with a game (`game::current`: its Documents folder, its profiles, its own folder for the mod)
+/// while this lives, and with the one before again after: setup checking or installing into the other game.
+struct WorkingWith(game::Kind);
+
+impl WorkingWith {
+    fn new(kind: game::Kind) -> Self {
+        let was = game::current();
+        game::set_current(kind);
+        Self(was)
+    }
+}
+
+impl Drop for WorkingWith {
+    fn drop(&mut self) {
+        game::set_current(self.0);
+    }
+}
+
+/// While WestPlay runs, it works with the game being played: one set up too (`Record::other_games`) made the one
+/// it works with as it starts (owner 2026-11-02: WestPlay in ETS2 as in ATS), its maps, saves and mod then its.
+pub fn follow_the_game_played(store: &SetupStore) {
+    let inner = store.0.clone();
+    let follow = move || {
+        loop {
+            follow_once(&inner);
+            std::thread::sleep(FOLLOW_EVERY);
+        }
+    };
+    if let Err(error) = std::thread::Builder::new().name("westplay-game".into()).spawn(follow) {
+        log!("setup: can't follow the game played: {error}");
+    }
+}
+
+/// How often [`follow_the_game_played`] looks.
+const FOLLOW_EVERY: Duration = Duration::from_secs(5);
+
+fn follow_once(inner: &Inner) {
+    let Some(running) = game::running_game() else { return };
+    let record = inner.record();
+    if record.game.as_deref().and_then(kind_of) == Some(running) {
+        return;
+    }
+    let Some(other) = record.other_games.iter().find(|other| kind_of(&other.game) == Some(running)) else { return };
+    let dir = other.game.clone();
+    game::set_current(running);
+    match inner.update(|record| record.switch(dir.clone(), None, same_game)) {
+        Ok(()) => log!("setup: {} is played: WestPlay works with it now ({})", running.name(), dir.display()),
+        Err(error) => log!("setup: {} is played, but WestPlay can't switch to it: {error}", running.name()),
+    }
+}
+
 /// WestPlay's plugin: shipped beside the app (its resources, or the app's own folder in an unbundled release
 /// build); while developing, the release build of it (the one the dev loop builds and installs).
 fn plugin_file(app: &AppHandle) -> Option<PathBuf> {
@@ -83,6 +148,9 @@ fn plugin_file(app: &AppHandle) -> Option<PathBuf> {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameInfo {
+    /// Which game: `ats` or `ets2`, and its name.
+    kind: game::Kind,
+    name: &'static str,
     dir: PathBuf,
     /// `steam`, `installed` (another store's, or SCS's own installer) or `chosen`.
     found_by: &'static str,
@@ -95,6 +163,8 @@ pub struct GameInfo {
 impl From<&Game> for GameInfo {
     fn from(game: &Game) -> Self {
         Self {
+            kind: game.kind,
+            name: game.kind.name(),
             dir: game.dir.clone(),
             found_by: match game.found_by {
                 FoundBy::Steam => "steam",
@@ -119,7 +189,9 @@ pub struct SetupState {
     /// in (`install_into_game`) once the game is closed. Never in a development build (its plugin is the
     /// development loop's to install).
     updated: bool,
-    /// Every install of the game found on the PC.
+    /// The other games WestPlay is set up in too (still there): each made the one it works with as it's played.
+    others: Vec<GameInfo>,
+    /// Every install of either game found on the PC.
     found: Vec<GameInfo>,
     /// The game is running (setup installs into it and builds its map while it's closed).
     game_running: bool,
@@ -139,6 +211,12 @@ pub async fn setup_state(store: State<'_, SetupStore>) -> Result<SetupState, Str
             finished: record.finished,
             updated: game.is_some() && record.finished && is_update(record.version.as_deref()),
             game: game.as_ref().map(GameInfo::from),
+            others: record
+                .other_games
+                .iter()
+                .filter_map(|other| Game::recognise(&other.game))
+                .map(|game| GameInfo::from(&game))
+                .collect(),
             found: found.iter().map(GameInfo::from).collect(),
             game_running: game::running(),
             language: onboarding_language(),
@@ -238,6 +316,8 @@ pub async fn check_game(dir: PathBuf, store: State<'_, SetupStore>) -> Result<Ga
     let ours = store.0.plugin.clone();
     blocking(move || {
         let game = Game::recognise(&dir).ok_or("gameGone")?;
+        // Its Documents folder, its profiles: the game checked's.
+        let _working = WorkingWith::new(game.kind);
         let (profiles, installed) = match places::game_documents() {
             Some(documents) => {
                 let userdata = places::steam().map(|steam| steam.join("userdata"));
@@ -486,17 +566,19 @@ pub async fn install_into_game(
     let inner = store.0.clone();
     blocking(move || {
         let game = Game::recognise(&dir).ok_or("gameGone")?;
+        // Its mod in its own folder, built from its mods.
+        let working = WorkingWith::new(game.kind);
         let mod_error = install_mod(&game).err();
         let plugin = match inner.plugin.as_deref() {
             None => PluginOutcome::Failed { error: "noPlugin".into() },
             Some(ours) => install_plugin(&game, ours, administrator),
         };
         let done = mod_error.is_none() && matches!(plugin, PluginOutcome::Installed);
+        drop(working);
         if done {
-            inner.update(|record| {
-                record.game = Some(game.dir.clone());
-                record.version = Some(VERSION.into());
-            })?;
+            // The game WestPlay works with from now on; the other one, set up before, kept for when it's played.
+            game::set_current(game.kind);
+            inner.update(|record| record.switch(game.dir.clone(), Some(VERSION.into()), same_game))?;
         }
         Ok(InstallReport { plugin, mod_error, done })
     })

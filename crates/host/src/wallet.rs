@@ -49,9 +49,13 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    /// The account as kept in `data_dir` (a new one where there's none).
-    pub fn open(data_dir: &Path) -> Self {
-        let path = data_dir.join(FILE);
+    /// The account as kept in `data_dir` (a new one where there's none): the game's `game` (its SDK id: each game's
+    /// money its own, owner 2026-11-02, WestPlay in ETS2 as in ATS), ATS's in [`FILE`], there first.
+    pub fn open(data_dir: &Path, game: &str) -> Self {
+        let path = match westplay_shared::westplay_game_folder(game) {
+            Some(folder) => data_dir.join(format!("wallet_{folder}.json")),
+            None => data_dir.join(FILE),
+        };
         let state = std::fs::read(&path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
         Self { path: Some(path), state, seen: None }
     }

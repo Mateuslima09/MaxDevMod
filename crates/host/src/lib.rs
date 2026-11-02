@@ -310,7 +310,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // The truck's commands the phones hold, for the plugin's input device.
     let mut truck_commands = truck_commands::TruckCommands::default();
     // The player's account, for the phone's Nupay (wallet.rs).
-    let mut wallet = wallet::Wallet::open(&config.data_dir);
+    let mut wallet_game = westplay_setup::game::current();
+    let mut wallet = wallet::Wallet::open(&config.data_dir, wallet_game.sdk_id());
     {
         let remote = remote.clone();
         let handset = handset.clone();
@@ -726,6 +727,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
         // The truck's commands the phones hold, as the plugin gives them to the game.
         host.truck_commands.store(truck_commands.held(Instant::now()), Ordering::Release);
+        // The game played changed (`westplay_setup::game::current`): its own account.
+        if westplay_setup::game::current() != wallet_game {
+            wallet_game = westplay_setup::game::current();
+            wallet = wallet::Wallet::open(&config.data_dir, wallet_game.sdk_id());
+            let _ = webview.post_json(&wallet.message());
+        }
         // The money the game moved, as it did.
         if let Some(money) = bridge.bridge().plugin.money.read()
             && wallet.take(&money)

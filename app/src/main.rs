@@ -229,6 +229,7 @@ fn main() {
             let shared = Arc::new(SharedSettings::new(file.load()));
             let setup = SetupStore::load(&config_dir, app.handle());
             setup::watch_installed_mods(&setup);
+            setup::follow_the_game_played(&setup);
             let customize = customize::Customize {
                 dir: app.path().app_local_data_dir()?.join(westplay_host::customize::FOLDER),
                 changed: Arc::default(),

@@ -148,6 +148,12 @@ export const words: CompanionWords = {
     closeGame: { title: 'Chiudi il gioco.', text: 'WestPlay si può reinstallare solo mentre il gioco non è avviato.' },
     checking: { title: 'Controllo del gioco', text: 'Versione, plugin e mod' },
     checked: { title: 'Tutto controllato', text: 'WestPlay è configurato' },
+    otherGames: {
+      title: 'Altri giochi',
+      footer: 'Configurato in entrambi, WestPlay funziona con quello a cui giochi e passa a esso quando si avvia.',
+      install: 'Installa',
+      setUp: 'Configurato',
+    },
   },
   tutorial: {
     intro: {

@@ -151,6 +151,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'A játékod ellenőrzése', text: 'Verzió, bővítmény és modok' },
     checked: { title: 'Minden ellenőrizve', text: 'A WestPlay be van állítva' },
+    otherGames: {
+      title: 'Más játékok',
+      footer: 'Mindkettőben beállítva a WestPlay azzal működik, amelyikkel játszol, és indításkor átvált rá.',
+      install: 'Telepítés',
+      setUp: 'Beállítva',
+    },
   },
   tutorial: {
     intro: {

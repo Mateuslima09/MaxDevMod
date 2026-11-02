@@ -149,6 +149,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Tikrinamas tavo žaidimas', text: 'Versija, papildinys ir modai' },
     checked: { title: 'Viskas patikrinta', text: 'WestPlay nustatytas' },
+    otherGames: {
+      title: 'Kiti žaidimai',
+      footer: 'Nustatytas abiejuose, WestPlay veikia su tuo, kurį žaidi, ir persijungia į jį, kai jis paleidžiamas.',
+      install: 'Įdiegti',
+      setUp: 'Nustatyta',
+    },
   },
   tutorial: {
     intro: {

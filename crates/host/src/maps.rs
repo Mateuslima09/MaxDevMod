@@ -237,7 +237,6 @@ struct Basis {
 type Failures = HashMap<PathBuf, (serde_json::Value, String)>;
 
 fn watch(maps: &Path, set_up: &SetUpGame, sender: &Sender<MapUpdate>, played: &PlayedMap) {
-    let documents = places::game_documents();
     let userdata = places::steam().map(|steam| steam.join("userdata"));
     let mut sent: Option<MapUpdate> = None;
     let mut worked_out: Option<(Basis, Vec<Want>)> = None;
@@ -252,6 +251,8 @@ fn watch(maps: &Path, set_up: &SetUpGame, sender: &Sender<MapUpdate>, played: &P
     loop {
         let set_up_in = set_up.state().clone();
         let game = set_up_in.dir.as_deref().and_then(Game::recognise);
+        // The Documents folder of the game set up now (the app makes it the current one: `game::current`).
+        let documents = places::game_documents();
         let asked_now = set_up_in.asked_again != asked_again;
         if asked_now {
             asked_again = set_up_in.asked_again;
@@ -353,21 +354,21 @@ fn watch(maps: &Path, set_up: &SetUpGame, sender: &Sender<MapUpdate>, played: &P
 }
 
 fn basis(game: &Game, documents: &Path, userdata: Option<&Path>) -> Basis {
-    let profile =
-        save::latest(documents, userdata).and_then(|save| save::profile_of(&save)?.parent().map(Path::to_path_buf));
+    let profile = save::latest(documents, userdata.map(|dir| (dir, game.kind.steam_app())))
+        .and_then(|save| save::profile_of(&save)?.parent().map(Path::to_path_buf));
     let written = |path: &Path| std::fs::metadata(path).and_then(|m| m.modified()).ok();
     Basis {
         game: game.dir.clone(),
         selected: profiles::selected(documents),
         profile,
-        profiles: profile_dirs(documents, userdata)
+        profiles: profile_dirs(documents, userdata, game.kind)
             .into_iter()
             .map(|dir| {
                 let at = written(&dir.join("profile.sii"));
                 (dir, at)
             })
             .collect(),
-        game_written: written(&game.dir.join("bin").join("win_x64").join("amtrucks.exe")),
+        game_written: written(&game.dir.join(game.kind.executable())),
         truckersmp: truckersmp::installation().map(|installation| {
             let packs = truckersmp::packs(&installation).into_iter().map(|pack| {
                 let at = written(&pack);
@@ -385,10 +386,10 @@ fn basis(game: &Game, documents: &Path, userdata: Option<&Path>) -> Basis {
 
 /// Every profile's folder, as `profiles::find` looks for them (the game's Documents folder's, and Steam
 /// Cloud's under Steam's `userdata`), sorted.
-fn profile_dirs(documents: &Path, userdata: Option<&Path>) -> Vec<PathBuf> {
+fn profile_dirs(documents: &Path, userdata: Option<&Path>, kind: game::Kind) -> Vec<PathBuf> {
     let mut folders = vec![documents.join("profiles"), documents.join("steam_profiles")];
     for user in userdata.into_iter().flat_map(|dir| std::fs::read_dir(dir).into_iter().flatten().flatten()) {
-        folders.push(user.path().join(game::STEAM_APP).join("remote").join("profiles"));
+        folders.push(user.path().join(kind.steam_app()).join("remote").join("profiles"));
     }
     let mut dirs: Vec<PathBuf> = folders
         .iter()
@@ -494,7 +495,9 @@ fn remove_unused(maps: &Path, wants: &[Want], told: &mut HashSet<PathBuf>) {
     for (mut folder, name) in entries {
         let removing = name.strip_suffix(REMOVING).is_some_and(map_folder_name);
         if !removing {
-            if wanted.contains(folder.as_path()) || !is_map_folder(&folder) {
+            // The other game's maps are kept for when it's played again.
+            let other_game = map::game_of_folder(&name) != game::current();
+            if wanted.contains(folder.as_path()) || !is_map_folder(&folder) || other_game {
                 continue;
             }
             let renamed = maps.join(format!("{name}{REMOVING}"));

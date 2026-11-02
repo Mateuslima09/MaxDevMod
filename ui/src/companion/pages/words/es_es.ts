@@ -151,6 +151,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Comprobando tu juego', text: 'Versión, plugin y mods' },
     checked: { title: 'Todo comprobado', text: 'WestPlay está configurado' },
+    otherGames: {
+      title: 'Otros juegos',
+      footer: 'Configurado en los dos, WestPlay funciona con el que juegues y cambia a él cuando se abre.',
+      install: 'Instalar',
+      setUp: 'Configurado',
+    },
   },
   tutorial: {
     intro: {

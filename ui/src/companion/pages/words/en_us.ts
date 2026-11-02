@@ -147,6 +147,12 @@ export const words: CompanionWords = {
     closeGame: { title: 'Please close the game.', text: 'WestPlay can only be reinstalled while it isn’t running.' },
     checking: { title: 'Checking your game', text: 'Version, plugin and mods' },
     checked: { title: 'All checked', text: 'WestPlay is set up' },
+    otherGames: {
+      title: 'Other Games',
+      footer: 'Set up in both, WestPlay works with whichever you play, switching to it as it starts.',
+      install: 'Install',
+      setUp: 'Set up',
+    },
   },
   tutorial: {
     intro: {

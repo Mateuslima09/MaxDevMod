@@ -15,7 +15,7 @@ use westplay_mapdata::archive::Archive;
 use westplay_mapdata::save;
 use westplay_mapdata::sii::Unit;
 
-use crate::game::{Game, STEAM_APP};
+use crate::game::Game;
 
 /// A profile of the player's.
 #[derive(Clone, Debug, PartialEq)]
@@ -138,7 +138,8 @@ pub fn find(game_documents: &Path, steam_userdata: Option<&Path>, game: Option<&
     let mut folders = vec![(game_documents.join("profiles"), false), (game_documents.join("steam_profiles"), true)];
     if let Some(userdata) = steam_userdata {
         for user in std::fs::read_dir(userdata).into_iter().flatten().flatten() {
-            folders.push((user.path().join(STEAM_APP).join("remote").join("profiles"), true));
+            let app = game.map_or(crate::game::current(), |game| game.kind).steam_app();
+            folders.push((user.path().join(app).join("remote").join("profiles"), true));
         }
     }
     let mod_dir = game_documents.join("mod");

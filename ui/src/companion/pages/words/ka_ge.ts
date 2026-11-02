@@ -150,6 +150,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'თქვენი თამაში მოწმდება', text: 'ვერსია, მოდული და დანამატები' },
     checked: { title: 'ყველაფერი შემოწმებულია', text: 'WestPlay დაყენებულია' },
+    otherGames: {
+      title: 'სხვა თამაშები',
+      footer: 'ორივეში დაყენებული WestPlay მუშაობს იმით, რომელსაც თამაშობ, და მასზე გადადის, როცა ის ჩაირთვება.',
+      install: 'დაყენება',
+      setUp: 'დაყენებულია',
+    },
   },
   tutorial: {
     intro: {

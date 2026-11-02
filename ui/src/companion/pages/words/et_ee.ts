@@ -149,6 +149,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Kontrollin sinu mängu', text: 'Versioon, pistikprogramm ja modid' },
     checked: { title: 'Kõik kontrollitud', text: 'WestPlay on seadistatud' },
+    otherGames: {
+      title: 'Teised mängud',
+      footer: 'Mõlemas seadistatuna töötab WestPlay sellega, mida mängid, ja lülitub sellele, kui see käivitub.',
+      install: 'Paigalda',
+      setUp: 'Seadistatud',
+    },
   },
   tutorial: {
     intro: {

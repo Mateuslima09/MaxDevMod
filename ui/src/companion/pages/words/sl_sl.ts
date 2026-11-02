@@ -149,6 +149,12 @@ export const words: CompanionWords = {
     },
     checking: { title: 'Preverjanje tvoje igre', text: 'Različica, vtičnik in modifikacije' },
     checked: { title: 'Vse preverjeno', text: 'WestPlay je nastavljen' },
+    otherGames: {
+      title: 'Druge igre',
+      footer: 'Nastavljen v obeh, WestPlay deluje s tisto, ki jo igraš, in preklopi nanjo, ko se zažene.',
+      install: 'Namesti',
+      setUp: 'Nastavljeno',
+    },
   },
   tutorial: {
     intro: {

@@ -135,6 +135,24 @@ pub fn log_dir() -> &'static PathBuf {
     LOG_DIR.get_or_init(|| documents_dir().join("WestPlay").join("logs"))
 }
 
+/// The game's id as the SDK gave it at load (`ats`, `eut2`), for [`game_dir`].
+static GAME_ID: OnceLock<String> = OnceLock::new();
+
+/// Says which game the plugin is in (its init: the SDK's id), once.
+pub fn set_game(game_id: &str) {
+    let _ = GAME_ID.set(game_id.to_owned());
+}
+
+/// The game's own folder in WestPlay's (`westplay_shared::westplay_game_folder`): its mod and the files setup writes
+/// with it. ATS's is WestPlay's folder itself.
+pub fn game_dir() -> PathBuf {
+    let westplay = log_dir().parent().map_or_else(|| documents_dir().join("WestPlay"), Path::to_path_buf);
+    match GAME_ID.get().and_then(|id| westplay_shared::westplay_game_folder(id)) {
+        Some(folder) => westplay.join(folder),
+        None => westplay,
+    }
+}
+
 /// The player's Documents folder (Windows' own, wherever it's moved).
 pub fn documents_dir() -> PathBuf {
     // SAFETY: Windows hands back a CoTaskMem string, read before it's freed here.

@@ -9,6 +9,12 @@ export const words: CompanionWords = {
     plugin: 'Plugiciel',
     reinstalled: 'Réinstallé',
     checking: { title: 'Vérification de votre jeu', text: 'Version, plugiciel et mods' },
+    otherGames: {
+      title: 'Autres jeux',
+      footer: 'Configuré dans les deux, WestPlay fonctionne avec celui auquel vous jouez et y passe dès son lancement.',
+      install: 'Installer',
+      setUp: 'Configuré',
+    },
   },
   uninstall: {
     ...france.uninstall,
