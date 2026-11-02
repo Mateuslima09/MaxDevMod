@@ -46,6 +46,9 @@ pub struct Wallet {
     state: State,
     /// How many of the plugin's money events were taken (`None`: none looked at yet this run).
     seen: Option<u64>,
+    /// The currency the game counts its money in (ISO 4217): ETS2's euros, ATS's dollars. The phone shows it in
+    /// the player's choice of dollars, reais or euros (owner 2026-11-02).
+    currency: &'static str,
 }
 
 impl Wallet {
@@ -57,7 +60,7 @@ impl Wallet {
             None => data_dir.join(FILE),
         };
         let state = std::fs::read(&path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
-        Self { path: Some(path), state, seen: None }
+        Self { path: Some(path), state, seen: None, currency: currency_of(game) }
     }
 
     /// The balance now: the latest save's, and what the game moved since.
@@ -125,7 +128,7 @@ impl Wallet {
     /// `{"type":"wallet","balance":25512,"entries":[…]}`: the account for the pages, the newest entries first.
     pub fn message(&self) -> String {
         let entries: Vec<&Entry> = self.state.entries.iter().rev().take(SENT_ENTRIES).collect();
-        serde_json::json!({ "type": "wallet", "balance": self.balance(), "entries": entries }).to_string()
+        serde_json::json!({ "type": "wallet", "balance": self.balance(), "currency": self.currency, "entries": entries }).to_string()
     }
 
     fn push(&mut self, entry: Entry) {
@@ -151,6 +154,11 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_millis() as u64)
 }
 
+/// The currency the game `game` (its SDK id) counts its money in: ETS2's euros, else ATS's dollars.
+fn currency_of(game: &str) -> &'static str {
+    if game == "eut2" { "EUR" } else { "USD" }
+}
+
 #[cfg(test)]
 mod tests {
     use westplay_shared::{FixedStr, MoneyEvent};
@@ -158,7 +166,7 @@ mod tests {
     use super::*;
 
     fn wallet() -> Wallet {
-        Wallet { path: None, state: State::default(), seen: None }
+        Wallet { path: None, state: State::default(), seen: None, currency: "USD" }
     }
 
     fn with(events: &[(MoneyKind, i64)]) -> MoneyEvents {

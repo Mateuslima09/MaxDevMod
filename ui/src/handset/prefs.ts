@@ -11,10 +11,25 @@ export interface Prefs {
   units: 'km' | 'mi'
   /** The home screen's wallpaper, the same whatever the look (owner 2026-11-03: "so it doesn't keep changing"). */
   wallpaper: Wallpaper
+  /** What Nupay shows the money in (owner 2026-11-02: "dollars, reais and euros"): `auto`, the game's own. */
+  currency: 'auto' | Currency
 }
 
 const KEY = 'westplay-handset-prefs'
-const DEFAULTS: Prefs = { look: 'auto', units: 'mi', wallpaper: 'aurora' }
+const DEFAULTS: Prefs = { look: 'auto', units: 'mi', wallpaper: 'aurora', currency: 'auto' }
+
+export type Currency = 'USD' | 'BRL' | 'EUR'
+
+/**
+ * How much of each a dollar is: fixed, roughly as they were in late 2026, not followed live (the phone may have no
+ * internet, and the game's money isn't real money anyway). Nupay says it's converted when it is.
+ */
+const PER_DOLLAR: Record<Currency, number> = { USD: 1, BRL: 5.4, EUR: 0.86 }
+
+/** `amount` of `from` in `to`, at the fixed rates. */
+export function convert(amount: number, from: Currency, to: Currency): number {
+  return from === to ? amount : (amount / PER_DOLLAR[from]) * PER_DOLLAR[to]
+}
 
 /** The home screen's wallpapers to choose from. */
 export const WALLPAPERS = ['aurora', 'ocean', 'sunset'] as const

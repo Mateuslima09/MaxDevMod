@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { distance, speed } from './prefs'
+import { convert, distance, speed } from './prefs'
 
 describe('distance', () => {
   it('says a short way in feet or metres, not 0', () => {
@@ -17,5 +17,16 @@ describe('speed', () => {
   it('turns metres per second into mph or km/h', () => {
     expect(speed(25, 'km')).toBe(90)
     expect(speed(-25, 'mi')).toBe(56)
+  })
+})
+
+describe('convert', () => {
+  it('leaves the game’s own currency as it is', () => {
+    expect(convert(1234, 'EUR', 'EUR')).toBe(1234)
+  })
+
+  it('goes through the dollar both ways', () => {
+    expect(convert(100, 'USD', 'BRL')).toBeCloseTo(540)
+    expect(convert(convert(100, 'EUR', 'BRL'), 'BRL', 'EUR')).toBeCloseTo(100)
   })
 })

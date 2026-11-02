@@ -98,7 +98,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'freight' && <FreightApp words={words} units={prefs.units} />}
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
               {app === 'settings' && <SettingsApp words={words} prefs={prefs} remote={remote} />}
-              {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} />}
+              {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />}
               {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
             </div>
           </section>
@@ -321,6 +321,23 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
           }
         />
       </List>
+      <List header={words.currency}>
+        <Row
+          icon={<RowIcon tone="#8a05be">{GLYPH_MONEY}</RowIcon>}
+          label={
+            <Segmented
+              options={[
+                ['auto', words.currencyGame],
+                ['USD', 'US$'],
+                ['BRL', 'R$'],
+                ['EUR', '€'],
+              ]}
+              chosen={prefs.currency}
+              choose={(currency) => setPrefs({ currency })}
+            />
+          }
+        />
+      </List>
       <List header={words.wallpaper}>
         <div className="ios-wallpapers">
           {WALLPAPERS.map((wallpaper) => (
@@ -369,6 +386,14 @@ function duration(minutes: number): string {
 const GLYPH_WEIGHT = <path d="M7 9h10l3 11H4ZM9.5 9a2.5 2.5 0 1 1 5 0" />
 const GLYPH_ROUTE = (
   <path d="M6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm12 12a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM6 9v4a4 4 0 0 0 4 4h5" />
+)
+const GLYPH_MONEY = (
+  <path
+    d="M3 6h18v12H3Zm9 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM6 9v6M18 9v6"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  />
 )
 const GLYPH_CLOCK = <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-1 4h2v5.4l3.5 2-1 1.7L11 13.6Z" fillRule="evenodd" />
 const GLYPH_PIN = (
@@ -438,6 +463,8 @@ const WORDS = {
     lookLight: 'Light',
     lookDark: 'Dark',
     units: 'Units',
+    currency: 'Nupay currency',
+    currencyGame: 'Game',
     fullScreen: 'Full screen',
     wallpaper: 'Wallpaper',
     wallpapers: { aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
@@ -447,7 +474,8 @@ const WORDS = {
     reload: 'Reload the page',
     reloadHint: 'After a WestPlay update: loads the new version here, without scanning the QR code again.',
     screenFit: 'Vehicle screen',
-    screenFitHint: 'Fits WestPlay on the screen of the vehicle you’re in, there at once: for when it’s too small or cut off to reach its own Settings.',
+    screenFitHint:
+      'Fits WestPlay on the screen of the vehicle you’re in, there at once: for when it’s too small or cut off to reach its own Settings.',
     screenFitNone: 'Get in a vehicle with WestPlay on its screen.',
     edgeTop: 'Top edge',
     edgeBottom: 'Bottom edge',
@@ -508,6 +536,8 @@ const WORDS = {
     lookLight: 'Claro',
     lookDark: 'Escuro',
     units: 'Unidades',
+    currency: 'Moeda do Nupay',
+    currencyGame: 'Do jogo',
     fullScreen: 'Tela cheia',
     wallpaper: 'Papel de parede',
     wallpapers: { aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
@@ -517,7 +547,8 @@ const WORDS = {
     reload: 'Atualizar página',
     reloadHint: 'Depois de uma atualização do WestPlay: carrega a versão nova aqui, sem escanear o QR Code de novo.',
     screenFit: 'Tela do veículo',
-    screenFitHint: 'Ajusta o WestPlay na tela do veículo em que você está, na hora: para quando ela fica pequena ou cortada demais para chegar nos Ajustes dela.',
+    screenFitHint:
+      'Ajusta o WestPlay na tela do veículo em que você está, na hora: para quando ela fica pequena ou cortada demais para chegar nos Ajustes dela.',
     screenFitNone: 'Entre num veículo com o WestPlay na tela.',
     edgeTop: 'Borda de cima',
     edgeBottom: 'Borda de baixo',

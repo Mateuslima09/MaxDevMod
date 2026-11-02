@@ -65,6 +65,9 @@ export interface TruckInfo {
   name: string
 }
 
+/** The currency a game counts its money in (crates/host wallet.rs): ATS's dollars, ETS2's euros. */
+export type GameCurrency = 'USD' | 'EUR'
+
 /** One sum in or out of the player's account (crates/host wallet.rs `Entry`; an expense negative): what for, about
  * what, and when (the PC's time, ms; the game's, minutes, when known). */
 export interface WalletEntry {
@@ -115,7 +118,7 @@ export type HostMessage =
   | { type: 'job'; data: JobInfo }
   /** The player's account (crates/host wallet.rs), for the phone's Nupay: its balance (`null`: no save read yet)
    * and its entries, the newest first. */
-  | { type: 'wallet'; balance: number | null; entries: WalletEntry[] }
+  | { type: 'wallet'; balance: number | null; currency?: GameCurrency; entries: WalletEntry[] }
   /** `null` until the game has drawn a WestPlay screen. Checked against the known ids on arrival. */
   | { type: 'screen'; layout: string | null }
   /** Adjust Screen from a phone (cabin/state/screenFit.ts), relayed by the host to the cab's page: a change, the fit

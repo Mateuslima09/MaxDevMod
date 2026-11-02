@@ -1,17 +1,21 @@
 import { type ReactNode, useState } from 'react'
 import type { WalletEntry } from '../shared/host'
 import { useLive } from '../cabin/state/store'
+import { convert, type Currency, type Prefs } from './prefs'
 
 /**
  * Nupay (owner 2026-11-03: "a finance app in the phone: the account's balance and what came in and went out"):
  * the player's account as the app keeps it (crates/host wallet.rs), its balance (hidden at a tap, as a bank's
  * app does), what came in and went out, and each movement, the newest first, by day.
  */
-export function NupayApp({ language }: { language: 'en' | 'pt' }) {
+export function NupayApp({ language, currency }: { language: 'en' | 'pt'; currency: Prefs['currency'] }) {
   const wallet = useLive((state) => state.wallet)
   const [hidden, setHidden] = useState(false)
   const words = WORDS[language]
-  const money = (amount: number, signed = false) => formatMoney(amount, language, signed)
+  // The game's money, in the currency chosen (its own, `auto`).
+  const from = wallet?.currency ?? 'USD'
+  const shown = currency === 'auto' ? from : currency
+  const money = (amount: number, signed = false) => formatMoney(convert(amount, from, shown), language, signed, shown)
   const entries = wallet?.entries ?? []
   const income = entries.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0)
   const spent = entries.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0)
@@ -66,18 +70,21 @@ export function NupayApp({ language }: { language: 'en' | 'pt' }) {
           </section>
         ))
       )}
-      <p className="nupay-foot">{words.foot}</p>
+      <p className="nupay-foot">
+        {words.foot}
+        {shown !== from && ` ${words.converted}`}
+      </p>
     </div>
   )
 }
 
 type Words = (typeof WORDS)['en']
 
-/** Dollars, whole, as the player's language writes them; `signed`: with + or −. */
-function formatMoney(amount: number, language: 'en' | 'pt', signed: boolean): string {
+/** `amount`, whole, in `currency` as the player's language writes it; `signed`: with + or −. */
+function formatMoney(amount: number, language: 'en' | 'pt', signed: boolean, currency: Currency): string {
   const text = Math.abs(amount).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency,
     maximumFractionDigits: 0,
   })
   if (!signed) return amount < 0 ? `−${text}` : text
@@ -205,6 +212,7 @@ const WORDS = {
       generic: 'Offence',
     },
     foot: 'Balance from the game’s latest save, plus what happened since. Fuel, repairs and purchases show at the next save.',
+    converted: 'Converted from the game’s currency at a fixed, approximate rate.',
   },
   pt: {
     account: 'Conta',
@@ -247,5 +255,6 @@ const WORDS = {
       generic: 'Infração',
     },
     foot: 'Saldo do último save do jogo, mais o que aconteceu depois. Diesel, oficina e compras aparecem no próximo save.',
+    converted: 'Convertido da moeda do jogo por um câmbio fixo e aproximado.',
   },
 }
