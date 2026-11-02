@@ -5,7 +5,8 @@ import { smoothThrough } from './curve'
 import { useWallpapers } from '../../state/looks'
 import { pickVariant, prepareWallpaper } from '../../wallpapers'
 import { type Appearance, resolveAppearance } from '../../state/appearance'
-import { useLook, useScreenProfile } from '../../state/hooks'
+import { useLook, useScreenFit, useScreenProfile } from '../../state/hooks'
+import { type FitEdge, FIT_LIMITS, isFitted, useScreenFits } from '../../state/screenFit'
 import { DASHBOARD_WIDGETS, type DashboardWidget, useCabin, useLive } from '../../state/store'
 import { useText } from '../../state/text'
 import { TEXT_SIZES } from '../../state/textSize'
@@ -15,6 +16,7 @@ import {
   ChevronGlyph,
   DashboardGlyph,
   NowPlayingGlyph,
+  ScreenFitGlyph,
   SoundGlyph,
   WallpaperGlyph,
 } from './glyphs'
@@ -62,6 +64,8 @@ function PageContent({ page }: { page: SettingsPage }) {
       return <EqualizerPage />
     case 'textSize':
       return <TextSizePage />
+    case 'screenFit':
+      return <ScreenFitPage />
   }
 }
 
@@ -117,7 +121,153 @@ function ListPage() {
           onOpen={() => open('sound')}
         />
       </Group>
+      <Group>
+        <NavRow
+          tile="var(--apple-gray)"
+          icon={<ScreenFitGlyph />}
+          label={text.settings.screenFit}
+          onOpen={() => open('screenFit')}
+        />
+      </Group>
     </Page>
+  )
+}
+
+/**
+ * Adjust Screen (state/screenFit.ts): this vehicle's screen's margins, the page's proportion and the size of what's
+ * on it, each a slider, changed on the screen as it's dragged; and back to none.
+ */
+function ScreenFitPage() {
+  const text = useText()
+  const { key, fit } = useScreenFit()
+  const change = useScreenFits((state) => state.change)
+  const reset = useScreenFits((state) => state.reset)
+  const words = text.settings
+  if (key === null) {
+    return (
+      <Page title={words.screenFit}>
+        <p className="text-size-about">{words.screenFitNone}</p>
+      </Page>
+    )
+  }
+  const edges: [FitEdge, string][] = [
+    ['top', words.edgeTop],
+    ['bottom', words.edgeBottom],
+    ['left', words.edgeLeft],
+    ['right', words.edgeRight],
+  ]
+  const percent = (value: number) => `${Math.round(value * 1000) / 10}%`
+  return (
+    <Page title={words.screenFit}>
+      <Group header={words.edges} footer={words.screenFitFooter}>
+        {edges.map(([edge, label]) => (
+          <FitSlider
+            key={edge}
+            label={label}
+            value={fit[edge]}
+            shown={percent(fit[edge])}
+            limits={FIT_LIMITS.edge}
+            onChange={(value) => change(key, { [edge]: value })}
+          />
+        ))}
+      </Group>
+      <Group footer={words.proportionFooter}>
+        <FitSlider
+          label={words.proportion}
+          value={fit.stretch}
+          shown={percent(fit.stretch)}
+          limits={FIT_LIMITS.stretch}
+          onChange={(value) => change(key, { stretch: value })}
+        />
+      </Group>
+      <Group>
+        <FitSlider
+          label={words.fitSize}
+          value={fit.size}
+          shown={percent(fit.size)}
+          limits={FIT_LIMITS.size}
+          onChange={(value) => change(key, { size: value })}
+        />
+      </Group>
+      <Group>
+        <button
+          type="button"
+          className="settings-row settings-action"
+          disabled={!isFitted(fit)}
+          onClick={() => reset(key)}
+        >
+          {words.restoreFit}
+        </button>
+      </Group>
+    </Page>
+  )
+}
+
+/** One of Adjust Screen's settings: its name and value, a minus, a track dragged along, and a plus (a step each:
+ * the mouse in the cab is easier with buttons than a fine drag). */
+function FitSlider({
+  label,
+  value,
+  shown,
+  limits,
+  onChange,
+}: {
+  label: string
+  value: number
+  shown: string
+  limits: { min: number; max: number; step: number }
+  onChange: (value: number) => void
+}) {
+  const track = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const { min, max, step } = limits
+  const settle = (wanted: number) => {
+    const stepped = Math.round((wanted - min) / step) * step + min
+    const next = Math.min(max, Math.max(min, Number(stepped.toFixed(4))))
+    if (next !== value) onChange(next)
+  }
+  const follow = (event: PointerEvent) => {
+    const box = track.current?.getBoundingClientRect()
+    if (!box || box.width === 0) return
+    settle(min + ((event.clientX - box.left) / box.width) * (max - min))
+  }
+  const along = `${((value - min) / (max - min)) * 100}%`
+  return (
+    <div className="fit-row">
+      <div className="fit-row-head">
+        <span className="settings-label">{label}</span>
+        <span className="settings-value">{shown}</span>
+      </div>
+      <div className="fit-row-controls">
+        <button type="button" className="fit-step" aria-label="−" onClick={() => settle(value - step)}>
+          −
+        </button>
+        <div
+          ref={track}
+          className={dragging ? 'text-size-track dragging' : 'text-size-track'}
+          data-own-drag
+          role="slider"
+          aria-label={label}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={value}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId)
+            setDragging(true)
+            follow(event)
+          }}
+          onPointerMove={(event) => dragging && follow(event)}
+          onPointerUp={() => setDragging(false)}
+          onPointerCancel={() => setDragging(false)}
+        >
+          <span className="text-size-line" />
+          <span className="text-size-thumb" style={{ left: along }} />
+        </div>
+        <button type="button" className="fit-step" aria-label="+" onClick={() => settle(value + step)}>
+          +
+        </button>
+      </div>
+    </div>
   )
 }
 

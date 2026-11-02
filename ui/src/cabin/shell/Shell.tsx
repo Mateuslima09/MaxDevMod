@@ -1,6 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
 import { isInHost } from '../../shared/host'
-import { useLook, useLookChanges, useOemStrip, useScreenProfile } from '../state/hooks'
+import { useLook, useLookChanges, useOemStrip, useScreenFit, useScreenProfile } from '../state/hooks'
+import { fitStyle, type ScreenFit } from '../state/screenFit'
 import { usePreparedIcons } from '../state/looks'
 import { frameInsets, NO_INSETS, OEM_STRIPS } from '../state/oem'
 import { RETURN_BUTTON_SIZE, returnButtonCentre } from '../state/screen'
@@ -35,6 +36,9 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   usePreparedIcons()
   const { appearance, wallpaperSrc } = useLook()
   const profile = useScreenProfile()
+  const { fit } = useScreenFit()
+  const handedOver = useCabin((state) => state.truckScreen)
+  useFittedRoot(fit, handedOver)
   const stripId = useOemStrip()
   const strip = stripId && OEM_STRIPS[stripId]
   const layout = useLive((state) => state.screenLayout)
@@ -42,7 +46,7 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   const style = {
     '--oem-left': `${insets.left}px`,
     '--oem-bottom': `${insets.bottom}px`,
-    '--ui-scale': profile.scale,
+    '--ui-scale': profile.scale * fit.size,
   } as CSSProperties
   // The screen changes' snapshots hang off <html>, not the shell: they're cut to the CarPlay area with these
   // too (transitions.css).
@@ -125,6 +129,29 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
       {profile.rim && <div className="screen-rim" style={{ color: profile.rim }} aria-hidden />}
     </main>
   )
+}
+
+/**
+ * The player's fit of this screen (state/screenFit.ts) on the page's root: everything, menus and the keyboard
+ * included, inside its margins and in its proportion, and black round it (the game's own screen would show there),
+ * but while the screen is handed to the truck (`handedOver`), whose own screen shows whole. A transform on the root:
+ * what's clicked is still what's under the cursor.
+ */
+function useFittedRoot({ top, bottom, left, right, stretch }: ScreenFit, handedOver: boolean) {
+  useLayoutEffect(() => {
+    const root = document.getElementById('root')
+    if (!root) return
+    const page = document.documentElement.style
+    const style = fitStyle({ top, bottom, left, right, stretch, size: 1 })
+    if (!style) {
+      root.removeAttribute('style')
+      page.removeProperty('background')
+      return
+    }
+    Object.assign(root.style, { position: 'fixed', transformOrigin: '0 0', ...style })
+    if (handedOver) page.removeProperty('background')
+    else page.setProperty('background', '#000')
+  }, [top, bottom, left, right, stretch, handedOver])
 }
 
 /** A mask showing everything but a rounded rectangle, through which what's under the page shows. */

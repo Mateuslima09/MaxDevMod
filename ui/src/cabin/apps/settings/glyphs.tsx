@@ -55,6 +55,23 @@ export function NowPlayingGlyph() {
 }
 
 /** Sound: a speaker, and two waves leaving it. */
+/** Adjust Screen: a screen with its corners pulled outward. */
+export function ScreenFitGlyph() {
+  return (
+    <TileGlyph>
+      <rect x="6.5" y="8" width="11" height="8" rx="1.4" />
+      <path
+        d="M3.5 7.5v-3h3M20.5 7.5v-3h-3M3.5 16.5v3h3M20.5 16.5v3h-3"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </TileGlyph>
+  )
+}
+
 export function SoundGlyph() {
   return (
     <TileGlyph>

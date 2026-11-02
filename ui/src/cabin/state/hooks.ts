@@ -8,6 +8,7 @@ import { animateAppearance } from './launch'
 import { useLooks, useWallpapers } from './looks'
 import { type OemStripId, resolveOemStrip } from './oem'
 import { type ScreenProfile, screenProfile } from './screen'
+import { fitKey, NO_FIT, type ScreenFit, useScreenFits } from './screenFit'
 import { useCabin, useLive } from './store'
 import { cabClock } from '../../shared/host'
 
@@ -69,6 +70,15 @@ export function useAppIcon(role: AppIconRole): string {
     const path = icon?.[look]
     return path ? fileUrl(state.base, path) : appIcon(role, look)
   })
+}
+
+/** The player's own fit on this screen and vehicle (state/screenFit.ts), and its key (`null`: no screen yet). */
+export function useScreenFit(): { key: string | null; fit: ScreenFit } {
+  const layout = useLive((state) => state.screenLayout)
+  const truck = useLive((state) => state.truck)
+  const key = fitKey(layout, truck)
+  const fit = useScreenFits((state) => (key === null ? undefined : state.fits[key]))
+  return { key, fit: fit ?? NO_FIT }
 }
 
 /** How WestPlay fits the screen the game draws it on (screen layout + truck model). */

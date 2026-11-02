@@ -444,6 +444,19 @@ export interface Strings {
     textSize: string
     /** Text Size's own text, shown at the size chosen (iOS's). */
     textSizeAbout: string
+    /** Adjust Screen (state/screenFit.ts): the player's own fit of WestPlay on this vehicle's screen. */
+    screenFit: string
+    screenFitFooter: string
+    screenFitNone: string
+    edges: string
+    edgeTop: string
+    edgeBottom: string
+    edgeLeft: string
+    edgeRight: string
+    proportion: string
+    proportionFooter: string
+    fitSize: string
+    restoreFit: string
     wallpaper: string
     dashboard: string
     widgets: string
@@ -921,6 +934,18 @@ export const STRINGS: Record<Language, Strings> = {
       vehicleBarFooter: 'The truck’s information bar beside WestPlay. Turned off, WestPlay fills the whole screen.',
       textSize: 'Text Size',
       textSizeAbout: 'WestPlay’s apps will adjust to your preferred reading size below.',
+      screenFit: 'Adjust Screen',
+      screenFitFooter: 'For this vehicle only. The screen changes as you adjust it.',
+      screenFitNone: 'Get in a vehicle with WestPlay on its screen to adjust it.',
+      edges: 'Edges',
+      edgeTop: 'Top',
+      edgeBottom: 'Bottom',
+      edgeLeft: 'Left',
+      edgeRight: 'Right',
+      proportion: 'Proportion',
+      proportionFooter: 'Narrower if the picture looks stretched, wider if it looks squeezed.',
+      fitSize: 'Size',
+      restoreFit: 'Restore Default',
       wallpaper: 'Wallpaper',
       dashboard: 'Dashboard',
       widgets: 'Widgets',
@@ -1407,6 +1432,18 @@ export const STRINGS: Record<Language, Strings> = {
         'A barra de informações do caminhão ao lado do WestPlay. Desligada, o WestPlay ocupa a tela toda.',
       textSize: 'Tamanho do Texto',
       textSizeAbout: 'Os apps do WestPlay vão se ajustar ao tamanho de leitura que você escolher abaixo.',
+      screenFit: 'Ajustar Tela',
+      screenFitFooter: 'Só para este veículo. A tela muda enquanto você ajusta.',
+      screenFitNone: 'Entre num veículo com o WestPlay na tela para ajustá-la.',
+      edges: 'Bordas',
+      edgeTop: 'Cima',
+      edgeBottom: 'Baixo',
+      edgeLeft: 'Esquerda',
+      edgeRight: 'Direita',
+      proportion: 'Proporção',
+      proportionFooter: 'Mais estreito se a imagem parece esticada, mais largo se parece achatada.',
+      fitSize: 'Tamanho',
+      restoreFit: 'Restaurar Padrão',
       wallpaper: 'Papel de Parede',
       dashboard: 'Painel',
       widgets: 'Widgets',
@@ -1893,6 +1930,18 @@ export const STRINGS: Record<Language, Strings> = {
       vehicleBarFooter: 'WestPlay’in yanındaki kamyon bilgi çubuğu. Kapatırsan WestPlay tüm ekranı kaplar.',
       textSize: 'Metin Boyutu',
       textSizeAbout: 'WestPlay’in uygulamaları aşağıda seçtiğin okuma boyutuna göre ayarlanır.',
+      screenFit: 'Ekranı Ayarla',
+      screenFitFooter: 'Yalnızca bu araç için. Ayarladıkça ekran değişir.',
+      screenFitNone: 'Ayarlamak için ekranında WestPlay olan bir araca bin.',
+      edges: 'Kenarlar',
+      edgeTop: 'Üst',
+      edgeBottom: 'Alt',
+      edgeLeft: 'Sol',
+      edgeRight: 'Sağ',
+      proportion: 'Oran',
+      proportionFooter: 'Görüntü gerilmiş görünüyorsa daralt, basık görünüyorsa genişlet.',
+      fitSize: 'Boyut',
+      restoreFit: 'Varsayılana Döndür',
       wallpaper: 'Duvar Kâğıdı',
       dashboard: 'Gösterge Paneli',
       widgets: 'Widget’lar',

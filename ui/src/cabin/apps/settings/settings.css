@@ -619,3 +619,47 @@
   transform: translate(-50%, -50%) scale(1.08);
   transition: transform 150ms var(--motion-ease);
 }
+
+/* Adjust Screen: each setting its name and value over a minus, a track and a plus (the track Text Size's). */
+.fit-row {
+  padding: 14px 22px 6px;
+  color: var(--apple-label);
+  font-size: calc(24px * var(--text-scale, 1));
+}
+
+.fit-row + .fit-row {
+  border-top: 1px solid var(--apple-separator, rgb(84 84 88 / 0.35));
+}
+
+.fit-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fit-row-controls {
+  display: flex;
+  align-items: center;
+}
+
+.fit-row-controls .text-size-track {
+  height: 56px;
+  margin: 0 26px;
+}
+
+.shell button.fit-step {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--apple-fill-secondary);
+  color: var(--apple-label);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.shell button.fit-step:active {
+  background: var(--apple-card-raised);
+}
