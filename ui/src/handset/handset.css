@@ -1,6 +1,6 @@
-/* The phone in the game (HandsetApp.tsx): a phone of the page's size, its corners left transparent so the game
-   shows around them; the plugin draws it over the game's picture. On the player's own phone (handset-remote),
-   the screen alone, as wide as theirs. */
+/* The phone in the game (HandsetApp.tsx), as an iPhone (owner 2026-11-03: "everything as on the iPhone"): a phone
+   of the page's size, its corners left transparent so the game shows around them; the plugin draws it over the
+   game's picture. On the player's own phone (handset-remote), the screen alone, as wide as theirs. */
 
 html,
 body,
@@ -12,17 +12,49 @@ body,
   overflow: hidden;
 }
 
+/* iOS's colours, dark and light. */
 .handset {
+  --ios-bg: #000;
+  --ios-group: #1c1c1e;
+  --ios-fill: rgb(120 120 128 / 0.32);
+  --ios-sep: rgb(84 84 88 / 0.6);
+  --ios-label: #fff;
+  --ios-secondary: rgb(235 235 245 / 0.6);
+  --ios-tint: #0a84ff;
+  --ios-red: #ff453a;
+  --ios-green: #30d158;
+  --ios-material: rgb(38 38 42 / 0.62);
+  --ios-material-edge: rgb(255 255 255 / 0.1);
+  --edge: 12px;
+  --tile-gap: 10px;
+  --panel-radius: 22px;
   position: fixed;
   inset: 0;
   padding: 7px;
   border-radius: 54px;
   background: linear-gradient(145deg, #3a3b40, #121216 40%, #26272c);
   box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.18);
-  --edge: 12px;
-  --tile-gap: 10px;
-  --panel-radius: 20px;
+  font-family:
+    'Inter Variable',
+    -apple-system,
+    system-ui,
+    sans-serif;
+  letter-spacing: -0.01em;
   user-select: none;
+}
+
+.handset.appearance-light {
+  --ios-bg: #f2f2f7;
+  --ios-group: #fff;
+  --ios-fill: rgb(118 118 128 / 0.12);
+  --ios-sep: rgb(60 60 67 / 0.29);
+  --ios-label: #000;
+  --ios-secondary: rgb(60 60 67 / 0.6);
+  --ios-tint: #007aff;
+  --ios-red: #ff3b30;
+  --ios-green: #34c759;
+  --ios-material: rgb(255 255 255 / 0.6);
+  --ios-material-edge: rgb(255 255 255 / 0.5);
 }
 
 .handset button {
@@ -38,10 +70,27 @@ body,
   height: 100%;
   border-radius: 47px;
   overflow: hidden;
-  background: var(--app-background);
-  color: var(--text);
+  background: var(--ios-bg);
+  color: var(--ios-label);
 }
 
+/* The home screen's wallpaper: iOS's deep blues and purples, softer in light. */
+.handset-screen.at-home {
+  background:
+    radial-gradient(90% 55% at 15% 10%, #3a6df0 0%, transparent 70%),
+    radial-gradient(80% 60% at 95% 55%, #a443d8 0%, transparent 70%),
+    radial-gradient(90% 60% at 20% 100%, #e0566e 0%, transparent 70%), #141433;
+  color: #fff;
+}
+
+.appearance-light .handset-screen.at-home {
+  background:
+    radial-gradient(90% 55% at 15% 10%, #7fa8ff 0%, transparent 70%),
+    radial-gradient(80% 60% at 95% 55%, #d39bf2 0%, transparent 70%),
+    radial-gradient(90% 60% at 20% 100%, #ff9fb0 0%, transparent 70%), #6a6fc9;
+}
+
+/* On the player's own phone: the screen alone, the status bar in the band its notch leaves. */
 .handset-remote {
   padding: 0;
   border-radius: 0;
@@ -51,379 +100,488 @@ body,
 
 .handset-remote .handset-screen {
   border-radius: 0;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-.handset-remote .handset-island {
+.handset-remote .ios-island {
   display: none;
 }
 
-/* The status bar: the time, the island, the signal. */
-.handset-status {
+.handset-remote .ios-status {
+  height: max(34px, env(safe-area-inset-top));
+  padding: 0 22px;
+}
+
+/* The status bar: the time, the island, the signal, Wi-Fi, the battery. */
+.ios-status {
   position: relative;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 46px;
-  padding: 0 26px 0 32px;
-  font-size: 15px;
-  font-weight: 600;
+  height: 50px;
+  padding: 0 24px 0 34px;
 }
 
-.handset-island {
+.ios-status-time {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.ios-island {
   position: absolute;
   top: 11px;
   left: 50%;
-  width: 96px;
-  height: 28px;
+  width: 104px;
+  height: 30px;
   transform: translateX(-50%);
   border-radius: 999px;
   background: #000;
 }
 
-.handset-signal svg {
+.ios-status-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ios-status-icons svg {
   display: block;
   fill: currentColor;
 }
 
-/* The home screen: the clock, what plays, the apps. */
-.handset-homescreen {
+/* The home indicator: back home from an app. */
+.ios-home-indicator {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  width: 124px;
+  height: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: currentColor !important;
+  opacity: 0.85;
+  z-index: 3;
+}
+
+/* ===== The home screen (Home.tsx): its pages, their dots, the dock. ===== */
+
+.ios-home {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: ios-home-in 260ms ease-out;
+}
+
+.ios-pages {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.ios-track {
+  display: flex;
+  width: 200%;
+  height: 100%;
+  transition: transform 320ms cubic-bezier(0.25, 0.9, 0.3, 1);
+}
+
+.ios-track:active {
+  transition: none;
+}
+
+.ios-page {
+  width: 50%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 10px var(--edge) 0;
-  background:
-    radial-gradient(120% 60% at 20% 0%, rgb(10 132 255 / 0.35), transparent 70%),
-    radial-gradient(120% 60% at 90% 100%, rgb(191 90 242 / 0.3), transparent 70%);
-  animation: handset-in 220ms ease-out;
+  padding: 6px 20px 0;
+  box-sizing: border-box;
 }
 
-.handset-clock {
-  text-align: center;
-  padding: 8px 0 4px;
-}
-
-.handset-clock-time {
-  font-size: 64px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-
-.handset-clock-day {
-  margin-top: 6px;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--text-dim);
-}
-
-.handset-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px 8px;
-  margin-top: auto;
-  padding: 0 6px 6px;
-}
-
-.handset-icon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-}
-
-.handset-glyph {
-  display: grid;
-  place-items: center;
-  width: 62px;
-  height: 62px;
-  border-radius: 16px;
-  color: #fff;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
-  transition: transform 120ms ease;
-}
-
-.handset-icon:hover .handset-glyph {
-  transform: scale(1.06);
-}
-
-.handset-icon:active .handset-glyph {
-  transform: scale(0.94);
-}
-
-.handset-glyph svg {
-  width: 32px;
-  height: 32px;
-  fill: currentColor;
-}
-
-.handset-glyph-maps {
-  background: linear-gradient(160deg, #5ac8fa, #007aff);
-}
-
-.handset-glyph-music {
-  background: linear-gradient(160deg, #ff6482, #ff2d55);
-}
-
-.handset-glyph-freight {
-  background: linear-gradient(160deg, #ffd60a, #ff9f0a);
-}
-
-.handset-glyph-truck {
-  background: linear-gradient(160deg, #63e6a3, #30b35a);
-  color: #1c5a2f;
-}
-
-.handset-glyph-truck svg {
-  fill: #fff;
-}
-
-.handset-glyph-settings {
-  background: linear-gradient(160deg, #a1a1aa, #636366);
-}
-
-.handset-label {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* An app: its bar (back to the home screen, its name) and what it shows. */
-.handset-app {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  animation: handset-in 220ms ease-out;
-}
-
-.handset-app-bar {
+.ios-dots {
   flex: none;
   display: flex;
-  align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 2px 10px 8px;
+  padding: 10px 0;
 }
 
-.handset-app-bar h1 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.handset-back {
-  padding: 6px 8px;
+.ios-dots button {
+  width: 7px;
+  height: 7px;
+  padding: 0;
   border: 0;
-  border-radius: 10px;
-  background: none;
-  font-size: 15px !important;
-  color: #0a84ff !important;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.35) !important;
 }
 
-.handset-app-body {
-  flex: 1;
-  min-height: 0;
+.ios-dots button.on {
+  background: #fff !important;
+}
+
+.ios-dock {
+  flex: none;
+  display: flex;
+  justify-content: space-around;
+  margin: 0 10px 22px;
+  padding: 12px 8px;
+  border-radius: 32px;
+  background: rgb(255 255 255 / 0.18);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.25);
+}
+
+.ios-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px 0;
+}
+
+.ios-app {
   display: flex;
   flex-direction: column;
-  gap: var(--tile-gap);
-  padding: 0 var(--edge);
-  overflow-y: auto;
-  scrollbar-width: none;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none !important;
+  color: #fff !important;
 }
 
-.handset-app-maps {
-  padding: 0 var(--edge);
+.ios-app:active .ios-icon {
+  filter: brightness(0.75);
 }
 
-.handset-app-maps > .map-tile {
-  flex: 1;
-  border-radius: var(--panel-radius);
+.ios-app-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
 }
 
-@keyframes handset-in {
+@keyframes ios-home-in {
   from {
     opacity: 0;
-    transform: scale(0.97);
+    transform: scale(1.06);
   }
 }
 
-/* Cards and their words. */
-.handset-card {
+/* ===== Icons (icons.tsx): iOS's rounded square, its gloss, a white glyph. ===== */
+
+.ios-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 13.5px;
+  color: #fff;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.ios-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.22), transparent 55%);
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.2);
+}
+
+.ios-icon svg {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+}
+
+.ios-icon.small {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.ios-icon.small svg {
+  width: 19px;
+  height: 19px;
+}
+
+.ios-icon-maps {
+  background: linear-gradient(160deg, #6ee0a0, #2bb673 45%, #1d8fe3);
+}
+
+.ios-icon-music {
+  background: linear-gradient(180deg, #fb5c74, #fa233b);
+}
+
+.ios-icon-youtubeMusic {
+  background: linear-gradient(180deg, #ff3d3d, #c4001a);
+}
+
+.ios-icon-spotify {
+  background: linear-gradient(180deg, #2a2a2a, #121212);
+  color: #1ed760;
+}
+
+.ios-icon-commands {
+  background: linear-gradient(160deg, #5ac8fa, #5856d6 55%, #af52de);
+}
+
+.ios-icon-freight {
+  background: linear-gradient(180deg, #ffcc4d, #ff9500);
+}
+
+.ios-icon-truck {
+  background: linear-gradient(180deg, #4dabf7, #1c7ed6);
+}
+
+.ios-icon-settings {
+  background: linear-gradient(180deg, #a2a2a8, #6e6e73);
+}
+
+/* ===== Widgets: iOS's glass, rounded, on the wallpaper. ===== */
+
+.ios-widget {
   flex: none;
-  padding: 12px 14px;
-  border-radius: var(--panel-radius);
-  background: var(--glass);
+  border-radius: 22px;
+  background: var(--ios-material);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: inset 0 0 0 0.5px var(--ios-material-edge);
+  color: var(--ios-label);
+  overflow: hidden;
 }
 
-.handset-kicker {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
+.ios-widget-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
-.handset-cargo {
-  margin-top: 2px;
-  font-size: 19px;
-  font-weight: 700;
+.ios-widget-small {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.ios-widget-kicker {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ios-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.handset-text {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.handset-hint {
-  margin: 0;
-  padding: 0 4px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-dim);
-}
-
-.handset-empty {
-  margin: auto;
-  font-size: 15px;
-  color: var(--text-dim);
-}
-
-.handset-facts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 0;
-}
-
-.handset-fact {
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: var(--glass);
-}
-
-.handset-fact dt {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-.handset-fact dd {
-  margin: 2px 0 0;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.handset-fact dd.late {
-  color: #ff453a;
-}
-
-.handset-route {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.handset-route-line {
-  width: 2px;
-  height: 14px;
-  margin-left: 4px;
-  background: var(--text-dim);
-  opacity: 0.5;
-}
-
-.handset-place-name {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.handset-place-city {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.handset-gauge {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 0;
-}
-
-.handset-gauge-value {
-  font-size: 64px;
-  font-weight: 700;
+.ios-widget-big {
+  font-size: 40px;
+  font-weight: 650;
   line-height: 1;
+  letter-spacing: -0.03em;
 }
 
-.handset-gauge-unit {
-  font-size: 16px;
-  color: var(--text-dim);
+.ios-widget-line {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* What plays: the Dashboard's Now Playing card, as tall as it needs. */
-.handset-music {
-  flex: none;
+.ios-widget-clock .ios-widget-kicker {
+  color: var(--ios-red);
+  text-transform: uppercase;
+}
+
+.ios-widget-truck .ios-widget-big {
+  color: var(--ios-tint);
+}
+
+/* What plays: the Dashboard's Now Playing card, as the widget's own (its own backdrop of the cover). */
+.ios-widget-music {
   display: flex;
-  min-height: 96px;
+  min-height: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
-.handset-music-big {
-  min-height: 150px;
-}
-
-.handset-music .widget-slot,
-.handset-music .widget {
+.ios-widget-music .widget-slot,
+.ios-widget-music .widget {
   flex: 1;
   margin: 0;
+  border-radius: 22px;
 }
 
-.handset-music .widget {
+.ios-widget-music .widget {
   padding: 12px 14px;
   gap: 12px;
 }
 
-/* The volume (phone/PhoneVolume.tsx). */
-.handset .phone-volume {
+.ios-music-big .widget {
+  min-height: 150px;
+}
+
+/* Where the truck is headed. */
+.ios-widget-arrival {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  color: var(--text-dim);
+  gap: 12px;
+  padding: 12px 14px;
 }
 
-.handset .phone-volume input {
-  flex: 1;
-  min-width: 0;
-  accent-color: #0a84ff;
-}
-
-.handset-home {
+.ios-arrival-flag {
   flex: none;
-  width: 120px;
-  height: 5px;
-  margin: 12px auto 9px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: var(--text);
-  opacity: 0.6;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--ios-tint);
 }
 
-/* The cab's own screens, smaller (Scaled.tsx): laid out larger, drawn down to the room. */
+.ios-arrival-flag svg {
+  width: 20px;
+  height: 20px;
+  fill: #fff;
+}
+
+.ios-arrival-text {
+  min-width: 0;
+}
+
+.ios-arrival-text > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ios-arrival-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.ios-arrival-detail {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ios-green);
+}
+
+.ios-arrival-detail.late {
+  color: var(--ios-red);
+}
+
+/* The minimap, the second page's widget: as tall as the page leaves it. */
+.ios-widget-map {
+  flex: 1 1 0;
+  min-height: 120px;
+  max-height: 340px;
+}
+
+.ios-widget-map .handset-scaled-page {
+  display: flex;
+}
+
+.ios-widget-map .map-tile {
+  flex: 1;
+  border-radius: 0;
+}
+
+/* ===== An app (HandsetApp.tsx): its navigation bar, its large title, its content. ===== */
+
+.ios-app-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: ios-app-in 280ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes ios-app-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+.ios-nav {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 8px;
+}
+
+.ios-back {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: 0;
+  background: none !important;
+  color: var(--ios-tint) !important;
+  font-size: 16px !important;
+}
+
+.ios-back svg {
+  width: 11px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ios-nav-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.ios-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 0 16px 30px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.ios-large-title {
+  margin: 0 0 -6px 2px;
+  font-size: 32px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+/* The cab's own screens (Scaled.tsx), full. */
+.compact .ios-content {
+  gap: 0;
+  padding: 0 0 22px;
+  overflow: hidden;
+}
+
 .handset-scaled {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  border-radius: var(--panel-radius);
 }
 
 .handset-scaled-page {
@@ -433,217 +591,249 @@ body,
   transform-origin: 0 0;
 }
 
-.handset-app-maps,
-.handset-app-youtubeMusic,
-.handset-app-spotify {
+/* ===== Lists (ios.tsx): iOS's grouped, inset rows. ===== */
+
+.ios-section {
+  flex: none;
+}
+
+.ios-section-header {
+  margin: 0 0 6px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--ios-secondary);
+}
+
+.ios-section-footer {
+  margin: 6px 16px 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--ios-secondary);
+}
+
+.ios-list {
+  border-radius: 12px;
+  background: var(--ios-group);
   overflow: hidden;
-  padding-bottom: 0;
 }
 
-/* More apps on the home screen: four in a row. */
-.handset-grid {
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px 4px;
+.ios-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 14px;
+  border: 0;
+  box-sizing: border-box;
+  background: none;
+  text-align: left;
+  font-size: 15.5px;
 }
 
-.handset-glyph {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+/* The separator: from the text on, as iOS's. */
+.ios-row + .ios-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 0;
+  height: 0.5px;
+  background: var(--ios-sep);
 }
 
-.handset-glyph svg {
-  width: 30px;
-  height: 30px;
+.ios-row:has(.ios-row-icon, .ios-icon) + .ios-row::before,
+.ios-row + .ios-row:has(.ios-row-icon, .ios-icon)::before {
+  left: 56px;
 }
 
-.handset-label {
-  font-size: 11px;
+.ios-row-button:active {
+  background: var(--ios-fill) !important;
 }
 
-.handset-glyph-youtubeMusic {
-  background: linear-gradient(160deg, #ff4d4d, #d90000);
-}
-
-.handset-glyph-spotify {
-  background: linear-gradient(160deg, #3be477, #1aa34a);
-}
-
-.handset-glyph-small {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  box-shadow: none;
-}
-
-.handset-glyph-small svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* The music apps, from the Music app. */
-.handset-sources {
+.ios-row-text {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  border-radius: var(--panel-radius);
-  background: var(--glass);
-  overflow: hidden;
 }
 
-.handset-source {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 0;
-  background: none;
-  font-size: 15px !important;
-  font-weight: 500;
-  text-align: left;
-}
-
-.handset-source + .handset-source {
-  border-top: 1px solid rgb(127 127 127 / 0.2);
-}
-
-.handset-chevron {
-  margin-left: auto;
-  font-size: 20px;
-  color: var(--text-dim);
-}
-
-/* The weather, on the home screen. */
-.handset-weather {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* A choice of a few (Settings: the look, the units). */
-.handset-choice {
-  display: flex;
-  margin-top: 8px;
-  padding: 2px;
-  border-radius: 10px;
-  background: rgb(127 127 127 / 0.2);
-}
-
-.handset-choice button {
-  flex: 1;
-  padding: 7px 4px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  font-size: 13px !important;
-  font-weight: 500;
-}
-
-.handset-choice button.on {
-  background: var(--app-background);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
-  font-weight: 700;
-}
-
-/* Where the truck is headed (the Dashboard's destination widget). */
-.handset-arrival {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.handset-arrival-flag {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: #0a84ff;
-}
-
-.handset-arrival-flag svg {
-  width: 22px;
-  height: 22px;
-  fill: #fff;
-}
-
-.handset-arrival-text {
-  min-width: 0;
-}
-
-.handset-arrival-text > div {
+.ios-row-label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.handset-arrival-detail {
-  margin-top: 2px;
-  font-size: 12px;
+.ios-row-detail {
+  font-size: 12.5px;
+  color: var(--ios-secondary);
+}
+
+.ios-row-value {
+  flex: none;
+  color: var(--ios-secondary);
+}
+
+.ios-row-value.late {
+  color: var(--ios-red);
   font-weight: 600;
-  color: #30d158;
 }
 
-.handset-arrival-detail.late {
-  color: #ff453a;
-}
-
-/* Room on the home screen for the widgets: a smaller clock, closer. */
-.handset-homescreen {
-  gap: 10px;
-}
-
-.handset-clock {
-  padding: 2px 0 0;
-}
-
-.handset-clock-time {
-  font-size: 52px;
-}
-
-.handset-clock-day {
-  margin-top: 2px;
+.ios-row-wrap {
+  display: block;
+  padding: 4px 0;
+  white-space: normal;
   font-size: 14px;
+  line-height: 1.4;
 }
 
-.handset-homescreen .handset-music {
-  min-height: 0;
+.ios-row-action {
+  justify-content: center;
+  color: var(--ios-tint) !important;
+  font-weight: 500;
 }
 
-/* On the player's own phone, full screen: the time, the signal and the battery in the band its notch leaves at the
-   top, not under it (owner 2026-11-02: "a big black bar on top, it's too low", then "the time and the battery
-   are gone"). */
-.handset-remote .handset-screen {
-  padding-top: 0;
+.ios-row-action:active {
+  background: var(--ios-fill) !important;
 }
 
-.handset-remote .handset-status {
-  height: max(34px, env(safe-area-inset-top));
-  padding: 0 22px;
+.ios-chevron {
+  flex: none;
+  width: 8px;
+  height: 14px;
+  fill: none;
+  stroke: var(--ios-secondary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
 }
 
-.handset-remote .handset-homescreen,
-.handset-remote .handset-app {
-  padding-top: 8px;
+.ios-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: #fff;
 }
 
-/* The truck's commands (CommandsApp.tsx): buttons in pairs, held as long as they're pressed. */
-.handset-glyph-commands {
-  background: linear-gradient(160deg, #64d2ff, #5e5ce6);
+.ios-row-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
+
+/* A row's own control: the segmented, the volume. */
+.ios-segmented {
+  flex: none;
+  display: flex;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--ios-fill);
+}
+
+.ios-segmented button {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font-size: 13px !important;
+  font-weight: 500;
+}
+
+.ios-segmented button.on {
+  background: #636366 !important;
+  font-weight: 650;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+}
+
+.appearance-light .ios-segmented button.on {
+  background: #fff !important;
+}
+
+.handset .phone-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--ios-secondary);
+}
+
+.handset .phone-volume input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ios-tint);
+}
+
+/* A big headline over an app's lists: the cargo and its pay, the truck's speed. */
+.ios-hero {
+  flex: none;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--ios-group);
+  text-align: center;
+}
+
+.ios-hero-kicker {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ios-secondary);
+}
+
+.ios-hero-title {
+  margin-top: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ios-hero-value {
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ios-green);
+}
+
+.ios-hero-speed {
+  margin: 4px 0;
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.ios-hero-speed span {
+  margin-left: 6px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--ios-secondary);
+}
+
+.ios-empty {
+  margin: auto;
+  font-size: 16px;
+  color: var(--ios-secondary);
+}
+
+/* ===== The truck's commands (CommandsApp.tsx): Control Center tiles, held as long as they're pressed. ===== */
 
 .handset-commands {
   flex: none;
 }
 
-.handset-command-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 8px;
+.handset-commands .handset-kicker {
+  margin: 0 0 6px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--ios-secondary);
 }
 
-/* Each group's colour: its buttons' icons, and the button held. */
 .handset-commands.tone-blue {
   --tone: #0a84ff;
 }
@@ -656,22 +846,23 @@ body,
   --tone: #ff9f0a;
 }
 
-/* A button as a Control Center tile: rounded, outlined, its icon in a circle of its group's colour (owner
-   2026-11-02: "rounded, outlined, not a button that looks like text"). Above the shell's own button look. */
+.handset-command-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .handset .handset-command {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 52px;
+  min-height: 54px;
   padding: 8px 10px;
-  border: 1.5px solid rgb(127 127 127 / 0.35);
+  border: 0;
   border-radius: 16px;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.03));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.12),
-    0 2px 6px rgb(0 0 0 / 0.25);
-  color: var(--text);
-  font-size: 12.5px !important;
+  background: var(--ios-group);
+  color: var(--ios-label);
+  font-size: 13px !important;
   font-weight: 600;
   line-height: 1.2;
   text-align: left;
@@ -679,15 +870,7 @@ body,
   -webkit-touch-callout: none;
   transition:
     background 120ms ease,
-    border-color 120ms ease,
     transform 120ms ease;
-}
-
-.appearance-light .handset .handset-command,
-.handset.appearance-light .handset-command {
-  background: linear-gradient(180deg, #fff, #f2f2f6);
-  border-color: rgb(0 0 0 / 0.12);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
 }
 
 .handset .handset-command.wide {
@@ -695,13 +878,8 @@ body,
   justify-content: center;
 }
 
-.handset .handset-command:hover {
-  border-color: var(--tone);
-}
-
 .handset .handset-command:active {
   background: var(--tone);
-  border-color: var(--tone);
   color: #fff;
   transform: scale(0.96);
 }
@@ -710,17 +888,15 @@ body,
   flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--tone);
   color: #fff;
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--tone) 45%, transparent);
 }
 
 .handset .handset-command:active .handset-command-icon {
   background: rgb(255 255 255 / 0.25);
-  box-shadow: none;
 }
 
 .handset-command-icon svg {
@@ -733,39 +909,30 @@ body,
   min-width: 0;
 }
 
-/* Settings: the page again, after an update. */
-.handset .handset-reload {
-  flex: none;
-  padding: 12px;
-  border: 1.5px solid #0a84ff;
-  border-radius: 14px;
-  background: rgb(10 132 255 / 0.12);
-  color: #0a84ff;
-  font-size: 15px !important;
-  font-weight: 600;
+.ios-row-off {
+  color: var(--ios-secondary);
 }
 
-.handset .handset-reload:active {
-  background: #0a84ff;
-  color: #fff;
-}
-
-/* The home screen's minimap: the room the widgets leave, the map following the truck and its route, drawn small. */
-.handset-minimap {
-  flex: 1 1 0;
-  min-height: 70px;
-  border-radius: var(--panel-radius);
-}
-
-.handset-minimap .handset-scaled-page {
+/* A choice as wide as its row. */
+.ios-row-label .ios-segmented {
   display: flex;
 }
 
-.handset-minimap .map-tile {
+.ios-row-label .ios-segmented button {
   flex: 1;
-  border-radius: calc(var(--panel-radius) / 0.45);
 }
 
-.handset-homescreen .handset-grid {
-  margin-top: 0;
+/* The real icons (the cab's): the image is the whole icon, its own colours and gloss. */
+.ios-icon-real {
+  background: none;
+}
+
+.ios-icon-real::after {
+  display: none;
+}
+
+.ios-icon-real img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }

@@ -42,7 +42,7 @@ export function CommandsApp({ words }: { words: CommandWords }) {
 /** A group of commands, its buttons in its colour (`tone`). */
 function Group({ title, tone, children }: { title: string; tone: string; children: ReactNode }) {
   return (
-    <section className={`handset-card handset-commands tone-${tone}`}>
+    <section className={`handset-commands tone-${tone}`}>
       <div className="handset-kicker">{title}</div>
       <div className="handset-command-grid">{children}</div>
     </section>
