@@ -1047,7 +1047,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             let handover = handover::Handover::new(picked, roads, &positions);
                             // The last hand-over's waypoints go as this one sets the game's (without them).
                             held_vias.clear();
-                            following = Some(Following { id, handover, positions, answered: None });
+                            following = Some(Following { id, handover, positions, asked: route_number, answered: None });
                         }
                         _ => {
                             let _ = webview.post_json(&followed_message(id, false, "unexpected"));
@@ -1071,7 +1071,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             } else if let Some(follow) = following.as_mut().filter(|follow| follow.id == id & !FOLLOWING) {
                 // Handing a route over: once the game has it, its new route is compared (below).
                 match reply["answer"].as_str() {
-                    Some("done") => follow.answered = Some((Instant::now(), route_number)),
+                    Some("done") => follow.answered = Some((Instant::now(), follow.asked)),
                     other => {
                         let _ = webview.post_json(&followed_message(follow.id, false, other.unwrap_or("noAnswer")));
                         following = None;
@@ -1159,6 +1159,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             vias,
                             Instant::now(),
                         );
+                        follow.asked = route_number;
                         follow.answered = None;
                     }
                 }
@@ -2203,12 +2204,16 @@ enum PageMessage {
 }
 
 /// A route being handed to the game's GPS: the page's request, the hand-over (the route picked and the
-/// waypoints holding the game to it), where each of the route's nodes is, and, once the game took the last
-/// change, when and the game's route number then (its next route is compared).
+/// waypoints holding the game to it), where each of the route's nodes is, the game's route number as the last
+/// change was asked, and, once the game took it, when and that route number (its next route is compared).
 struct Following {
     id: u32,
     handover: handover::Handover,
     positions: Vec<[f32; 2]>,
+    /// The game's route number as the last change was asked, not as it answered: the game may plan the new route
+    /// before its answer is read (2026-11-02, a short route in ETS2: the new route came first, and the hand-over
+    /// waited for another until it said the game didn't answer).
+    asked: Option<u32>,
     answered: Option<(Instant, Option<u32>)>,
 }
 
