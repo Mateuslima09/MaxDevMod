@@ -28,6 +28,7 @@ import '../cabin/apps/apps.css'
 /** How much smaller the cab's own screens are drawn in the phone: the map's, and the music apps'. */
 const MAP_SCALE = 0.55
 const MUSIC_SCALE = 0.5
+const MINIMAP_SCALE = 0.45
 
 /**
  * The phone in the game (owner 2026-11-01: "a phone that shows up in the game at a key... as if it were a real
@@ -151,6 +152,10 @@ function Home({ words, open }: { words: Words; open: (app: AppId) => void }) {
       </div>
       <ArrivalCard />
       <WeatherCard />
+      {/* What room is left: the map following the truck, small (owner 2026-11-02: "a tiny minimap, the route"). */}
+      <Scaled scale={MINIMAP_SCALE} className="handset-minimap">
+        <MapView />
+      </Scaled>
       <nav className="handset-grid">
         {APPS.map((id) => (
           <button key={id} type="button" className="handset-icon" onClick={() => open(id)}>

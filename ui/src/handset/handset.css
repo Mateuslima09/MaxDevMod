@@ -749,3 +749,23 @@ body,
   background: #0a84ff;
   color: #fff;
 }
+
+/* The home screen's minimap: the room the widgets leave, the map following the truck and its route, drawn small. */
+.handset-minimap {
+  flex: 1 1 0;
+  min-height: 70px;
+  border-radius: var(--panel-radius);
+}
+
+.handset-minimap .handset-scaled-page {
+  display: flex;
+}
+
+.handset-minimap .map-tile {
+  flex: 1;
+  border-radius: calc(var(--panel-radius) / 0.45);
+}
+
+.handset-homescreen .handset-grid {
+  margin-top: 0;
+}
