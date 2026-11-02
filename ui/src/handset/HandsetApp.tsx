@@ -8,6 +8,8 @@ import { weatherView } from '../cabin/dashboard/weather'
 import { WeatherGlyph } from '../cabin/dashboard/WeatherGlyph'
 import { SpotifyApp } from '../cabin/apps/spotify/SpotifyApp'
 import { YouTubeMusicApp } from '../cabin/apps/youtubeMusic/YouTubeMusicApp'
+import { useDestinationView, EMPTY } from '../cabin/dashboard/widgetState'
+import { Keyboard } from '../cabin/keyboard/Keyboard'
 import { useMapData } from '../cabin/maps/mapData'
 import { useLook, useLookChanges } from '../cabin/state/hooks'
 import { connectHost, useLive } from '../cabin/state/store'
@@ -98,12 +100,14 @@ type AppId = 'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'freight' | 'truck'
 
 const APPS: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify', 'freight', 'truck', 'settings']
 
-/** One of the cab's own screens, smaller (Scaled.tsx), in an app window as the cab has it. */
+/** One of the cab's own screens, smaller (Scaled.tsx), in an app window as the cab has it, with the cab's
+ * keyboard for its search fields (the map's, the music apps'). */
 function CabScreen({ scale, children }: { scale: number; children: ReactNode }) {
   return (
     <Scaled scale={scale} className="handset-cab">
       <div className="screen app-window" style={{ '--content-left': '16px', '--edge': '16px' } as CSSProperties}>
         {children}
+        <Keyboard />
       </div>
     </Scaled>
   )
@@ -142,6 +146,7 @@ function Home({ words, open }: { words: Words; open: (app: AppId) => void }) {
       <div className="handset-music">
         <NowPlayingWidget />
       </div>
+      <ArrivalCard />
       <WeatherCard />
       <nav className="handset-grid">
         {APPS.map((id) => (
@@ -152,6 +157,28 @@ function Home({ words, open }: { words: Words; open: (app: AppId) => void }) {
         ))}
       </nav>
     </section>
+  )
+}
+
+/** Where the truck is headed, as the Dashboard's widget (destination.ts): the pickup or the delivery, by when
+ * and how far; or where the game's route ends (owner 2026-11-02: "the arrival widget, as CarPlay's"). */
+function ArrivalCard() {
+  const view = useDestinationView()
+  if (view === EMPTY) return null
+  return (
+    <article className="handset-card handset-arrival">
+      <span className="handset-arrival-flag" aria-hidden>
+        <svg viewBox="0 0 24 24">
+          <path d="M6 21V4h11l-2 4 2 4H8v9Z" />
+        </svg>
+      </span>
+      <div className="handset-arrival-text">
+        <div className="handset-kicker">{view.kicker}</div>
+        <div className="handset-place-name">{view.title}</div>
+        {view.subtitle && <div className="handset-place-city">{view.subtitle}</div>}
+        <div className={`handset-arrival-detail${view.late ? ' late' : ''}`}>{view.detail}</div>
+      </div>
+    </article>
   )
 }
 
@@ -452,9 +479,9 @@ const WORDS = {
     pickingUp: 'Picking up',
     weight: 'Weight',
     pays: 'Pays',
-    left: 'Left',
+    left: 'Left on the route',
     arrives: 'Arrives in',
-    planned: 'Planned',
+    planned: 'Whole job',
     deadline: 'Deadline',
     late: 'Late',
     from: 'From',
@@ -500,9 +527,9 @@ const WORDS = {
     pickingUp: 'Indo buscar',
     weight: 'Peso',
     pays: 'Paga',
-    left: 'Falta',
+    left: 'Falta na rota',
     arrives: 'Chega em',
-    planned: 'Distância',
+    planned: 'Frete inteiro',
     deadline: 'Prazo',
     late: 'Atrasado',
     from: 'De',

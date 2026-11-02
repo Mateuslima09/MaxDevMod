@@ -47,10 +47,19 @@ export function usePrefs(): Prefs {
 
 const KM_PER_MILE = 1.609344
 
-/** Metres as the chosen unit, whole: "120 km", "75 mi". */
+const FEET_PER_METRE = 3.28084
+
+/** Metres as the chosen unit: "120 km", "75 mi", "4.2 mi"; under one, in metres or feet ("250 m", "820 ft"),
+ * not rounded away to nothing (owner 2026-11-02: the job said 0 mi with the map at 250 m). */
 export function distance(metres: number, units: Prefs['units']): string {
   const km = metres / 1000
-  return `${Math.round(units === 'mi' ? km / KM_PER_MILE : km).toLocaleString()} ${units}`
+  const far = units === 'mi' ? km / KM_PER_MILE : km
+  if (far < 1) {
+    const near = units === 'mi' ? metres * FEET_PER_METRE : metres
+    return `${(Math.round(near / 10) * 10).toLocaleString()} ${units === 'mi' ? 'ft' : 'm'}`
+  }
+  const digits = far < 10 ? 1 : 0
+  return `${far.toLocaleString(undefined, { maximumFractionDigits: digits })} ${units}`
 }
 
 /** Metres per second as the chosen unit's speed, whole (no sign). */

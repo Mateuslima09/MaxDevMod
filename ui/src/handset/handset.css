@@ -543,3 +543,80 @@ body,
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
   font-weight: 700;
 }
+
+/* Where the truck is headed (the Dashboard's destination widget). */
+.handset-arrival {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.handset-arrival-flag {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #0a84ff;
+}
+
+.handset-arrival-flag svg {
+  width: 22px;
+  height: 22px;
+  fill: #fff;
+}
+
+.handset-arrival-text {
+  min-width: 0;
+}
+
+.handset-arrival-text > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.handset-arrival-detail {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #30d158;
+}
+
+.handset-arrival-detail.late {
+  color: #ff453a;
+}
+
+/* Room on the home screen for the widgets: a smaller clock, closer. */
+.handset-homescreen {
+  gap: 10px;
+}
+
+.handset-clock {
+  padding: 2px 0 0;
+}
+
+.handset-clock-time {
+  font-size: 52px;
+}
+
+.handset-clock-day {
+  margin-top: 2px;
+  font-size: 14px;
+}
+
+.handset-homescreen .handset-music {
+  min-height: 0;
+}
+
+/* On the player's own phone: its own status bar is there (or hidden, full screen), so not ours; the page starts
+   right under the phone's notch (owner 2026-11-02: "a big black bar on top, it's too low"). */
+.handset-remote .handset-status {
+  display: none;
+}
+
+.handset-remote .handset-homescreen,
+.handset-remote .handset-app {
+  padding-top: 8px;
+}
