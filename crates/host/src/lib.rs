@@ -33,6 +33,7 @@ mod spotify;
 pub mod startup;
 mod truck_commands;
 mod typing;
+mod wallet;
 mod weather;
 mod webview;
 mod youtube;
@@ -308,6 +309,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut handset_shown = false;
     // The truck's commands the phones hold, for the plugin's input device.
     let mut truck_commands = truck_commands::TruckCommands::default();
+    // The player's account, for the phone's Nupay (wallet.rs).
+    let mut wallet = wallet::Wallet::open(&config.data_dir);
     {
         let remote = remote.clone();
         let handset = handset.clone();
@@ -723,6 +726,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
         // The truck's commands the phones hold, as the plugin gives them to the game.
         host.truck_commands.store(truck_commands.held(Instant::now()), Ordering::Release);
+        // The money the game moved, as it did.
+        if let Some(money) = bridge.bridge().plugin.money.read()
+            && wallet.take(&money)
+        {
+            let _ = webview.post_json(&wallet.message());
+        }
         // The player's keybinds pressed in the game: the page acts on each.
         for keybind in Keybind::ALL {
             let presses = bridge.bridge().plugin.keybind_presses[keybind as usize].load(Ordering::Acquire);
@@ -811,6 +820,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
 
         while let Ok(player) = player_watch.updates.try_recv() {
             player_messages = player_messages_for(&player);
+            if let Some(money) = player.money
+                && wallet.saved(money)
+            {
+                let _ = webview.post_json(&wallet.message());
+            }
             for message in &player_messages {
                 let _ = webview.post_json(message);
             }
@@ -875,6 +889,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     for message in all {
                         let _ = webview.post_json(message);
                     }
+                    // The account, as it is now.
+                    let _ = webview.post_json(&wallet.message());
                 }
                 Some(PageMessage::Westplay { open }) => {
                     if status.westplay_open != Some(open) {
@@ -2625,6 +2641,7 @@ mod tests {
             hvt_map: true,
             language: Some("tr_tr".into()),
             time_zones: true,
+            money: None,
         };
         assert_eq!(
             super::player_messages_for(&player),

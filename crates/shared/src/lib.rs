@@ -27,7 +27,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 26;
+pub const BRIDGE_VERSION: u32 = 27;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -270,6 +270,70 @@ pub struct PluginBlock {
     pub nearby: SeqLock<Nearby>,
     /// Each [`Keybind`]'s presses so far: the plugin counts them, the app acts on each new one.
     pub keybind_presses: [AtomicU32; KEYBIND_COUNT],
+    /// The money the game moved as the player played (the SDK's gameplay events), for the phone's Nupay.
+    pub money: SeqLock<MoneyEvents>,
+}
+
+/// How many of the latest money events the bridge keeps: more than a player makes between two looks of the app.
+pub const MONEY_EVENTS: usize = 16;
+
+/// The money the game moved (the SDK's gameplay events): how many so far, and the latest of them, the `n`th at
+/// `events[n % MONEY_EVENTS]`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MoneyEvents {
+    pub count: u64,
+    pub events: [MoneyEvent; MONEY_EVENTS],
+}
+
+/// One sum of money the game moved: what for ([`MoneyKind`]), how much (dollars, an expense negative), about what
+/// (the cargo, the offence, where to), and when in the game (minutes, as `Telemetry::game_time`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MoneyEvent {
+    pub kind: u32,
+    pub game_time: u32,
+    pub amount: i64,
+    pub detail: FixedStr<64>,
+}
+
+/// What a [`MoneyEvent`] was (its `kind`), as the SDK's gameplay event ids.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum MoneyKind {
+    /// `job.delivered`: the job's revenue.
+    Delivered = 1,
+    /// `job.cancelled`: its penalty.
+    Cancelled = 2,
+    /// `player.fined`.
+    Fined = 3,
+    /// `player.tollgate.paid`.
+    Toll = 4,
+    /// `player.use.ferry`.
+    Ferry = 5,
+    /// `player.use.train`.
+    Train = 6,
+}
+
+impl MoneyKind {
+    pub const ALL: [MoneyKind; 6] =
+        [Self::Delivered, Self::Cancelled, Self::Fined, Self::Toll, Self::Ferry, Self::Train];
+
+    pub fn from_code(code: u32) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| *kind as u32 == code)
+    }
+
+    /// Its name for the pages (`delivered`…).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Delivered => "delivered",
+            Self::Cancelled => "cancelled",
+            Self::Fined => "fined",
+            Self::Toll => "toll",
+            Self::Ferry => "ferry",
+            Self::Train => "train",
+        }
+    }
 }
 
 /// The most of TruckersMP's players around the player the bridge carries (its streaming range holds far fewer).
@@ -794,6 +858,8 @@ unsafe impl Plain for TruckInfo {}
 unsafe impl Plain for JobInfo {}
 // SAFETY: integers and floats only (see `Plain`); a count read torn is bounded by `Nearby::players`.
 unsafe impl Plain for Nearby {}
+// SAFETY: integers and byte strings only (see `Plain`); a count read torn only says which events are new.
+unsafe impl Plain for MoneyEvents {}
 
 // SAFETY: the value is only ever written by one writer at a time (`write`'s contract) and read whole, a
 // read that overlapped a write being thrown away (`read`).

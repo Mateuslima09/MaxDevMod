@@ -24,7 +24,7 @@ const DRAG = 8
 /** The apps in the dock, on every page; and each page's own. */
 const DOCK: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify']
 const PAGE_ONE: AppId[] = ['freight', 'truck', 'commands', 'settings']
-const PAGE_TWO: AppId[] = []
+const PAGE_TWO: AppId[] = ['nupay']
 
 export interface HomeWords {
   apps: Record<AppId, string>

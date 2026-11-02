@@ -9,10 +9,16 @@ export interface Prefs {
   /** `auto`: as the cab is (the headlights, the time of day, or the player's choice in the cab). */
   look: 'auto' | 'light' | 'dark'
   units: 'km' | 'mi'
+  /** The home screen's wallpaper, the same whatever the look (owner 2026-11-03: "so it doesn't keep changing"). */
+  wallpaper: Wallpaper
 }
 
 const KEY = 'westplay-handset-prefs'
-const DEFAULTS: Prefs = { look: 'auto', units: 'mi' }
+const DEFAULTS: Prefs = { look: 'auto', units: 'mi', wallpaper: 'aurora' }
+
+/** The home screen's wallpapers to choose from. */
+export const WALLPAPERS = ['aurora', 'ocean', 'sunset'] as const
+export type Wallpaper = (typeof WALLPAPERS)[number]
 
 let prefs: Prefs = read()
 const listeners = new Set<() => void>()

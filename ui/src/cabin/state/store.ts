@@ -7,6 +7,7 @@ import {
   type GameWeather,
   hasTruck,
   type JobInfo,
+  type WalletEntry,
   IS_DEMO,
   type KeybindAction,
   isInHost,
@@ -235,6 +236,8 @@ export interface LiveState {
   truck: TruckInfo | null
   /** The player's job (`null`: none). */
   job: JobInfo | null
+  /** The player's account, for the phone's Nupay (`null`: not told yet). */
+  wallet: { balance: number | null; entries: WalletEntry[] } | null
   /** The kind of screen the game draws WestPlay on; `null` until it has drawn one. */
   screenLayout: ScreenLayoutId | null
   /** The cities whose garages the player owns, and their headquarters' (none until the host has read their
@@ -298,6 +301,7 @@ export const useLive = create<LiveState>()(() => ({
   telemetry: null,
   truck: previewTruck(),
   job: null,
+  wallet: null,
   screenLayout: previewLayout(),
   ownedGarages: [],
   headquarters: null,
@@ -376,6 +380,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       }
       case 'truck':
         useLive.setState({ truck: hasTruck(message.data) ? message.data : null })
+        break
+      case 'wallet':
+        useLive.setState({ wallet: { balance: message.balance, entries: message.entries } })
         break
       case 'job':
         useLive.setState({ job: message.data.active ? message.data : null })

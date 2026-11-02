@@ -15,6 +15,7 @@ mod input;
 mod keybinds;
 mod keyboard;
 mod log;
+mod money;
 mod mod_mount;
 mod navigation;
 mod screens;

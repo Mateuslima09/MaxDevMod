@@ -65,6 +65,16 @@ export interface TruckInfo {
   name: string
 }
 
+/** One sum in or out of the player's account (crates/host wallet.rs `Entry`; an expense negative): what for, about
+ * what, and when (the PC's time, ms; the game's, minutes, when known). */
+export interface WalletEntry {
+  at: number
+  gameTime: number | null
+  kind: 'delivered' | 'cancelled' | 'fined' | 'toll' | 'ferry' | 'train' | 'other'
+  amount: number
+  detail: string
+}
+
 /** The player's job (`westplay_shared::JobInfo`): names localized by the game. */
 export interface JobInfo {
   /** There is a job. */
@@ -93,6 +103,9 @@ export type HostMessage =
   | { type: 'telemetry'; data: Telemetry }
   | { type: 'truck'; data: TruckInfo }
   | { type: 'job'; data: JobInfo }
+  /** The player's account (crates/host wallet.rs), for the phone's Nupay: its balance (`null`: no save read yet)
+   * and its entries, the newest first. */
+  | { type: 'wallet'; balance: number | null; entries: WalletEntry[] }
   /** `null` until the game has drawn a WestPlay screen. Checked against the known ids on arrival. */
   | { type: 'screen'; layout: string | null }
   /** The settings the page applies: whether the truck's own strip stays beside WestPlay

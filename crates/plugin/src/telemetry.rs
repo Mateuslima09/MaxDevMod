@@ -12,9 +12,9 @@ use westplay_shared::{FixedStr, JobInfo, Telemetry, TruckInfo};
 
 use crate::scs::{
     ChannelCallback, ConfigurationEvent, EventCallback, SCS_RESULT_OK, SCS_TELEMETRY_EVENT_CONFIGURATION,
-    SCS_TELEMETRY_EVENT_FRAME_END, SCS_TELEMETRY_EVENT_PAUSED, SCS_TELEMETRY_EVENT_STARTED, SCS_U32_NIL,
-    SCS_VALUE_TYPE_BOOL, SCS_VALUE_TYPE_DPLACEMENT, SCS_VALUE_TYPE_FLOAT, SCS_VALUE_TYPE_FPLACEMENT,
-    SCS_VALUE_TYPE_S32, SCS_VALUE_TYPE_U32, ScsValue, TelemetryInitParamsV100,
+    SCS_TELEMETRY_EVENT_FRAME_END, SCS_TELEMETRY_EVENT_GAMEPLAY, SCS_TELEMETRY_EVENT_PAUSED,
+    SCS_TELEMETRY_EVENT_STARTED, SCS_U32_NIL, SCS_VALUE_TYPE_BOOL, SCS_VALUE_TYPE_DPLACEMENT, SCS_VALUE_TYPE_FLOAT,
+    SCS_VALUE_TYPE_FPLACEMENT, SCS_VALUE_TYPE_S32, SCS_VALUE_TYPE_U32, ScsValue, TelemetryInitParamsV100,
 };
 use crate::{bridge, log};
 
@@ -150,6 +150,7 @@ pub unsafe fn register(params: &TelemetryInitParamsV100) {
             SCS_TELEMETRY_EVENT_PAUSED,
             SCS_TELEMETRY_EVENT_STARTED,
             SCS_TELEMETRY_EVENT_CONFIGURATION,
+            SCS_TELEMETRY_EVENT_GAMEPLAY,
         ] {
             let result = register_event(event, on_event, std::ptr::null_mut());
             if result != SCS_RESULT_OK {
@@ -193,6 +194,13 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
     // SAFETY: a configuration event's `info` is the SDK's `ConfigurationEvent`, alive through the call; the
     // navigator is served on the game's main thread, where this is (`serve`'s contract).
     unsafe {
+        // The money the game moved (money.rs): a gameplay event is laid out as a configuration.
+        if event == SCS_TELEMETRY_EVENT_GAMEPLAY {
+            if let Some(gameplay) = (info as *const ConfigurationEvent).as_ref() {
+                crate::money::on_gameplay(gameplay);
+            }
+            return;
+        }
         if event == SCS_TELEMETRY_EVENT_CONFIGURATION {
             if let Some(configuration) = (info as *const ConfigurationEvent).as_ref() {
                 on_configuration(configuration);

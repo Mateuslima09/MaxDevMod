@@ -1,0 +1,251 @@
+import { type ReactNode, useState } from 'react'
+import type { WalletEntry } from '../shared/host'
+import { useLive } from '../cabin/state/store'
+
+/**
+ * Nupay (owner 2026-11-03: "a finance app in the phone: the account's balance and what came in and went out"):
+ * the player's account as the app keeps it (crates/host wallet.rs), its balance (hidden at a tap, as a bank's
+ * app does), what came in and went out, and each movement, the newest first, by day.
+ */
+export function NupayApp({ language }: { language: 'en' | 'pt' }) {
+  const wallet = useLive((state) => state.wallet)
+  const [hidden, setHidden] = useState(false)
+  const words = WORDS[language]
+  const money = (amount: number, signed = false) => formatMoney(amount, language, signed)
+  const entries = wallet?.entries ?? []
+  const income = entries.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0)
+  const spent = entries.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0)
+
+  return (
+    <div className="nupay">
+      <header className="nupay-head">
+        <div className="nupay-hello">{words.account}</div>
+        <button type="button" className="nupay-balance" onClick={() => setHidden(!hidden)}>
+          <span className="nupay-balance-value">
+            {wallet?.balance == null ? '—' : hidden ? '••••••' : money(wallet.balance)}
+          </span>
+          <svg viewBox="0 0 24 24" aria-label={hidden ? words.show : words.hide}>
+            {hidden ? EYE_CLOSED : EYE}
+          </svg>
+        </button>
+        {wallet?.balance == null && <p className="nupay-note">{words.noSave}</p>}
+      </header>
+      <div className="nupay-summary">
+        <article className="nupay-total in">
+          <span>{words.income}</span>
+          <strong>{hidden ? '••••' : money(income)}</strong>
+        </article>
+        <article className="nupay-total out">
+          <span>{words.spent}</span>
+          <strong>{hidden ? '••••' : money(-spent)}</strong>
+        </article>
+      </div>
+      <h2 className="nupay-title">{words.history}</h2>
+      {entries.length === 0 ? (
+        <p className="nupay-empty">{words.empty}</p>
+      ) : (
+        byDay(entries, language).map(([day, list]) => (
+          <section key={day} className="nupay-day">
+            <h3>{day}</h3>
+            <div className="ios-list">
+              {list.map((entry, index) => (
+                <div key={`${entry.at}-${index}`} className="ios-row nupay-row">
+                  <span className={`nupay-kind nupay-kind-${entry.kind}`} aria-hidden>
+                    <svg viewBox="0 0 24 24">{KIND_GLYPHS[entry.kind]}</svg>
+                  </span>
+                  <span className="ios-row-text">
+                    <span className="ios-row-label">{kindName(entry, words)}</span>
+                    <span className="ios-row-detail">{detailOf(entry, words)}</span>
+                  </span>
+                  <span className={`nupay-amount${entry.amount > 0 ? ' in' : ''}`}>
+                    {hidden ? '••••' : money(entry.amount, true)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+      <p className="nupay-foot">{words.foot}</p>
+    </div>
+  )
+}
+
+type Words = (typeof WORDS)['en']
+
+/** Dollars, whole, as the player's language writes them; `signed`: with + or −. */
+function formatMoney(amount: number, language: 'en' | 'pt', signed: boolean): string {
+  const text = Math.abs(amount).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  })
+  if (!signed) return amount < 0 ? `−${text}` : text
+  return `${amount < 0 ? '−' : '+'}${text}`
+}
+
+/** The entries by the day they came (the PC's), the newest first: "Today", "Yesterday", or the date. */
+function byDay(entries: WalletEntry[], language: 'en' | 'pt'): [string, WalletEntry[]][] {
+  const words = WORDS[language]
+  const days = new Map<string, WalletEntry[]>()
+  const today = new Date().toDateString()
+  const yesterday = new Date(Date.now() - 86_400_000).toDateString()
+  for (const entry of entries) {
+    const date = new Date(entry.at)
+    const key = date.toDateString()
+    const name =
+      key === today
+        ? words.today
+        : key === yesterday
+          ? words.yesterday
+          : date.toLocaleDateString(language === 'pt' ? 'pt-BR' : 'en-US', { day: 'numeric', month: 'long' })
+    days.set(name, [...(days.get(name) ?? []), entry])
+  }
+  return [...days]
+}
+
+function kindName(entry: WalletEntry, words: Words): string {
+  if (entry.kind === 'other') return entry.amount < 0 ? words.otherOut : words.otherIn
+  return words.kinds[entry.kind]
+}
+
+/** What an entry was about: the cargo and where to, the offence, the crossing; for `other`, what it may be. */
+function detailOf(entry: WalletEntry, words: Words): string {
+  if (entry.kind === 'fined') return words.offences[entry.detail as keyof Words['offences']] ?? entry.detail
+  if (entry.kind === 'other') return entry.amount < 0 ? words.otherOutDetail : words.otherInDetail
+  if (entry.kind === 'toll') return words.tollDetail
+  return entry.detail
+}
+
+const EYE = <path d="M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7Zm0 3.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" />
+const EYE_CLOSED = (
+  <path d="M3 4.5 4.5 3l16.5 16.5-1.5 1.5-3.2-3.2A10.6 10.6 0 0 1 12 19C6 19 2 12 2 12a17 17 0 0 1 4.2-4.6ZM12 5c6 0 10 7 10 7a17 17 0 0 1-2.9 3.7L8.6 5.6A10 10 0 0 1 12 5Z" />
+)
+
+const KIND_GLYPHS: Record<WalletEntry['kind'], ReactNode> = {
+  delivered: (
+    <path
+      d="M3 7.5 12 3.5l9 4v9l-9 4-9-4Zm9 4v9M3 7.5l9 4 9-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+  ),
+  cancelled: (
+    <path
+      d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM8 8l8 8M16 8l-8 8"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  ),
+  fined: <path d="M12 2 1 21h22Zm-1 7h2v6h-2Zm0 8h2v2h-2Z" />,
+  toll: <path d="M4 20V8l8-5 8 5v12h-4v-6H8v6Z" />,
+  ferry: (
+    <path
+      d="M3 15h18l-2 4H5Zm3-2V8h12v5M10 8V5h4v3"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+    />
+  ),
+  train: (
+    <path
+      d="M7 3h10a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3l2 3h-2.5l-2-3h-5l-2 3H5l2-3a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm-1 4v4h12V7Zm2 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"
+      fillRule="evenodd"
+    />
+  ),
+  other: (
+    <path d="M4 6h16v12H4Zm0 4h16M7 14h4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  ),
+}
+
+const WORDS = {
+  en: {
+    account: 'Account',
+    show: 'Show balance',
+    hide: 'Hide balance',
+    noSave: 'The balance shows once the game saves (an autosave too).',
+    income: 'Money in',
+    spent: 'Money out',
+    history: 'History',
+    empty: 'Nothing yet: deliveries, fines, tolls and ferries show here as they happen.',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    kinds: {
+      delivered: 'Job delivered',
+      cancelled: 'Job cancelled',
+      fined: 'Fine',
+      toll: 'Toll',
+      ferry: 'Ferry',
+      train: 'Train',
+    },
+    otherOut: 'Other expenses',
+    otherIn: 'Other income',
+    otherOutDetail: 'Fuel, repairs, purchases (seen at the save)',
+    otherInDetail: 'Seen at the save',
+    tollDetail: 'Toll gate',
+    offences: {
+      crash: 'Crash',
+      avoid_sleeping: 'Driving tired',
+      wrong_way: 'Wrong way',
+      speeding_camera: 'Speed camera',
+      no_lights: 'No lights',
+      red_signal: 'Red light',
+      speeding: 'Speeding',
+      avoid_weighing: 'Skipped the weigh station',
+      illegal_trailer: 'Illegal trailer',
+      avoid_inspection: 'Skipped the inspection',
+      illegal_border_crossing: 'Illegal border crossing',
+      hard_shoulder_violation: 'Hard shoulder',
+      damaged_vehicle_usage: 'Damaged vehicle',
+      generic: 'Offence',
+    },
+    foot: 'Balance from the game’s latest save, plus what happened since. Fuel, repairs and purchases show at the next save.',
+  },
+  pt: {
+    account: 'Conta',
+    show: 'Mostrar saldo',
+    hide: 'Esconder saldo',
+    noSave: 'O saldo aparece assim que o jogo salvar (o salvamento automático também conta).',
+    income: 'Entradas',
+    spent: 'Saídas',
+    history: 'Histórico',
+    empty: 'Nada ainda: entregas, multas, pedágios e balsas aparecem aqui na hora.',
+    today: 'Hoje',
+    yesterday: 'Ontem',
+    kinds: {
+      delivered: 'Frete entregue',
+      cancelled: 'Frete cancelado',
+      fined: 'Multa',
+      toll: 'Pedágio',
+      ferry: 'Balsa',
+      train: 'Trem',
+    },
+    otherOut: 'Outros gastos',
+    otherIn: 'Outras entradas',
+    otherOutDetail: 'Diesel, oficina, compras (visto no save)',
+    otherInDetail: 'Visto no save',
+    tollDetail: 'Praça de pedágio',
+    offences: {
+      crash: 'Batida',
+      avoid_sleeping: 'Dirigir com sono',
+      wrong_way: 'Contramão',
+      speeding_camera: 'Radar',
+      no_lights: 'Sem faróis',
+      red_signal: 'Sinal vermelho',
+      speeding: 'Excesso de velocidade',
+      avoid_weighing: 'Fugiu da balança',
+      illegal_trailer: 'Carreta irregular',
+      avoid_inspection: 'Fugiu da inspeção',
+      illegal_border_crossing: 'Fronteira ilegal',
+      hard_shoulder_violation: 'Acostamento',
+      damaged_vehicle_usage: 'Veículo danificado',
+      generic: 'Infração',
+    },
+    foot: 'Saldo do último save do jogo, mais o que aconteceu depois. Diesel, oficina e compras aparecem no próximo save.',
+  },
+}

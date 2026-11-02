@@ -18,7 +18,8 @@ import { useFullScreen } from './fullScreen'
 import { Home } from './Home'
 import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
-import { distance, type Prefs, setPrefs, speed, speedUnit, usePrefs } from './prefs'
+import { distance, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
+import { NupayApp } from './NupayApp'
 import { Scaled } from './Scaled'
 import '../cabin/dashboard/dashboard.css'
 import '../cabin/apps/apps.css'
@@ -56,7 +57,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
 
   return (
     <main className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : ''}`}>
-      <div className={`handset-screen${app === null ? ' at-home' : ''}`}>
+      <div className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}`}>
         <StatusBar />
         {app === null ? (
           <Home words={words} open={setApp} units={prefs.units} />
@@ -72,7 +73,8 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {compact && <span className="ios-nav-title">{words.apps[app]}</span>}
             </header>
             <div className={`ios-content ios-content-${app}`}>
-              {!compact && <h1 className="ios-large-title">{words.apps[app]}</h1>}
+              {/* Nupay has its own head, the bank's colour. */}
+              {!compact && app !== 'nupay' && <h1 className="ios-large-title">{words.apps[app]}</h1>}
               {app === 'maps' && (
                 <CabScreen scale={MAP_SCALE}>
                   <section className="app-panel maps-app">
@@ -95,6 +97,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'freight' && <FreightApp words={words} units={prefs.units} />}
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
               {app === 'settings' && <SettingsApp words={words} prefs={prefs} />}
+              {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} />}
             </div>
           </section>
         )}
@@ -313,6 +316,20 @@ function SettingsApp({ words, prefs }: { words: Words; prefs: Prefs }) {
           }
         />
       </List>
+      <List header={words.wallpaper}>
+        <div className="ios-wallpapers">
+          {WALLPAPERS.map((wallpaper) => (
+            <button
+              key={wallpaper}
+              type="button"
+              className={`ios-wallpaper wallpaper-${wallpaper}${prefs.wallpaper === wallpaper ? ' on' : ''}`}
+              onClick={() => setPrefs({ wallpaper })}
+            >
+              <span>{words.wallpapers[wallpaper]}</span>
+            </button>
+          ))}
+        </div>
+      </List>
       <Volume words={words} />
       {/* A new version installed: the page again, without scanning the QR code again (owner 2026-11-02). */}
       <List footer={words.reloadHint}>
@@ -371,6 +388,7 @@ const WORDS = {
       freight: 'Job',
       truck: 'Truck',
       settings: 'Settings',
+      nupay: 'Nupay',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -406,6 +424,8 @@ const WORDS = {
     lookLight: 'Light',
     lookDark: 'Dark',
     units: 'Units',
+    wallpaper: 'Wallpaper',
+    wallpapers: { aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
     miles: 'Miles',
     kilometres: 'Km',
     howTo: 'How to use',
@@ -425,6 +445,7 @@ const WORDS = {
       freight: 'Frete',
       truck: 'Caminhão',
       settings: 'Ajustes',
+      nupay: 'Nupay',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',
@@ -460,6 +481,8 @@ const WORDS = {
     lookLight: 'Claro',
     lookDark: 'Escuro',
     units: 'Unidades',
+    wallpaper: 'Papel de parede',
+    wallpapers: { aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
     miles: 'Milhas',
     kilometres: 'Km',
     howTo: 'Como usar',

@@ -252,6 +252,12 @@ pub fn garages(units: &[Unit]) -> Garages {
     Garages { owned, headquarters }
 }
 
+/// The player's money in a save's units: the `bank` unit's `money_account` (dollars, or euros in ETS2; negative
+/// in debt), for the phone's Nupay.
+pub fn money(units: &[Unit]) -> Option<i64> {
+    units.iter().find(|unit| unit.class == "bank")?.get("money_account")?.parse().ok()
+}
+
 /// The mods a profile has enabled (its `profile.sii`, read with [`read`]), as the game lists them:
 /// `<package>|<name as shown>` (a Steam Workshop mod's package is `mod_workshop_package.<id>`). The list's
 /// length, which a text profile writes as an entry of its own (`active_mods: 50`), isn't a mod.
@@ -600,6 +606,13 @@ mod tests {
         );
         assert_eq!(units[0].get("size"), Some("big"));
         assert_eq!(units[2].name, "_nameless.0000.0000.0000.0001");
+    }
+
+    #[test]
+    fn finds_the_players_money() {
+        let text = "SiiNunit\n{\nbank : _nameless.1 {\n money_account: 25512\n loan_limit: 500000\n}\n}\n";
+        assert_eq!(money(&read(text.as_bytes()).unwrap()), Some(25512));
+        assert_eq!(money(&read(b"SiiNunit\n{\n}\n").unwrap()), None);
     }
 
     #[test]

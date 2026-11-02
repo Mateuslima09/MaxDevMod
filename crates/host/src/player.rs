@@ -34,6 +34,8 @@ pub struct Player {
     /// The profile has the game's time zones on (Options › Gameplay › Time zones: "Only time" or "Full
     /// info"): the game's clock shows the time of the country the truck is in.
     pub time_zones: bool,
+    /// The player's money as the save has it (`save::money`), for the phone's Nupay.
+    pub money: Option<i64>,
 }
 
 /// The speakers of the parts of the truck the SDK names (`None`: not found in the save, or no part with any).
@@ -106,6 +108,7 @@ impl PlayerWatch {
                             mod_files = found.into_iter().filter_map(|m| m.files).collect();
                             let player = Player {
                                 garages: save::garages(&units),
+                                money: save::money(&units),
                                 hvt_map,
                                 language: documents.as_deref().and_then(game_language),
                                 time_zones: options
