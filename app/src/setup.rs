@@ -20,6 +20,7 @@ use westplay_host::log;
 use westplay_host::maps::SetUpGame;
 use westplay_mapdata::files::GameFiles;
 use westplay_setup::game::{self, FoundBy, Game};
+use westplay_setup::mod_screens;
 use westplay_setup::plugin::{self, InstallError};
 use westplay_setup::record::Record;
 use westplay_setup::trucks::{self, Fit};
@@ -301,16 +302,17 @@ pub async fn check_game(dir: PathBuf, store: State<'_, SetupStore>) -> Result<Ga
     .await
 }
 
-/// The mod built for `game` and its installed mods, and the marks of the vehicles its tablet shows nothing in
-/// (`tablet::write_apart`).
-fn build_mod(game: &Game) -> Result<(Vec<u8>, game_mod::Built, Vec<u64>), String> {
+/// The mod built for `game` and its installed mods, the marks of the vehicles its tablet shows nothing in
+/// (`tablet::write_apart`), and the mod vehicles' screens found (`mod_screens::write_list`).
+fn build_mod(game: &Game) -> Result<(Vec<u8>, game_mod::Built, Vec<u64>, mod_screens::ModScreens), String> {
     let files = GameFiles::install(&game.dir).map_err(|e| e.to_string())?;
     let mods = installed_mod_files(game);
     let (mod_trucks, apart) = tablet::mod_trucks_and_marks(&mods);
     let marks = cab_mark::for_tablet(&files, &mods, &mod_trucks);
-    let (bytes, built) =
-        game_mod::build(&files, &mod_trucks, &game_mod::mod_screen_mods(&mods), &marks).map_err(|e| e.to_string())?;
-    Ok((bytes, built, apart))
+    let found = mod_screens::find(&files, &mods);
+    let (bytes, built) = game_mod::build_with(&files, &mod_trucks, &game_mod::mod_screen_mods(&mods), &marks, &found)
+        .map_err(|e| e.to_string())?;
+    Ok((bytes, built, apart, found))
 }
 
 /// The installed mods' files (active in a profile or not), for the tablet's trucks and the mod vehicles' screens.
@@ -394,11 +396,15 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
     let marks = cab_mark::for_tablet(&files, &mods, &mod_trucks);
     let marks_current = cab_mark::current(&marks, &ours);
     let layouts_current = game_mod::layouts_current(&ours);
-    if wanted != present || !screens_current || !marks_current || !layouts_current {
-        let made = game_mod::build(&files, &mod_trucks, &screen_mods, &marks).map_err(|error| error.to_string());
+    let found = mod_screens::find(&files, &mods);
+    let found_current = mod_screens::current(&found, &ours);
+    if wanted != present || !screens_current || !marks_current || !layouts_current || !found_current {
+        let made =
+            game_mod::build_with(&files, &mod_trucks, &screen_mods, &marks, &found).map_err(|error| error.to_string());
         let made = made.and_then(|(bytes, built)| {
             let dir = ours.parent().ok_or("no folder")?;
             game_mod::install(&bytes, dir).map_err(|error| error.to_string())?;
+            mod_screens::write_list(&found, dir).map_err(|error| error.to_string())?;
             Ok(built)
         });
         let built = match made {
@@ -419,8 +425,25 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
         for (script, why) in &marks.left {
             log!("setup: the cab's mark not in {script}: {why}");
         }
+        log_mod_screens(&found);
     }
     *looked = Some(stamp);
+}
+
+/// The mod vehicles' screens found, and those left as they are, for the log.
+fn log_mod_screens(found: &mod_screens::ModScreens) {
+    for screen in &found.screens {
+        log!(
+            "setup: a mod screen: {} in {} (laid out 1280x{}), for {}",
+            screen.script,
+            screen.layout,
+            screen.page_height,
+            screen.vehicles.join(", ")
+        );
+    }
+    for (script, why) in &found.left {
+        log!("setup: a mod screen left as it is, {script}: {why}");
+    }
 }
 
 /// How installing the plugin went.
@@ -485,13 +508,15 @@ pub async fn install_into_game(
 /// Two copies would stop the game when a screen starts, and the plugin doesn't mount its own while the old one
 /// is there.
 fn install_mod(game: &Game) -> Result<(), String> {
-    let (bytes, built, apart) = build_mod(game)?;
+    let (bytes, built, apart, found) = build_mod(game)?;
     if let Some(why) = &built.not_sharp {
         log!("setup: the 7\" Scania screen stays at the game's size: {why}");
     }
     let ours = places::westplay_documents().ok_or("noDocuments")?;
     game_mod::install(&bytes, &ours).map_err(|e| format!("Couldn't write the mod: {e}"))?;
     tablet::write_apart(&apart, &ours).map_err(|e| format!("Couldn't write the mod: {e}"))?;
+    mod_screens::write_list(&found, &ours).map_err(|e| format!("Couldn't write the mod: {e}"))?;
+    log_mod_screens(&found);
     if let Some(documents) = places::game_documents() {
         westplay_setup::uninstall::remove_mod(&documents)
             .map_err(|e| format!("Couldn't take the old mod out of the game's mod folder: {e}"))?;

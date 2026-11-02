@@ -11,6 +11,8 @@ describe('screen fit', () => {
     expect(fitKey('ford-cars', bronco)).toBe('ford-cars|ford.bronco_24')
     expect(fitKey('generic', null)).toBe('generic|')
     expect(fitKey(null, bronco)).toBeNull()
+    // A mod screen's, whichever slot setup gave it.
+    expect(fitKey('mod-3', bronco)).toBe(fitKey('mod-7', bronco))
   })
 
   it('leaves the page where it is without margins or proportion', () => {
@@ -33,7 +35,7 @@ describe('screen fit', () => {
   it('keeps each setting within its limits', () => {
     expect(readFit({ top: 0.9, stretch: 3, size: 0.1, left: 'x' })).toEqual({
       ...NO_FIT,
-      top: 0.2,
+      top: 0.35,
       stretch: 1.35,
       size: 0.6,
     })

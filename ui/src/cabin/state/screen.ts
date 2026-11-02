@@ -27,6 +27,23 @@ export const SCREEN_LAYOUT_IDS = [
   'westernstar-5700xe',
   'westernstar-57x',
   'ford-cars',
+  // Mod vehicles' own screens, found by setup (crates/setup mod_screens.rs): which is in each slot is setup's.
+  'mod-1',
+  'mod-2',
+  'mod-3',
+  'mod-4',
+  'mod-5',
+  'mod-6',
+  'mod-7',
+  'mod-8',
+  'mod-9',
+  'mod-10',
+  'mod-11',
+  'mod-12',
+  'mod-13',
+  'mod-14',
+  'mod-15',
+  'mod-16',
 ] as const
 
 export type ScreenLayoutId = (typeof SCREEN_LAYOUT_IDS)[number]

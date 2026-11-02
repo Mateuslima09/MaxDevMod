@@ -1607,7 +1607,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 // The page in the shape the game shows it in on this screen (none drawn yet: as it was), before
                 // the page hears of the screen and lays itself out for it.
                 if let Some(index) = (layout as usize).checked_sub(1) {
-                    let height = westplay_shared::page_height(index);
+                    let height = page_height_on(index);
                     if height != page_height {
                         page_height = height;
                         log!("the page laid out {}x{height}, shown in the {}-row frame", config.width, config.height);
@@ -1953,6 +1953,20 @@ fn open_handset(cab: &OffscreenWebView, stage: &Stage, root: &Path, maps: &Path)
     handset.navigate("https://westplay.cabin/handset.html")?;
     handset.show(false)?;
     Ok(handset)
+}
+
+/// The page's height on the layout at `index` (`westplay_shared::page_height`); a mod screen's slot's, as setup
+/// found its screen's shape (`westplay_shared::MOD_SCREENS_FILE`, beside the mod).
+fn page_height_on(index: usize) -> u32 {
+    let slot = westplay_shared::screen_layouts()
+        .get(index)
+        .map(|layout| layout.id)
+        .filter(|id| westplay_shared::is_mod_slot(id));
+    let told = slot.and_then(|id| {
+        let file = westplay_setup::places::westplay_documents()?.join(westplay_shared::MOD_SCREENS_FILE);
+        westplay_shared::mod_page_height(&std::fs::read_to_string(file).ok()?, id)
+    });
+    told.unwrap_or_else(|| westplay_shared::page_height(index))
 }
 
 /// What the phone in the game's page posted since last taken: what a player's phone may send (remote.rs).

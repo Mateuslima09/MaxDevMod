@@ -371,7 +371,7 @@ const APART: &[&[u64]] =
     &[&[0xdd10_e007_18e3_ff30], &[0xc237_0cf4_6903_dd71, 0xa08c_a3fb_d82a_c129, 0x94ab_97db_93df_f806]];
 
 /// Whether `path`'s mod (mounted as `mounted`) is set apart ([`APART`]): its vehicles never get the tablet.
-fn set_apart(path: &Path, mounted: &GameFiles) -> bool {
+pub(crate) fn set_apart(path: &Path, mounted: &GameFiles) -> bool {
     let words = |text: &str| -> BTreeSet<u64> {
         text.to_lowercase()
             .split(|c: char| !c.is_alphanumeric())

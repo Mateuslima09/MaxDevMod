@@ -21,7 +21,7 @@ export const NO_FIT: ScreenFit = { top: 0, bottom: 0, left: 0, right: 0, stretch
 
 /** How far each setting goes. */
 export const FIT_LIMITS = {
-  edge: { min: 0, max: 0.2, step: 0.005 },
+  edge: { min: 0, max: 0.35, step: 0.005 },
   stretch: { min: 0.75, max: 1.35, step: 0.01 },
   size: { min: 0.6, max: 1.6, step: 0.05 },
 } as const
@@ -30,7 +30,9 @@ export const FIT_LIMITS = {
  * vehicles, not always shown alike. */
 export function fitKey(layout: ScreenLayoutId | null, truck: TruckInfo | null): string | null {
   if (layout === null) return null
-  return `${layout}|${truck ? truck.id.replace(/^vehicle\./, '') : ''}`
+  // A mod screen's slot is setup's choice, another as the installed mods change: the vehicle's fit, whichever.
+  const screen = layout.startsWith('mod-') ? 'mod' : layout
+  return `${screen}|${truck ? truck.id.replace(/^vehicle\./, '') : ''}`
 }
 
 /** Whether a fit changes anything. */

@@ -137,6 +137,17 @@ const MOD_SCREENS: &[ModScreen] = &[
     },
 ];
 
+/// The screen scripts WestPlay has a way of its own with (`crates/setup mod_screens.rs` leaves them be): every
+/// layout's, the mod screens' sources, the window screens' and the stock screen's (shared by trucks whose displays
+/// show it in shapes of their own).
+pub(crate) fn own_scripts() -> impl Iterator<Item = &'static str> {
+    screen_layouts()
+        .iter()
+        .flat_map(|layout| layout.gps_scripts.iter().copied())
+        .chain(MOD_SCREENS.iter().map(|screen| screen.source))
+        .chain(["ui/gps.sii", "ui/dashboard/gps.dlc_toys.sii", "ui/dashboard/cellphone_gps.dlc_toys.sii"])
+}
+
 /// Whether `layout` is a mod vehicle's own screen ([`MOD_SCREENS`]).
 pub fn mod_screen_layout(layout: &str) -> bool {
     MOD_SCREENS.iter().any(|screen| screen.layout == layout)
@@ -456,6 +467,17 @@ pub fn build(
     screen_mods: &GameFiles,
     cab_marks: &cab_mark::Marks,
 ) -> Result<(Vec<u8>, Built), BuildError> {
+    build_with(game, mod_trucks, screen_mods, cab_marks, &crate::mod_screens::ModScreens::default())
+}
+
+/// [`build`], with the installed mods' vehicles' own screens found (`mod_screens::find`) in their slots.
+pub fn build_with(
+    game: &GameFiles,
+    mod_trucks: &[crate::tablet::Spot],
+    screen_mods: &GameFiles,
+    cab_marks: &cab_mark::Marks,
+    mod_screens: &crate::mod_screens::ModScreens,
+) -> Result<(Vec<u8>, Built), BuildError> {
     let mut files: Vec<(String, Vec<u8>)> = vec![
         ("manifest.sii".into(), manifest().into_bytes()),
         ("description.txt".into(), b"WestPlay screens. Requires the WestPlay app and plugin.\n".to_vec()),
@@ -469,6 +491,10 @@ pub fn build(
             format!("{SCREEN_DIR}/{texture}.dds"),
             transparent_dds(SCREEN_WIDTH, ScreenLayout::texture_height(index)),
         ));
+        // A mod screen's slot: its texture only, a script found put in it below (`mod_screens`).
+        if westplay_shared::is_mod_slot(layout.id) {
+            continue;
+        }
         // WestPlay's tablet: its model shows the texture (no script draws it), whole or missing.
         if layout.id == TABLET {
             let screen = format!("/{SCREEN_DIR}/{texture}.tobj");
@@ -546,6 +572,12 @@ pub fn build(
             built.missing.push(layout.id);
         }
     }
+    // The mod vehicles' own screens found, each in its slot (its texture made with the slot's), listed.
+    for screen in &mod_screens.screens {
+        files.push((screen.script.clone(), screen.text.clone()));
+        built.patched.push(screen.layout);
+    }
+    files.push((crate::mod_screens::LIST.to_owned(), mod_screens.list().into_bytes()));
     // The cab's mark: its texture, fully transparent, and the dashboard scripts with it, listed.
     let mark = cab_mark::TEXTURE;
     files.push((format!("{SCREEN_DIR}/{mark}.mat"), material(mark).into_bytes()));

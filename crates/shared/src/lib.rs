@@ -90,6 +90,30 @@ pub fn page_height(index: usize) -> u32 {
     }
 }
 
+/// Whether `id` is a slot for a mod vehicle's own screen found by setup (`screen_layouts.txt`'s `mod-1`...): which
+/// mod's is in it is setup's choice, the mod's shape in [`MOD_SCREENS_FILE`].
+pub fn is_mod_slot(id: &str) -> bool {
+    id.strip_prefix("mod-").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// The file in WestPlay's own folder, beside `westplay.scs`, of the mod screens' slots in use and the height the page
+/// is laid out at in each (its width [`SCREEN_WIDTH`], the screen's shape): `mod-3 793`, a slot a line. Written by
+/// setup with the mod, read by the app as the screen changes.
+pub const MOD_SCREENS_FILE: &str = "mod_screens.txt";
+
+/// The page's height in mod screen slot `id`, by [`MOD_SCREENS_FILE`]'s `text` (`None`: not in it, or not a height
+/// a page is laid out at).
+pub fn mod_page_height(text: &str, id: &str) -> Option<u32> {
+    text.lines().find_map(|line| {
+        let (slot, height) = line.trim().split_once(' ')?;
+        let height: u32 = height.trim().parse().ok()?;
+        (slot == id && (MOD_PAGE_HEIGHTS.0..=MOD_PAGE_HEIGHTS.1).contains(&height)).then_some(height)
+    })
+}
+
+/// The heights a mod screen's page may be laid out at: from a wide screen's (8:3, as the Cascadia's) to a square's.
+pub const MOD_PAGE_HEIGHTS: (u32, u32) = (480, 1280);
+
 /// WestPlay's tablet's layout: a dashboard toy any truck can have (WestPlay shows on it in every truck), its
 /// model showing the layout's texture itself.
 pub const TABLET: &str = "tablet";
@@ -203,9 +227,10 @@ fn parse_screen_layouts(text: &'static str) -> Vec<ScreenLayout> {
             let mut fields = line.split_whitespace();
             let id = fields.next().unwrap_or_default();
             let gps_scripts: Vec<&'static str> = fields.collect();
-            // Only the tablet is drawn by no script: any other line without one is a mistake.
+            // Only the tablet and the mod screens' slots are drawn by no script of their own: any other line without
+            // one is a mistake.
             assert!(
-                !gps_scripts.is_empty() || id == TABLET,
+                !gps_scripts.is_empty() || id == TABLET || is_mod_slot(id),
                 "screen_layouts.txt: expected `id gps-script...`, got {line:?}"
             );
             // Read once, for the program's life.
@@ -1144,6 +1169,20 @@ mod tests {
         assert_eq!(screen_layout_for_texture(SCREEN_WIDTH, past_last), None);
         assert_eq!(screen_layout_for_texture(SCREEN_WIDTH, SCREEN_HEIGHT - 1), None);
         assert_eq!(screen_layout_for_texture(SCREEN_WIDTH + 1, SCREEN_HEIGHT), None);
+    }
+
+    #[test]
+    fn mod_screens_have_slots_their_heights_told_by_setups_file() {
+        let slots: Vec<&str> = screen_layouts().iter().map(|layout| layout.id).filter(|id| is_mod_slot(id)).collect();
+        assert_eq!(slots.len(), 16);
+        assert!(screen_layouts().iter().filter(|layout| is_mod_slot(layout.id)).all(|l| l.gps_scripts.is_empty()));
+        assert!(!is_mod_slot("mod-") && !is_mod_slot("mod-x") && !is_mod_slot("generic"));
+        let file = "mod-1 793\nmod-2 2000\nmod-12 480\n";
+        assert_eq!(mod_page_height(file, "mod-1"), Some(793));
+        // Not a height a page is laid out at.
+        assert_eq!(mod_page_height(file, "mod-2"), None);
+        assert_eq!(mod_page_height(file, "mod-12"), Some(480));
+        assert_eq!(mod_page_height(file, "mod-3"), None);
     }
 
     #[test]

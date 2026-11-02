@@ -55,3 +55,22 @@ westernstar-57x   ui/dashboard/westernstar_57x_gps.sii
 # interiors' (interior/computers.sui) screens alike, 1280 x 800, shown whole (a player's Bronco, in the cab).
 # The Mustang (1967) and Crown Victoria (2006) have no screen.
 ford-cars         ui/dashboard/ford_bronco_gps_24.sii ui/dashboard/ford_f150_gps_23.sii
+# Mod vehicles' own screens found by setup (owner 2026-11-02: "identify the screen in mods automatically"):
+# crates/setup mod_screens.rs gives each GPS script an installed mod's vehicles name a slot of these, WestPlay's
+# image on its whole screen, the page laid out at its shape (MOD_SCREENS_FILE). No script of their own here.
+mod-1
+mod-2
+mod-3
+mod-4
+mod-5
+mod-6
+mod-7
+mod-8
+mod-9
+mod-10
+mod-11
+mod-12
+mod-13
+mod-14
+mod-15
+mod-16
