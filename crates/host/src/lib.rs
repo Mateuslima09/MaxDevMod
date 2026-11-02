@@ -700,7 +700,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
             let interaction = config.settings.get().interaction;
             pointer.set_sensitivity(interaction.sensitivity.get());
-            handset_pointer.set_sensitivity(interaction.sensitivity.get());
+            // Slower in the phone (owner 2026-11-02: "too sensitive"): it's smaller on the screen than the cab's page.
+            handset_pointer.set_sensitivity(interaction.sensitivity.get() * HANDSET_SENSITIVITY);
             host.interaction_key.store(interaction.key.virtual_key(), Ordering::Release);
             let toggle = interaction.mode == settings::InteractionMode::Toggle;
             host.interaction_toggle.store(u32::from(toggle), Ordering::Release);
@@ -1900,6 +1901,9 @@ fn stops_message(id: Option<u32>, route: Option<&[u64]>, waypoints: &[u64], hidd
     stops.dedup();
     serde_json::json!({ "type": "routeStops", "id": id, "stops": stops }).to_string()
 }
+
+/// The phone in the game's pointer speed, of the screen's.
+const HANDSET_SENSITIVITY: f32 = 0.45;
 
 /// The most presses of a keybind the page is told of at once.
 const MOST_KEYBIND_PRESSES: u32 = 10;

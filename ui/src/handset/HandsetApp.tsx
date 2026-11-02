@@ -1,14 +1,29 @@
-import { type ReactNode, useEffect, useState } from 'react'
-import { formatGameTime, formatGear, speedKmh } from '../shared/format'
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react'
+import { formatGameTime, formatGear } from '../shared/format'
 import { cabClock } from '../shared/host'
 import { MapView } from '../cabin/dashboard/MapView'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
+import { nearestCity } from '../cabin/dashboard/destination'
+import { weatherView } from '../cabin/dashboard/weather'
+import { WeatherGlyph } from '../cabin/dashboard/WeatherGlyph'
+import { SpotifyApp } from '../cabin/apps/spotify/SpotifyApp'
+import { YouTubeMusicApp } from '../cabin/apps/youtubeMusic/YouTubeMusicApp'
+import { useMapData } from '../cabin/maps/mapData'
 import { useLook, useLookChanges } from '../cabin/state/hooks'
 import { connectHost, useLive } from '../cabin/state/store'
 import { languageOf } from '../cabin/state/strings'
+import { useText } from '../cabin/state/text'
 import { followTimeZone } from '../cabin/state/timeZone'
 import { PhoneVolume } from '../phone/PhoneVolume'
+import { useFullScreen } from './fullScreen'
+import { distance, type Prefs, setPrefs, speed, speedUnit, usePrefs } from './prefs'
+import { Scaled } from './Scaled'
 import '../cabin/dashboard/dashboard.css'
+import '../cabin/apps/apps.css'
+
+/** How much smaller the cab's own screens are drawn in the phone: the map's, and the music apps'. */
+const MAP_SCALE = 0.55
+const MUSIC_SCALE = 0.5
 
 /**
  * The phone in the game (owner 2026-11-01: "a phone that shows up in the game at a key... as if it were a real
@@ -25,7 +40,11 @@ export function HandsetApp({ remote }: { remote: boolean }) {
     document.documentElement.lang = language
   }, [language])
   useLookChanges()
-  const { appearance } = useLook()
+  const prefs = usePrefs()
+  // Light or dark as chosen in its Settings, else as the cab is.
+  const cab = useLook().appearance
+  const appearance = prefs.look === 'auto' ? cab : prefs.look
+  useFullScreen(remote)
   const words = WORDS[language === 'pt' ? 'pt' : 'en']
   const [app, setApp] = useState<AppId | null>(null)
   const home = () => setApp(null)
@@ -45,11 +64,27 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               <h1>{words.apps[app]}</h1>
             </header>
             <div className={`handset-app-body handset-app-${app}`}>
-              {app === 'maps' && <MapView interactive />}
-              {app === 'music' && <MusicApp words={words} />}
-              {app === 'freight' && <FreightApp words={words} />}
-              {app === 'truck' && <TruckApp words={words} />}
-              {app === 'settings' && <SettingsApp words={words} />}
+              {app === 'maps' && (
+                <CabScreen scale={MAP_SCALE}>
+                  <section className="app-panel maps-app">
+                    <MapView interactive />
+                  </section>
+                </CabScreen>
+              )}
+              {app === 'youtubeMusic' && (
+                <CabScreen scale={MUSIC_SCALE}>
+                  <YouTubeMusicApp />
+                </CabScreen>
+              )}
+              {app === 'spotify' && (
+                <CabScreen scale={MUSIC_SCALE}>
+                  <SpotifyApp />
+                </CabScreen>
+              )}
+              {app === 'music' && <MusicApp words={words} open={setApp} />}
+              {app === 'freight' && <FreightApp words={words} units={prefs.units} />}
+              {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
+              {app === 'settings' && <SettingsApp words={words} prefs={prefs} />}
             </div>
           </section>
         )}
@@ -59,9 +94,20 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   )
 }
 
-type AppId = 'maps' | 'music' | 'freight' | 'truck' | 'settings'
+type AppId = 'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'freight' | 'truck' | 'settings'
 
-const APPS: AppId[] = ['maps', 'music', 'freight', 'truck', 'settings']
+const APPS: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify', 'freight', 'truck', 'settings']
+
+/** One of the cab's own screens, smaller (Scaled.tsx), in an app window as the cab has it. */
+function CabScreen({ scale, children }: { scale: number; children: ReactNode }) {
+  return (
+    <Scaled scale={scale} className="handset-cab">
+      <div className="screen app-window" style={{ '--content-left': '16px', '--edge': '16px' } as CSSProperties}>
+        {children}
+      </div>
+    </Scaled>
+  )
+}
 
 /** The time in the game, the island, and the signal and battery. */
 function StatusBar() {
@@ -96,6 +142,7 @@ function Home({ words, open }: { words: Words; open: (app: AppId) => void }) {
       <div className="handset-music">
         <NowPlayingWidget />
       </div>
+      <WeatherCard />
       <nav className="handset-grid">
         {APPS.map((id) => (
           <button key={id} type="button" className="handset-icon" onClick={() => open(id)}>
@@ -108,8 +155,31 @@ function Home({ words, open }: { words: Words; open: (app: AppId) => void }) {
   )
 }
 
-/** What plays, larger, with its volume. */
-function MusicApp({ words }: { words: Words }) {
+/** The weather where the truck is, as the Dashboard's widget (none while the game's isn't known). */
+function WeatherCard() {
+  const text = useText()
+  const labels = useMapData()?.labels
+  const weather = useLive((state) => state.weather)
+  const gameTime = useLive((state) => (state.telemetry ? cabClock(state.telemetry, state.clockShift) : 0))
+  const place = useLive((state) => {
+    const t = state.telemetry
+    return t && labels ? nearestCity([t.x, t.z], labels) : null
+  })
+  const view = weather ? weatherView(weather, gameTime, place, text) : null
+  if (!view) return null
+  return (
+    <article className="handset-card handset-weather">
+      <div>
+        {view.place && <div className="handset-place-name">{view.place}</div>}
+        <div className="handset-place-city">{view.condition}</div>
+      </div>
+      <WeatherGlyph symbol={view.symbol} size={44} />
+    </article>
+  )
+}
+
+/** What plays, larger, with its volume, and the music apps to choose it in. */
+function MusicApp({ words, open }: { words: Words; open: (app: AppId) => void }) {
   return (
     <>
       <div className="handset-music handset-music-big">
@@ -119,13 +189,21 @@ function MusicApp({ words }: { words: Words }) {
         <div className="handset-kicker">{words.volume}</div>
         <PhoneVolume label={words.volume} />
       </div>
-      <p className="handset-hint">{words.musicHint}</p>
+      <div className="handset-sources">
+        {(['youtubeMusic', 'spotify'] as const).map((id) => (
+          <button key={id} type="button" className="handset-source" onClick={() => open(id)}>
+            <span className={`handset-glyph handset-glyph-small handset-glyph-${id}`}>{GLYPHS[id]}</span>
+            <span>{words.apps[id]}</span>
+            <span className="handset-chevron">›</span>
+          </button>
+        ))}
+      </div>
     </>
   )
 }
 
 /** The job, as the game gives it: the cargo and its weight, from where to where, how far yet, what it pays. */
-function FreightApp({ words }: { words: Words }) {
+function FreightApp({ words, units }: { words: Words; units: Prefs['units'] }) {
   const job = useLive((state) => state.job)
   const left = useLive((state) => state.telemetry?.navigationDistance ?? 0)
   const time = useLive((state) => state.telemetry?.navigationTime ?? 0)
@@ -144,9 +222,9 @@ function FreightApp({ words }: { words: Words }) {
           value={`${(job.cargoMass / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} t`}
         />
         <Fact name={words.pays} value={`$ ${job.income.toLocaleString()}`} />
-        <Fact name={words.left} value={left > 0 ? `${Math.round(left / 1000).toLocaleString()} km` : '—'} />
+        <Fact name={words.left} value={left > 0 ? distance(left, units) : words.noRoute} />
         <Fact name={words.arrives} value={left > 0 ? duration(time / 60) : '—'} />
-        <Fact name={words.planned} value={`${job.plannedDistanceKm.toLocaleString()} km`} />
+        <Fact name={words.planned} value={distance(job.plannedDistanceKm * 1000, units)} />
         <Fact
           name={words.deadline}
           value={due === null ? '—' : due < 0 ? words.late : duration(due)}
@@ -171,10 +249,11 @@ function FreightApp({ words }: { words: Words }) {
 }
 
 /** The truck as the game says it is now: speed, gear, engine, fuel and its range. */
-function TruckApp({ words }: { words: Words }) {
+function TruckApp({ words, units }: { words: Words; units: Prefs['units'] }) {
   const truck = useLive((state) => state.truck)
   const t = useLive((state) => state.telemetry)
   if (!t) return <Empty>{words.noGame}</Empty>
+  const fuel = units === 'mi' ? `${Math.round(t.fuel / LITRES_PER_GALLON)} gal` : `${Math.round(t.fuel)} L`
   return (
     <>
       <article className="handset-card">
@@ -182,17 +261,17 @@ function TruckApp({ words }: { words: Words }) {
         <div className="handset-cargo">{truck?.name ?? ''}</div>
       </article>
       <div className="handset-gauge">
-        <span className="handset-gauge-value">{speedKmh(t.speed)}</span>
-        <span className="handset-gauge-unit">km/h</span>
+        <span className="handset-gauge-value">{speed(t.speed, units)}</span>
+        <span className="handset-gauge-unit">{speedUnit(units)}</span>
       </div>
       <dl className="handset-facts">
         <Fact name={words.gear} value={formatGear(t.displayedGear)} />
         <Fact name="RPM" value={Math.round(t.engineRpm).toLocaleString()} />
-        <Fact name={words.fuel} value={`${Math.round(t.fuel)} L`} />
-        <Fact name={words.range} value={`${Math.round(t.fuelRange)} km`} />
+        <Fact name={words.fuel} value={fuel} />
+        <Fact name={words.range} value={distance(t.fuelRange * 1000, units)} />
         <Fact
           name={words.cruise}
-          value={t.cruiseControlSpeed > 0 ? `${speedKmh(t.cruiseControlSpeed)} km/h` : words.off}
+          value={t.cruiseControlSpeed > 0 ? `${speed(t.cruiseControlSpeed, units)} ${speedUnit(units)}` : words.off}
         />
         <Fact name={words.engine} value={t.engineEnabled ? words.on : words.off} />
         <Fact name={words.parkingBrake} value={t.parkingBrake ? words.on : words.off} />
@@ -202,10 +281,35 @@ function TruckApp({ words }: { words: Words }) {
   )
 }
 
-/** The volume of what plays, and how the phone is used. */
-function SettingsApp({ words }: { words: Words }) {
+const LITRES_PER_GALLON = 3.785411784
+
+/** The phone's look and units (prefs.ts), the volume of what plays, and how the phone is used. */
+function SettingsApp({ words, prefs }: { words: Words; prefs: Prefs }) {
   return (
     <>
+      <div className="handset-card">
+        <div className="handset-kicker">{words.look}</div>
+        <Choice
+          options={[
+            ['auto', words.lookAuto],
+            ['light', words.lookLight],
+            ['dark', words.lookDark],
+          ]}
+          chosen={prefs.look}
+          choose={(look) => setPrefs({ look })}
+        />
+      </div>
+      <div className="handset-card">
+        <div className="handset-kicker">{words.units}</div>
+        <Choice
+          options={[
+            ['mi', words.miles],
+            ['km', words.kilometres],
+          ]}
+          chosen={prefs.units}
+          choose={(units) => setPrefs({ units })}
+        />
+      </div>
       <div className="handset-card">
         <div className="handset-kicker">{words.volume}</div>
         <PhoneVolume label={words.volume} />
@@ -216,6 +320,34 @@ function SettingsApp({ words }: { words: Words }) {
       </div>
       <p className="handset-hint">WestPlay ATS</p>
     </>
+  )
+}
+
+/** A choice of a few, as iOS's segmented control. */
+function Choice<T extends string>({
+  options,
+  chosen,
+  choose,
+}: {
+  options: [T, string][]
+  chosen: T
+  choose: (value: T) => void
+}) {
+  return (
+    <div className="handset-choice" role="radiogroup">
+      {options.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={value === chosen}
+          className={value === chosen ? 'on' : undefined}
+          onClick={() => choose(value)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -249,6 +381,23 @@ function duration(minutes: number): string {
 }
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  youtubeMusic: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10 8.5v7l6-3.5Z" />
+    </svg>
+  ),
+  spotify: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M5 9c4.5-1.4 9.5-1 13.5 1.2M6 12.6c3.8-1.1 7.8-.7 11 1M7 16c3-.8 6-.5 8.6.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
   maps: (
     <svg viewBox="0 0 24 24" aria-hidden>
       <path d="M12 2.5 19 20l-7-4-7 4Z" />
@@ -287,7 +436,15 @@ const GLYPHS: Record<AppId, ReactNode> = {
 const WORDS = {
   en: {
     home: 'Home',
-    apps: { maps: 'Maps', music: 'Music', freight: 'Job', truck: 'Truck', settings: 'Settings' },
+    apps: {
+      maps: 'Maps',
+      music: 'Music',
+      youtubeMusic: 'YT Music',
+      spotify: 'Spotify',
+      freight: 'Job',
+      truck: 'Truck',
+      settings: 'Settings',
+    },
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
     noGame: 'The game isn’t running',
@@ -313,14 +470,29 @@ const WORDS = {
     off: 'Off',
     high: 'High',
     volume: 'Volume',
-    musicHint: 'Choose what plays on the truck’s screen: Spotify, YouTube Music or Apple Music.',
+    noRoute: 'No route',
+    look: 'Look',
+    lookAuto: 'Automatic',
+    lookLight: 'Light',
+    lookDark: 'Dark',
+    units: 'Units',
+    miles: 'Miles (mph)',
+    kilometres: 'Kilometres (km/h)',
     howTo: 'How to use',
     howToText:
       'Alt+4 takes the phone out and puts it away. Hold Alt to use it with the mouse. The key can be changed in WestPlay’s Controls.',
   },
   pt: {
     home: 'Início',
-    apps: { maps: 'Mapas', music: 'Música', freight: 'Frete', truck: 'Caminhão', settings: 'Ajustes' },
+    apps: {
+      maps: 'Mapas',
+      music: 'Música',
+      youtubeMusic: 'YT Music',
+      spotify: 'Spotify',
+      freight: 'Frete',
+      truck: 'Caminhão',
+      settings: 'Ajustes',
+    },
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',
     noGame: 'O jogo não está aberto',
@@ -346,7 +518,14 @@ const WORDS = {
     off: 'Desligado',
     high: 'Alto',
     volume: 'Volume',
-    musicHint: 'Escolha o que tocar na tela do caminhão: Spotify, YouTube Music ou Apple Music.',
+    noRoute: 'Sem rota',
+    look: 'Aparência',
+    lookAuto: 'Automático',
+    lookLight: 'Claro',
+    lookDark: 'Escuro',
+    units: 'Unidades',
+    miles: 'Milhas (mph)',
+    kilometres: 'Quilômetros (km/h)',
     howTo: 'Como usar',
     howToText:
       'Alt+4 tira e guarda o celular. Segure o Alt para mexer nele com o mouse. A tecla pode ser trocada em Controles, no WestPlay.',

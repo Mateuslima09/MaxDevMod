@@ -416,3 +416,130 @@ body,
   background: var(--text);
   opacity: 0.6;
 }
+
+/* The cab's own screens, smaller (Scaled.tsx): laid out larger, drawn down to the room. */
+.handset-scaled {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--panel-radius);
+}
+
+.handset-scaled-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.handset-app-maps,
+.handset-app-youtubeMusic,
+.handset-app-spotify {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+/* More apps on the home screen: four in a row. */
+.handset-grid {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 4px;
+}
+
+.handset-glyph {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+
+.handset-glyph svg {
+  width: 30px;
+  height: 30px;
+}
+
+.handset-label {
+  font-size: 11px;
+}
+
+.handset-glyph-youtubeMusic {
+  background: linear-gradient(160deg, #ff4d4d, #d90000);
+}
+
+.handset-glyph-spotify {
+  background: linear-gradient(160deg, #3be477, #1aa34a);
+}
+
+.handset-glyph-small {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.handset-glyph-small svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* The music apps, from the Music app. */
+.handset-sources {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--panel-radius);
+  background: var(--glass);
+  overflow: hidden;
+}
+
+.handset-source {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  font-size: 15px !important;
+  font-weight: 500;
+  text-align: left;
+}
+
+.handset-source + .handset-source {
+  border-top: 1px solid rgb(127 127 127 / 0.2);
+}
+
+.handset-chevron {
+  margin-left: auto;
+  font-size: 20px;
+  color: var(--text-dim);
+}
+
+/* The weather, on the home screen. */
+.handset-weather {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* A choice of a few (Settings: the look, the units). */
+.handset-choice {
+  display: flex;
+  margin-top: 8px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgb(127 127 127 / 0.2);
+}
+
+.handset-choice button {
+  flex: 1;
+  padding: 7px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-size: 13px !important;
+  font-weight: 500;
+}
+
+.handset-choice button.on {
+  background: var(--app-background);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+  font-weight: 700;
+}
