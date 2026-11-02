@@ -50,7 +50,7 @@ function Group({ title, tone, children }: { title: string; tone: string; childre
 }
 
 /** A command, held from the press until it's let go (or the pointer leaves it). */
-function Hold({
+export function Hold({
   command,
   label,
   glyph,

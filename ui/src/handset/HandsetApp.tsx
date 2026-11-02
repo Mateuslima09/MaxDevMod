@@ -20,6 +20,8 @@ import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
 import { distance, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
 import { NupayApp } from './NupayApp'
+import { ServicesApp } from './ServicesApp'
+import { SERVICES_WORDS } from './servicesWords'
 import { Scaled } from './Scaled'
 import '../cabin/dashboard/dashboard.css'
 import '../cabin/apps/apps.css'
@@ -98,6 +100,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
               {app === 'settings' && <SettingsApp words={words} prefs={prefs} />}
               {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} />}
+              {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
             </div>
           </section>
         )}
@@ -389,6 +392,7 @@ const WORDS = {
       truck: 'Truck',
       settings: 'Settings',
       nupay: 'Nupay',
+      services: 'Services',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -446,6 +450,7 @@ const WORDS = {
       truck: 'Caminhão',
       settings: 'Ajustes',
       nupay: 'Nupay',
+      services: 'Serviços',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',

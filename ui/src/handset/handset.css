@@ -1148,3 +1148,23 @@ body,
 .nupay-row + .nupay-row::before {
   left: 62px;
 }
+
+/* Services (ServicesApp.tsx): its two buttons, larger. */
+.ios-icon-services {
+  background: linear-gradient(180deg, #ffb340, #ff7a00);
+}
+
+.handset .handset-services .handset-command {
+  min-height: 76px;
+  font-size: 16px !important;
+}
+
+.handset-services .handset-command-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.handset-services .handset-command-icon svg {
+  width: 24px;
+  height: 24px;
+}

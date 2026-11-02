@@ -3,7 +3,7 @@ import { type AppIconRole, appIcon } from '../shared/icons'
 
 /** The phone's apps (HandsetApp.tsx). */
 export type AppId =
-  'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'commands' | 'freight' | 'truck' | 'settings' | 'nupay'
+  'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'commands' | 'freight' | 'truck' | 'settings' | 'nupay' | 'services'
 
 /** The apps that are the cab's too: their real icons, the cab's own (owner 2026-11-03: "the apps' real logos"). */
 const REAL: Partial<Record<AppId, AppIconRole>> = {
@@ -55,6 +55,7 @@ const STROKE = {
 } as const
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  services: <path d="M14.7 6.3a4 4 0 0 0-5.4 5l-6 6a1.4 1.4 0 0 0 2 2l6-6a4 4 0 0 0 5-5.4l-2.6 2.6-2-.6-.6-2Z" />,
   nupay: (
     <>
       <rect x="2.5" y="5.5" width="19" height="13" rx="3" {...STROKE} />

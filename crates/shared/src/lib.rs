@@ -490,6 +490,9 @@ pub const TRUCK_COMMANDS: &[&str] = &[
     "parkingbrake",
     "wipers",
     "attach",
+    // The Services app's: the game's services window (F7: towing, the nearest service), and parking itself.
+    "services",
+    "quickpark",
 ];
 
 const _: () = assert!(TRUCK_COMMANDS.len() <= 64);
