@@ -610,10 +610,16 @@ body,
   min-height: 0;
 }
 
-/* On the player's own phone: its own status bar is there (or hidden, full screen), so not ours; the page starts
-   right under the phone's notch (owner 2026-11-02: "a big black bar on top, it's too low"). */
+/* On the player's own phone, full screen: the time, the signal and the battery in the band its notch leaves at the
+   top, not under it (owner 2026-11-02: "a big black bar on top, it's too low", then "the time and the battery
+   are gone"). */
+.handset-remote .handset-screen {
+  padding-top: 0;
+}
+
 .handset-remote .handset-status {
-  display: none;
+  height: max(34px, env(safe-area-inset-top));
+  padding: 0 22px;
 }
 
 .handset-remote .handset-homescreen,
