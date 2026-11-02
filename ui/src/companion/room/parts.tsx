@@ -1,6 +1,7 @@
 import { type CSSProperties, type PointerEvent, type ReactNode, useContext } from 'react'
 import { hvtMapMessage } from '../../cabin/maps/blockedMap'
 import { count, fill, list, percent, type Words } from '../onboarding/words'
+import { protectedMapMessage } from '../protectedMap'
 import type { ProfileCheck } from '../setup'
 import type { MapStage, MapStatus } from '../useHostStatus'
 import { KEY_PRESETS, type KeyCode, type KeyPreset } from '../useSettings'
@@ -291,7 +292,8 @@ export function ProfileRow({
     return <Row title={profile.name} detail={hvtMapMessage(code)} accessory={<Cross />} />
   }
   if (state?.state === 'failed') {
-    return <Row title={profile.name} detail={state.error} accessory={<Cross />} />
+    const detail = state.protectedMap ? protectedMapMessage(code, state.protectedMap) : state.error
+    return <Row title={profile.name} detail={detail} accessory={<Cross />} />
   }
   const map = profile.map === 'europe' ? w.baseMap : profile.map
   const withMods = profile.mapMods.length ? fill(w.withMods, { map, mods: list(words, profile.mapMods) }) : map

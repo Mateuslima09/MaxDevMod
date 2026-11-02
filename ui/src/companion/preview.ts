@@ -115,6 +115,8 @@ function startingMap(): MapStatus {
       return { state: 'waitingForMemory', needed: 3_500_000_000, free: 2_140_000_000 }
     case 'failed':
       return { state: 'failed', error: 'The map couldn’t be read: def/world/road_look.sii is missing.' }
+    case 'protected':
+      return { state: 'failed', error: 'the map eldorado has no roads', protectedMap: 'eldorado' }
     default:
       return { state: 'ready' }
   }

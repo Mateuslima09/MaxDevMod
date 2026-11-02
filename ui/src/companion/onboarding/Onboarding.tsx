@@ -24,6 +24,7 @@ import {
 } from '../useHostStatus'
 import { DEFAULT_KEY, type SettingsState } from '../useSettings'
 import { memoryNote } from '../pages/page'
+import { protectedMapMessage } from '../protectedMap'
 import { companionWords } from '../pages/words'
 import '../room/room.css'
 import { type Banner, GlassCursor, type Pose, TruckScreen } from '../room/TruckScreen'
@@ -737,7 +738,9 @@ function MapStep({ status, next, back }: { status: HostStatus | null; next(): vo
       {(building || (watched && map.state === 'ready')) && (
         <MapProgress shown={shown} stage={building?.stage ?? null} finished={map.state === 'ready'} />
       )}
-      {map.state === 'failed' && <Note tone="bad">{map.error}</Note>}
+      {map.state === 'failed' && (
+        <Note tone="bad">{map.protectedMap ? protectedMapMessage(code, map.protectedMap) : map.error}</Note>
+      )}
       {map.state === 'waitingForGame' && (
         <Note>
           <b>{w.waiting.title}</b> {w.waiting.text}

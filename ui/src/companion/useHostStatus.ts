@@ -86,7 +86,9 @@ export type MapStatus =
   | { state: 'waitingForMemory'; needed: number; free: number }
   /** Road to Heavy: no map for it. */
   | { state: 'notAllowed' }
-  | { state: 'failed'; error: string }
+  /** `protectedMap`: the profile's map, when it has no roads because its map mod is protected (only the game
+   * opens it). */
+  | { state: 'failed'; error: string; protectedMap?: string }
   /** Another profile's map, to make after the maps before it. */
   | { state: 'queued' }
 

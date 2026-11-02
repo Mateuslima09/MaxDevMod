@@ -1,6 +1,7 @@
 import { useContext, useState } from 'react'
 import { hvtMapMessage } from '../../cabin/maps/blockedMap'
 import { Button, Checking, Group, MapProgress, Note, Panel, ProfileRow, Row, Tick } from '../room/parts'
+import { protectedMapMessage } from '../protectedMap'
 import { prepareMapsAgain } from '../setup'
 import { banner, WordsContext } from '../room/room'
 import { GLOW, ON_SCREEN, useScreenAt, useTour } from '../room/screen'
@@ -125,7 +126,9 @@ export function MapPage(props: PageProps) {
           <b>{cw.map.memory.note.title}</b> {memoryNote(cw, words.locale, map.needed, map.free)}
         </Note>
       )}
-      {map.state === 'failed' && <Note tone="bad">{map.error}</Note>}
+      {map.state === 'failed' && (
+        <Note tone="bad">{map.protectedMap ? protectedMapMessage(code, map.protectedMap) : map.error}</Note>
+      )}
       {map.state === 'notAllowed' && <Note tone="bad">{hvtMapMessage(code)}</Note>}
       <Group title={cw.map.profiles} place={5}>
         {check ? (
@@ -142,7 +145,14 @@ export function MapPage(props: PageProps) {
                 .map((each) => (
                   <ProfileRow
                     key={each.dir}
-                    profile={{ name: 'TruckersMP', dir: each.dir, map: 'europe', mapMods: [], unreadable: 0, hvtMap: false }}
+                    profile={{
+                      name: 'TruckersMP',
+                      dir: each.dir,
+                      map: 'europe',
+                      mapMods: [],
+                      unreadable: 0,
+                      hvtMap: false,
+                    }}
                     map={each.status}
                     leftOut={each.leftOut}
                   />

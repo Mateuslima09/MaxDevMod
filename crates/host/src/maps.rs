@@ -80,6 +80,11 @@ pub enum MapStatus {
     NotAllowed,
     Failed {
         error: String,
+        /// The profile's map (`eldorado`) when it has no roads because its map mod can't be read: a protected
+        /// one, in a format of its own only the game opens (owner 2026-11-02, Mapa Eldorado), said so to the
+        /// player rather than as a fault.
+        #[serde(rename = "protectedMap", skip_serializing_if = "Option::is_none")]
+        protected_map: Option<String>,
     },
     /// Another profile's map, to build after the maps before it.
     Queued,
@@ -316,7 +321,7 @@ fn watch(maps: &Path, set_up: &SetUpGame, sender: &Sender<MapUpdate>, played: &P
                     Err(error) => {
                         let (folder, built) =
                             sent.as_ref().map_or((None, None), |sent| (sent.folder.clone(), sent.built));
-                        let status = MapStatus::Failed { error };
+                        let status = MapStatus::Failed { error, protected_map: None };
                         break 'look (MapUpdate { folder, built, status, profiles: Vec::new() }, false, false);
                     }
                 };
@@ -579,9 +584,19 @@ fn state_of(want: &Want, failed: &Failures, again: &HashSet<PathBuf>) -> MapStat
     if let Some((source, error)) = failed.get(&want.folder)
         && *source == want.source
     {
-        return MapStatus::Failed { error: error.clone() };
+        return failed_for(want, error.clone());
     }
     if map::needs_building(&want.folder, &want.source) { MapStatus::Queued } else { MapStatus::Ready }
+}
+
+/// `want`'s map failed with `error`: its map protected ([`MapStatus::Failed`]'s `protected_map`) when it has no
+/// roads and some of the profile's mods can't be read (the map's own among them: none read has its sectors).
+fn failed_for(want: &Want, error: String) -> MapStatus {
+    let map = &want.profile.map;
+    let no_roads = error == ExportError::Empty(map.clone()).to_string();
+    let unreadable = want.profile.mods.iter().any(|m| m.files.is_some() && m.problem.is_some());
+    let protected_map = (no_roads && unreadable).then(|| map.clone());
+    MapStatus::Failed { error, protected_map }
 }
 
 /// Every profile's map's state, for the companion.
@@ -721,7 +736,7 @@ fn carry_out(
             let error = format!("WestPlay couldn't make it ({})", panic_message(&*panic));
             log!("map {}: {error}", want.folder.display());
             failed.insert(want.folder.clone(), (want.source.clone(), error.clone()));
-            states[next] = MapStatus::Failed { error };
+            states[next] = failed_for(want, error);
             again.remove(&want.folder);
             return (update(&states), true);
         }
@@ -739,7 +754,7 @@ fn carry_out(
         Ok(_) => {
             let error = "the map built isn't the one asked for".to_owned();
             failed.insert(want.folder.clone(), (want.source.clone(), error.clone()));
-            states[next] = MapStatus::Failed { error };
+            states[next] = failed_for(want, error);
         }
         // The game started meanwhile: once it's closed.
         Err(map::BuildError::GameRunning) => {
@@ -753,13 +768,13 @@ fn carry_out(
                 format!("it needed more than {} of memory, more than WestPlay lets a map take", gigabytes(ceiling));
             log!("map {}: {error}", want.folder.display());
             failed.insert(want.folder.clone(), (want.source.clone(), error.clone()));
-            states[next] = MapStatus::Failed { error };
+            states[next] = failed_for(want, error);
         }
         Err(error) => {
             let error = error.to_string();
             log!("map {}: {error}", want.folder.display());
             failed.insert(want.folder.clone(), (want.source.clone(), error.clone()));
-            states[next] = MapStatus::Failed { error };
+            states[next] = failed_for(want, error);
         }
     }
     // Asked for again: done (or, failing, kept as a failure).
@@ -976,7 +991,10 @@ mod tests {
         let none = HashSet::new();
         assert_eq!(state_of(&want, &failed, &none), MapStatus::Queued);
         failed.insert(want.folder.clone(), (want.source.clone(), "sector version 903".into()));
-        assert_eq!(state_of(&want, &failed, &none), MapStatus::Failed { error: "sector version 903".into() });
+        assert_eq!(
+            state_of(&want, &failed, &none),
+            MapStatus::Failed { error: "sector version 903".into(), protected_map: None }
+        );
         // The player asks for it again: built again, the failure aside.
         assert_eq!(state_of(&want, &failed, &HashSet::from([want.folder.clone()])), MapStatus::Queued);
         // A mod updated: built again.
