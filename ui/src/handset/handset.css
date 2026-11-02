@@ -1,5 +1,6 @@
 /* The phone in the game (HandsetApp.tsx): a phone of the page's size, its corners left transparent so the game
-   shows around them; the plugin draws it over the game's picture. */
+   shows around them; the plugin draws it over the game's picture. On the player's own phone (handset-remote),
+   the screen alone, as wide as theirs. */
 
 html,
 body,
@@ -20,7 +21,14 @@ body,
   box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.18);
   --edge: 12px;
   --tile-gap: 10px;
-  --panel-radius: 22px;
+  --panel-radius: 20px;
+  user-select: none;
+}
+
+.handset button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 
 .handset-screen {
@@ -34,8 +42,26 @@ body,
   color: var(--text);
 }
 
+.handset-remote {
+  padding: 0;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+}
+
+.handset-remote .handset-screen {
+  border-radius: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.handset-remote .handset-island {
+  display: none;
+}
+
+/* The status bar: the time, the island, the signal. */
 .handset-status {
   position: relative;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -61,83 +87,285 @@ body,
   fill: currentColor;
 }
 
-.handset-body {
+/* The home screen: the clock, what plays, the apps. */
+.handset-homescreen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px var(--edge) 0;
+  background:
+    radial-gradient(120% 60% at 20% 0%, rgb(10 132 255 / 0.35), transparent 70%),
+    radial-gradient(120% 60% at 90% 100%, rgb(191 90 242 / 0.3), transparent 70%);
+  animation: handset-in 220ms ease-out;
+}
+
+.handset-clock {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.handset-clock-time {
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.handset-clock-day {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.handset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px 8px;
+  margin-top: auto;
+  padding: 0 6px 6px;
+}
+
+.handset-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.handset-glyph {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+  transition: transform 120ms ease;
+}
+
+.handset-icon:hover .handset-glyph {
+  transform: scale(1.06);
+}
+
+.handset-icon:active .handset-glyph {
+  transform: scale(0.94);
+}
+
+.handset-glyph svg {
+  width: 32px;
+  height: 32px;
+  fill: currentColor;
+}
+
+.handset-glyph-maps {
+  background: linear-gradient(160deg, #5ac8fa, #007aff);
+}
+
+.handset-glyph-music {
+  background: linear-gradient(160deg, #ff6482, #ff2d55);
+}
+
+.handset-glyph-freight {
+  background: linear-gradient(160deg, #ffd60a, #ff9f0a);
+}
+
+.handset-glyph-truck {
+  background: linear-gradient(160deg, #63e6a3, #30b35a);
+  color: #1c5a2f;
+}
+
+.handset-glyph-truck svg {
+  fill: #fff;
+}
+
+.handset-glyph-settings {
+  background: linear-gradient(160deg, #a1a1aa, #636366);
+}
+
+.handset-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* An app: its bar (back to the home screen, its name) and what it shows. */
+.handset-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: handset-in 220ms ease-out;
+}
+
+.handset-app-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px 8px;
+}
+
+.handset-app-bar h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.handset-back {
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-size: 15px !important;
+  color: #0a84ff !important;
+}
+
+.handset-app-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--tile-gap);
-  padding: 4px var(--edge) 0;
+  padding: 0 var(--edge);
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
-.handset-map {
-  position: relative;
-  flex: 1 1 44%;
-  min-height: 0;
-  display: flex;
+.handset-app-maps {
+  padding: 0 var(--edge);
 }
 
-.handset-map > .map-tile {
+.handset-app-maps > .map-tile {
   flex: 1;
   border-radius: var(--panel-radius);
 }
 
+@keyframes handset-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* Cards and their words. */
 .handset-card {
   flex: none;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: var(--panel-radius);
   background: var(--glass);
 }
 
 .handset-kicker {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);
 }
 
-.handset-none {
-  margin-top: 4px;
-  font-size: 15px;
-  color: var(--text-dim);
-}
-
 .handset-cargo {
   margin-top: 2px;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.handset-text {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.handset-hint {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.handset-empty {
+  margin: auto;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+
 .handset-facts {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #30d158;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+}
+
+.handset-fact {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--glass);
+}
+
+.handset-fact dt {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.handset-fact dd {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.handset-fact dd.late {
+  color: #ff453a;
 }
 
 .handset-route {
   display: flex;
   flex-direction: column;
-  margin-top: 8px;
+  gap: 6px;
+}
+
+.handset-route-line {
+  width: 2px;
+  height: 14px;
+  margin-left: 4px;
+  background: var(--text-dim);
+  opacity: 0.5;
+}
+
+.handset-place-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.handset-place-city {
   font-size: 13px;
-  line-height: 1.3;
   color: var(--text-dim);
 }
 
-.handset-route span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.handset-gauge {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 0;
 }
 
-.handset-arrow {
-  font-size: 11px;
+.handset-gauge-value {
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.handset-gauge-unit {
+  font-size: 16px;
+  color: var(--text-dim);
 }
 
 /* What plays: the Dashboard's Now Playing card, as tall as it needs. */
@@ -145,6 +373,10 @@ body,
   flex: none;
   display: flex;
   min-height: 96px;
+}
+
+.handset-music-big {
+  min-height: 150px;
 }
 
 .handset-music .widget-slot,
@@ -158,11 +390,28 @@ body,
   gap: 12px;
 }
 
+/* The volume (phone/PhoneVolume.tsx). */
+.handset .phone-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-dim);
+}
+
+.handset .phone-volume input {
+  flex: 1;
+  min-width: 0;
+  accent-color: #0a84ff;
+}
+
 .handset-home {
   flex: none;
   width: 120px;
   height: 5px;
   margin: 12px auto 9px;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   background: var(--text);
   opacity: 0.6;

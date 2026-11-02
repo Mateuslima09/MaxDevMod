@@ -135,9 +135,10 @@ function GpuChooser({ status, settings: state, cw }: Pick<PageProps, 'status' | 
 }
 
 /**
- * The player's phone as a second screen (crates/host remote.rs, owner 2026-11-01): the QR code that opens it, on
- * the PC's network. Its words in English, Portuguese and Turkish for now (the rest English), not yet in the
- * companion's own words: those are every language's at once.
+ * The player's phone as a second screen (crates/host remote.rs, owner 2026-11-01): the QR codes that open it, on
+ * the PC's network: the truck's panel (CarPlay), and the phone in the game alone. Its words in English,
+ * Portuguese and Turkish for now (the rest English), not yet in the companion's own words: those are every
+ * language's at once.
  */
 function PhoneCode({ status, language }: { status: PageProps['status']; language: string | null }) {
   if (!status?.phoneUrl || !status.phoneQr) return null
@@ -145,8 +146,11 @@ function PhoneCode({ status, language }: { status: PageProps['status']; language
   return (
     <>
       <Group title={w.title} place={6}>
-        <div className="phone-code ob-in">
-          <img src={`data:image/svg+xml;utf8,${encodeURIComponent(status.phoneQr)}`} alt={status.phoneUrl} />
+        <div className="phone-codes ob-in">
+          <QrCode svg={status.phoneQr} url={status.phoneUrl} caption={w.panel} />
+          {status.handsetUrl && status.handsetQr && (
+            <QrCode svg={status.handsetQr} url={status.handsetUrl} caption={w.handset} />
+          )}
         </div>
       </Group>
       <Note tone="calm">{w.text}</Note>
@@ -154,17 +158,32 @@ function PhoneCode({ status, language }: { status: PageProps['status']; language
   )
 }
 
-const PHONE_WORDS: Record<'en' | 'pt' | 'tr', { title: string; text: string }> = {
+function QrCode({ svg, url, caption }: { svg: string; url: string; caption: string }) {
+  return (
+    <figure className="phone-code">
+      <img src={`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`} alt={url} />
+      <figcaption>{caption}</figcaption>
+    </figure>
+  )
+}
+
+const PHONE_WORDS: Record<'en' | 'pt' | 'tr', { title: string; text: string; panel: string; handset: string }> = {
   en: {
     title: 'Your phone',
-    text: 'Scan it with your phone’s camera, on the same Wi-Fi as this PC: the map, what plays and your delivery, on your phone as on the truck’s screen.',
+    text: 'Scan one with your phone’s camera, on the same Wi-Fi as this PC: the truck’s panel (CarPlay) on your phone, or the phone in the game (Alt+4) on your phone. Both work at the same time as the game’s.',
+    panel: 'Truck panel',
+    handset: 'Phone in the game',
   },
   pt: {
     title: 'Seu celular',
-    text: 'Escaneie com a câmera do celular, na mesma rede Wi-Fi deste PC: o mapa, o que está tocando e sua entrega, no celular e na tela do caminhão ao mesmo tempo.',
+    text: 'Escaneie um deles com a câmera do celular, na mesma rede Wi-Fi deste PC: o painel do caminhão (CarPlay) no celular, ou o celular do jogo (Alt+4) no celular. Os dois funcionam junto com o do jogo.',
+    panel: 'Painel do caminhão',
+    handset: 'Celular do jogo',
   },
   tr: {
     title: 'Telefonunuz',
-    text: 'Bu bilgisayarla aynı Wi-Fi ağındayken telefonunuzun kamerasıyla okutun: harita, çalan müzik ve teslimatınız, hem telefonunuzda hem tırın ekranında.',
+    text: 'Bu bilgisayarla aynı Wi-Fi ağındayken birini telefonunuzun kamerasıyla okutun: tırın paneli (CarPlay) ya da oyundaki telefon (Alt+4), telefonunuzda.',
+    panel: 'Tır paneli',
+    handset: 'Oyundaki telefon',
   },
 }

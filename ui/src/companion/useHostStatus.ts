@@ -42,6 +42,9 @@ export interface HostStatus {
    * remote.rs); `null` when it isn't served. */
   phoneUrl: string | null
   phoneQr: string | null
+  /** The phone in the game's page on the player's phone, as `phoneUrl` and `phoneQr` the panel's. */
+  handsetUrl: string | null
+  handsetQr: string | null
   /** Every profile's map (mirrors `westplay_host::maps::ProfileMap`): WestPlay makes one for each, one by
    * one, the profile played first. */
   profileMaps: ProfileMap[]

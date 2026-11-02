@@ -1,3 +1,5 @@
+// First of all: on the player's phone, the way to the PC, in place before the cab's code looks for it.
+import { HANDSET_REMOTE } from './install'
 import '@fontsource-variable/inter'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -10,7 +12,7 @@ import './handset.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Recovery>
-      <HandsetApp />
+      <HandsetApp remote={HANDSET_REMOTE} />
     </Recovery>
   </StrictMode>,
 )

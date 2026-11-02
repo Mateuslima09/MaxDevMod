@@ -2,12 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
     <title>WestPlay</title>
     <!-- Before any of the page's code: the code it shares with the cab (in chunks of their own, run first) asks
          which page it runs in as it loads (shared/host.ts firstRequestId). -->
     <script>
       window.westplayHandset = true
+      // On the player's own phone (no WebView2): its way to the PC is the phone page's (src/phone/socket.ts).
+      if (!window.chrome || !window.chrome.webview) window.westplayPhone = true
     </script>
   </head>
   <body>

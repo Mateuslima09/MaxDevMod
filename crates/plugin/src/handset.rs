@@ -34,7 +34,7 @@ use crate::{bridge, log};
 
 /// The phone's height on the game's screen, of the screen's; and its gap to the screen's right edge, of the
 /// screen's height.
-const HEIGHT_OF_SCREEN: f32 = 0.82;
+const HEIGHT_OF_SCREEN: f32 = 0.62;
 const RIGHT_GAP_OF_SCREEN: f32 = 0.04;
 
 const SHADERS: &str = r"

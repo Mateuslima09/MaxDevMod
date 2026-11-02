@@ -768,16 +768,31 @@ button {
   box-shadow: inset 0 0 0 2px var(--blue);
 }
 
-/* The phone page's QR code (ScreenPage.tsx PhoneCode): black on white, as cameras read best. */
-.phone-code {
+/* The phone pages' QR codes (ScreenPage.tsx PhoneCode), side by side: black on white, as cameras read best. */
+.phone-codes {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 24px;
   padding: 8px 0 4px;
 }
 
+.phone-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.phone-code figcaption {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .phone-code img {
-  width: 200px;
-  height: 200px;
+  width: 180px;
+  height: 180px;
   padding: 10px;
   border-radius: 14px;
   background: #fff;

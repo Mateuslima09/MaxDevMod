@@ -59,6 +59,10 @@ pub struct Remote {
     pub url: Option<String>,
     /// The address as a QR code, an SVG image.
     pub qr: Option<String>,
+    /// The phone in the game's page on the player's phone (owner 2026-11-01: "a QR code of the phone alone"), its
+    /// address and QR code as the panel's.
+    pub handset_url: Option<String>,
+    pub handset_qr: Option<String>,
 }
 
 impl Remote {
@@ -67,7 +71,8 @@ impl Remote {
     pub fn start(ui: Option<PathBuf>, maps: PathBuf, data_dir: &Path) -> Self {
         let phones = Arc::new(Mutex::new(Vec::new()));
         let incoming = Arc::new(Mutex::new(VecDeque::new()));
-        let off = |phones, incoming| Self { phones, incoming, url: None, qr: None };
+        let off =
+            |phones, incoming| Self { phones, incoming, url: None, qr: None, handset_url: None, handset_qr: None };
         let key = key(data_dir);
         let listener = match TcpListener::bind(("0.0.0.0", PORT)) {
             Ok(listener) => listener,
@@ -97,14 +102,15 @@ impl Remote {
         };
         let url = format!("http://{address}:{PORT}/phone.html#{key}");
         log!("[phone] serving at http://{address}:{PORT}/phone.html");
-        let qr = qrcode::QrCode::new(url.as_bytes()).ok().map(|code| {
-            code.render::<qrcode::render::svg::Color>()
-                .min_dimensions(240, 240)
-                .dark_color(qrcode::render::svg::Color("#000000"))
-                .light_color(qrcode::render::svg::Color("#ffffff"))
-                .build()
-        });
-        Self { phones, incoming, url: Some(url), qr }
+        let handset_url = format!("http://{address}:{PORT}/handset.html#{key}");
+        Self {
+            phones,
+            incoming,
+            qr: qr_of(&url),
+            url: Some(url),
+            handset_qr: qr_of(&handset_url),
+            handset_url: Some(handset_url),
+        }
     }
 
     /// Whether a host message (JSON) is for the phones too: all but the cab's alone ([`CAB_ONLY`]).
@@ -238,6 +244,17 @@ impl Served {
         }
         Ok(())
     }
+}
+
+/// An address as a QR code, an SVG image, for the companion to show.
+fn qr_of(url: &str) -> Option<String> {
+    qrcode::QrCode::new(url.as_bytes()).ok().map(|code| {
+        code.render::<qrcode::render::svg::Color>()
+            .min_dimensions(240, 240)
+            .dark_color(qrcode::render::svg::Color("#000000"))
+            .light_color(qrcode::render::svg::Color("#ffffff"))
+            .build()
+    })
 }
 
 /// Whether a phone may send this ([`PAGE_MESSAGES`], [`COMMANDS`], [`YOUTUBE`]).

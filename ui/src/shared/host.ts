@@ -1008,6 +1008,8 @@ export const IS_DEMO = typeof location !== 'undefined' && new URLSearchParams(lo
  */
 export function firstRequestId(): number {
   if (typeof window === 'undefined') return 1
+  // The phone in the game's page on the player's phone is both: apart from either.
+  if (window.westplayHandset && window.westplayPhone) return 1_500_000_000
   return window.westplayHandset ? 2_000_000_000 : window.westplayPhone ? 1_000_000_000 : 1
 }
 

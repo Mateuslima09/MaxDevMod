@@ -93,6 +93,9 @@ pub struct Status {
     /// (remote.rs); `None` when it isn't served.
     pub phone_url: Option<String>,
     pub phone_qr: Option<String>,
+    /// The phone in the game's page on the player's phone, as `phone_url` and `phone_qr` the panel's.
+    pub handset_url: Option<String>,
+    pub handset_qr: Option<String>,
     pub game_connected: bool,
     pub screen_drawing: bool,
     /// Whether the truck the player is in is one WestPlay shows in, as the plugin last saw (`None`: not known yet,
@@ -321,6 +324,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         adapters: adapters.clone(),
         phone_url: remote.url.clone(),
         phone_qr: remote.qr.clone(),
+        handset_url: remote.handset_url.clone(),
+        handset_qr: remote.handset_qr.clone(),
         ..Default::default()
     };
 
@@ -353,6 +358,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // host draws it (`None`: not told since it loaded).
     let mut cursor = cursor::Cursor::new(Instant::now());
     let mut cursor_told: Option<bool> = None;
+    // The phone in the game's, as the screen's.
+    let mut handset_pointer = Pointer::new(westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT);
+    let mut handset_cursor = cursor::Cursor::new(Instant::now());
     // What the player's latest save says (their garages, a map WestPlay doesn't allow), kept to send again
     // when the page reloads.
     let player_watch = PlayerWatch::start();
@@ -465,7 +473,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             if let Some(phone) = &pipeline.phone
                 && handset_shown
             {
-                phone.flush(None, 1.0);
+                phone.flush(handset_cursor.look(Instant::now()), 1.0);
             }
         }
         // The page told whether the host draws the cursor (it draws its own where the host can't).
@@ -692,6 +700,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
             let interaction = config.settings.get().interaction;
             pointer.set_sensitivity(interaction.sensitivity.get());
+            handset_pointer.set_sensitivity(interaction.sensitivity.get());
             host.interaction_key.store(interaction.key.virtual_key(), Ordering::Release);
             let toggle = interaction.mode == settings::InteractionMode::Toggle;
             host.interaction_toggle.store(u32::from(toggle), Ordering::Release);
@@ -700,8 +709,14 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
             let _ = webview.post_json(&settings_message(&config.settings.get()));
         }
-        let mouse = pointer.update(&bridge.bridge().plugin.pointer, &webview);
-        cursor.follow(mouse, Instant::now());
+        // The mouse in the phone while it's out (its own pointer and cursor, at its size), else in the cab's screen.
+        if let Some(handset) = handset.as_deref().filter(|_| handset_shown) {
+            let mouse = handset_pointer.update(&bridge.bridge().plugin.pointer, handset);
+            handset_cursor.follow(mouse, Instant::now());
+        } else {
+            let mouse = pointer.update(&bridge.bridge().plugin.pointer, &webview);
+            cursor.follow(mouse, Instant::now());
+        }
         // The player's keybinds pressed in the game: the page acts on each.
         for keybind in Keybind::ALL {
             let presses = bridge.bridge().plugin.keybind_presses[keybind as usize].load(Ordering::Acquire);
