@@ -6,6 +6,7 @@
 
 mod bridge;
 mod camera;
+mod commands;
 mod d3d;
 mod frame;
 mod handset;
@@ -102,6 +103,21 @@ unsafe fn init(version: u32, params: *const TelemetryInitParamsV100) -> i32 {
         SCS_RESULT_OK
     }
 }
+
+/// Entry point called by the game when it activates the input API: the truck's commands from the phone
+/// (`commands`). Declines on a panic.
+///
+/// # Safety
+/// Called by the game with a valid `params` pointer for the negotiated `version`, on its main thread.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn scs_input_init(version: u32, params: *const commands::InputInitParamsV100) -> i32 {
+    // SAFETY: as the game calls this (the contract above).
+    hooks::contained("scs_input_init", SCS_RESULT_UNSUPPORTED, || unsafe { commands::init(version, params) })
+}
+
+/// Called by the game when it deactivates the input API: nothing to let go (the device is the game's to drop).
+#[unsafe(no_mangle)]
+pub extern "system" fn scs_input_shutdown() {}
 
 /// Called by the game when it deactivates the telemetry API (also on `sdk unload`).
 ///

@@ -31,6 +31,7 @@ mod signin;
 pub mod speakers;
 mod spotify;
 pub mod startup;
+mod truck_commands;
 mod typing;
 mod weather;
 mod webview;
@@ -305,6 +306,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         None => None,
     };
     let mut handset_shown = false;
+    // The truck's commands the phones hold, for the plugin's input device.
+    let mut truck_commands = truck_commands::TruckCommands::default();
     {
         let remote = remote.clone();
         let handset = handset.clone();
@@ -718,6 +721,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let mouse = pointer.update(&bridge.bridge().plugin.pointer, &webview);
             cursor.follow(mouse, Instant::now());
         }
+        // The truck's commands the phones hold, as the plugin gives them to the game.
+        host.truck_commands.store(truck_commands.held(Instant::now()), Ordering::Release);
         // The player's keybinds pressed in the game: the page acts on each.
         for keybind in Keybind::ALL {
             let presses = bridge.bridge().plugin.keybind_presses[keybind as usize].load(Ordering::Acquire);
@@ -888,6 +893,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 }
                 Some(PageMessage::Spectrum { on }) => spectrum = on,
                 Some(PageMessage::CursorLight { light }) => cursor.set_light(light, Instant::now()),
+                Some(PageMessage::TruckCommand { command, down }) => {
+                    truck_commands.press(&command, down, Instant::now());
+                }
                 Some(PageMessage::VolumeShown { volume }) => {
                     let _ =
                         webview.post_json(&format!(r#"{{"type":"volumeShown","volume":{}}}"#, volume.clamp(0.0, 1.0)));
@@ -1597,6 +1605,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     host.frame_generation.store(0, Ordering::Release);
     host.phone_generation.store(0, Ordering::Release);
     host.phone_shown.store(0, Ordering::Release);
+    host.truck_commands.store(0, Ordering::Release);
     host.screen_enabled.store(0, Ordering::Release);
     host.pid.store(0, Ordering::Release);
     drop(pipeline);
@@ -2127,6 +2136,8 @@ enum PageMessage {
     Spectrum { on: bool },
     /// Whether what's under the cursor is light (it's drawn dark there: `cursor`).
     CursorLight { light: bool },
+    /// One of the truck's commands pressed or let go in the phone (truck_commands.rs).
+    TruckCommand { command: String, down: bool },
     /// A volume the player's phone set (remote.rs, 0 to 1): the cab shows it, as for a keybind.
     VolumeShown { volume: f64 },
     /// A command for YouTube's player (`youtube`): what to play, where it shows, and so on.

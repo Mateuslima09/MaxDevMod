@@ -84,7 +84,8 @@ export function installPhoneSocket(): boolean {
 
 /** The volume (0 to 1) a player's command sets, if it's one that sets it. */
 function volumeSet(message: PageMessage): number | null {
-  if (!('command' in message)) return null
+  // A player's command is an object (the truck's commands are named, by a string).
+  if (!('command' in message) || typeof message.command !== 'object') return null
   const command: { action: string; percent?: number } = message.command
   return command.action === 'volume' && typeof command.percent === 'number' ? command.percent / 100 : null
 }

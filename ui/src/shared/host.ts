@@ -286,6 +286,9 @@ export type PageMessage =
   | { type: 'cursorLight'; light: boolean }
   /** A volume the phone page set (0 to 1): the host has the cab show it (crates/host remote.rs). */
   | { type: 'volumeShown'; volume: number }
+  /** One of the truck's commands (the game's control by name: `westplay_shared::TRUCK_COMMANDS`) pressed or let
+   * go in the phone's Commands app; the plugin gives it to the game as held (crates/host truck_commands.rs). */
+  | { type: 'truckCommand'; command: string; down: boolean }
   /** A change to the game's GPS route (Maps' search), at a map node (its uid, hex) for going or adding a
    * stop; the host answers with `routeAnswer` and the same `id`. */
   | { type: 'route'; id: number; action: RouteAction; node?: string }

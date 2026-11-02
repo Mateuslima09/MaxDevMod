@@ -44,8 +44,8 @@ const COMMANDS: &[&str] = &[
 ];
 /// YouTube's, whose videos the phone doesn't show: what plays, paused or played on, and its volume.
 const YOUTUBE: &[&str] = &["play", "pause", "seek", "volume"];
-/// The Maps app's route requests, and the volume the phone set (for the cab to show).
-const PAGE_MESSAGES: &[&str] = &["ready", "route", "routes", "follow", "detours", "volumeShown"];
+/// The Maps app's route requests, the volume the phone set (for the cab to show), and the truck's commands.
+const PAGE_MESSAGES: &[&str] = &["ready", "route", "routes", "follow", "detours", "volumeShown", "truckCommand"];
 
 /// Messages from the phones not taken yet, at most this many (a phone sending more than the host takes loses
 /// the oldest).

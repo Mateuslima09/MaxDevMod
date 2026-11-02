@@ -27,7 +27,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 25;
+pub const BRIDGE_VERSION: u32 = 26;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -398,6 +398,41 @@ pub struct HostBlock {
     pub phone_seq: AtomicU64,
     /// 1 while the phone is out: the plugin draws it over the game.
     pub phone_shown: AtomicU32,
+    /// The truck's commands held from the phone now ([`TRUCK_COMMANDS`], bit by bit): the plugin's input device
+    /// gives each to the game as held.
+    pub truck_commands: AtomicU64,
+}
+
+/// The truck's commands the phone gives (owner 2026-11-02: "open the window, lower the truck, the suspension"):
+/// the game's own controls ("mixes") by name, which its semantical inputs drive with no binding (SDK
+/// `SCS_INPUT_DEVICE_TYPE_semantical`; `semantical.<name>` in each mix of a profile's `controls.sii`). Their order
+/// is their bit in `HostBlock::truck_commands`.
+pub const TRUCK_COMMANDS: &[&str] = &[
+    "lwinopen",
+    "lwinclose",
+    "rwinopen",
+    "rwinclose",
+    "frontsuspup",
+    "frontsuspdwn",
+    "rearsuspup",
+    "rearsuspdwn",
+    "suspreset",
+    "liftaxle",
+    "beacon",
+    "flasher4way",
+    "horn",
+    "airhorn",
+    "cabinlight",
+    "parkingbrake",
+    "wipers",
+    "attach",
+];
+
+const _: () = assert!(TRUCK_COMMANDS.len() <= 64);
+
+/// A truck command's bit in `HostBlock::truck_commands`, by its name (`None`: none of [`TRUCK_COMMANDS`]).
+pub fn truck_command_bit(name: &str) -> Option<u64> {
+    TRUCK_COMMANDS.iter().position(|command| *command == name).map(|index| 1 << index)
 }
 
 /// What WestPlay does from the game by a key of the player's choosing (the app's settings).

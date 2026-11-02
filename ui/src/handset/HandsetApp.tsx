@@ -20,6 +20,8 @@ import { PhoneVolume } from '../phone/PhoneVolume'
 import { useFullScreen } from './fullScreen'
 import { distance, type Prefs, setPrefs, speed, speedUnit, usePrefs } from './prefs'
 import { Scaled } from './Scaled'
+import { CommandsApp } from './CommandsApp'
+import { COMMAND_WORDS } from './commandWords'
 import '../cabin/dashboard/dashboard.css'
 import '../cabin/apps/apps.css'
 
@@ -84,6 +86,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
                 </CabScreen>
               )}
               {app === 'music' && <MusicApp words={words} open={setApp} />}
+              {app === 'commands' && <CommandsApp words={COMMAND_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'freight' && <FreightApp words={words} units={prefs.units} />}
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
               {app === 'settings' && <SettingsApp words={words} prefs={prefs} />}
@@ -96,9 +99,9 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   )
 }
 
-type AppId = 'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'freight' | 'truck' | 'settings'
+type AppId = 'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'commands' | 'freight' | 'truck' | 'settings'
 
-const APPS: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify', 'freight', 'truck', 'settings']
+const APPS: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify', 'commands', 'freight', 'truck', 'settings']
 
 /** One of the cab's own screens, smaller (Scaled.tsx), in an app window as the cab has it, with the cab's
  * keyboard for its search fields (the map's, the music apps'). */
@@ -408,6 +411,19 @@ function duration(minutes: number): string {
 }
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  commands: (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M4 7h10M18 7h2M4 17h2M10 17h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <circle cx="16" cy="7" r="2.5" />
+      <circle cx="8" cy="17" r="2.5" />
+    </svg>
+  ),
   youtubeMusic: (
     <svg viewBox="0 0 24 24" aria-hidden>
       <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -468,6 +484,7 @@ const WORDS = {
       music: 'Music',
       youtubeMusic: 'YT Music',
       spotify: 'Spotify',
+      commands: 'Commands',
       freight: 'Job',
       truck: 'Truck',
       settings: 'Settings',
@@ -516,6 +533,7 @@ const WORDS = {
       music: 'Música',
       youtubeMusic: 'YT Music',
       spotify: 'Spotify',
+      commands: 'Comandos',
       freight: 'Frete',
       truck: 'Caminhão',
       settings: 'Ajustes',
