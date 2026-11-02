@@ -1,0 +1,53 @@
+/**
+ * How the page fares on the player's own phone, told to the PC's log (crates/host remote.rs `diag`) every few
+ * seconds (owner 2026-11-03: "it stalls, the browser stops, it's too heavy"): the frames it draws, the time its
+ * script held the phone, its memory, the page's size, and any error; a phone stalling can't be watched otherwise.
+ */
+
+/** How often it's told, ms. */
+const EVERY_MS = 4000
+
+export function reportHealth(send: (report: object) => void): void {
+  let frames = 0
+  let busy = 0
+  let errors: string[] = []
+  let renders = 0
+  const started = performance.now()
+  const count = () => {
+    frames++
+    requestAnimationFrame(count)
+  }
+  requestAnimationFrame(count)
+  try {
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) busy += entry.duration
+    }).observe({ type: 'longtask', buffered: true })
+  } catch {
+    // No long tasks in this browser: the frames say it.
+  }
+  window.addEventListener('error', (event) => errors.push(String(event.message).slice(0, 120)))
+  window.addEventListener('unhandledrejection', (event) => errors.push(String(event.reason).slice(0, 120)))
+  // How much the page holds: its elements (a list grown without end would show here).
+  const observer = new MutationObserver(() => renders++)
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+  setInterval(() => {
+    const memory = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory
+    send({
+      type: 'diag',
+      s: Math.round((performance.now() - started) / 1000),
+      fps: Math.round((frames * 1000) / EVERY_MS),
+      busyMs: Math.round(busy),
+      mutations: renders,
+      nodes: document.getElementsByTagName('*').length,
+      heapMB: memory ? Math.round(memory.usedJSHeapSize / 1048576) : null,
+      screen: `${innerWidth}x${innerHeight}@${devicePixelRatio}`,
+      full: document.fullscreenElement !== null,
+      hidden: document.hidden,
+      errors,
+    })
+    frames = 0
+    busy = 0
+    renders = 0
+    errors = []
+  }, EVERY_MS)
+}

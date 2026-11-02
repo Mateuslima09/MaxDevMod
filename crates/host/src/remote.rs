@@ -186,6 +186,12 @@ impl Served {
                 Err(TryRecvError::Empty) => {}
             }
             match socket.read() {
+                // How the page fares on the phone (handset/diagnostics.ts), into the log: a phone stalling can't
+                // be watched from here otherwise.
+                Ok(Message::Text(text)) if text.as_str().starts_with(r#"{"type":"diag""#) => {
+                    let said: String = text.as_str().chars().take(600).collect();
+                    log!("[phone] {peer} {said}");
+                }
                 Ok(Message::Text(text)) if allowed(text.as_str()) => {
                     if let Ok(mut incoming) = self.incoming.lock() {
                         if incoming.len() >= MOST_WAITING {
