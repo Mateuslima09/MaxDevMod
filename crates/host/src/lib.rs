@@ -98,6 +98,9 @@ pub struct Status {
     /// The phone in the game's page on the player's phone, as `phone_url` and `phone_qr` the panel's.
     pub handset_url: Option<String>,
     pub handset_qr: Option<String>,
+    /// The game WestPlay works with (`westplay_setup::game::current`: the one played, switched to as it starts),
+    /// the one `game_connected` says of.
+    pub game: westplay_setup::game::Kind,
     pub game_connected: bool,
     pub screen_drawing: bool,
     /// Whether the truck the player is in is one WestPlay shows in, as the plugin last saw (`None`: not known yet,
@@ -651,6 +654,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 // moving.
                 let alive = game_liveness.update(plugin.heartbeat.load(Ordering::Relaxed), Instant::now());
                 status.game_connected = plugin.pid.load(Ordering::Relaxed) != 0 && alive && bridge.matches();
+                status.game = westplay_setup::game::current();
                 // A plugin of another version (the game still running from before an update): not used.
                 if !bridge.matches() && plugin.pid.load(Ordering::Relaxed) != 0 {
                     status.error = Some("the game's WestPlay plugin is another version: restart the game".into());

@@ -2,6 +2,7 @@ import { setWestplayOpen } from '../useHostStatus'
 import { Group, Note, Panel, Row, Status, Switch, Tick } from '../room/parts'
 import { banner } from '../room/room'
 import { GLOW, useScreenAt } from '../room/screen'
+import type { GameInfo } from '../setup'
 import { type PageProps, screenState } from './page'
 
 /**
@@ -12,6 +13,10 @@ import { type PageProps, screenState } from './page'
 export function ScreenPage({ status, settings, setup, cw }: PageProps) {
   const w = cw.screen
   const state = screenState(status)
+  const games = gamesSetUp(setup, w.game)
+  // Waiting for a game: every one set up named, in the words that name American Truck Simulator.
+  const names = games.map((game) => game.name).join(' / ')
+  const named = (text: string) => text.replace('American Truck Simulator', names)
   // Known once the cabin page has said (it owns the state): the switch waits for it.
   const open = status?.westplayOpen ?? null
   useScreenAt(
@@ -26,12 +31,12 @@ export function ScreenPage({ status, settings, setup, cw }: PageProps) {
           : state === 'notInCab'
             ? banner(w.banners.notInCab)
             : state === 'noGame'
-              ? banner(w.banners.noGame, true)
+              ? banner({ ...w.banners.noGame, text: named(w.banners.noGame.text) }, true)
               : null,
   )
   const fps = status?.framesPerSecond ?? 0
   return (
-    <Panel place="page" title={w.titles[state]} sub={w.subs[state]}>
+    <Panel place="page" title={w.titles[state]} sub={named(w.subs[state])}>
       <Group place={4}>
         <Row
           title={w.show}
@@ -54,11 +59,17 @@ export function ScreenPage({ status, settings, setup, cw }: PageProps) {
           value={status?.error ? cw.values.failed : status ? w.engineRunning : w.engineStarting}
           accessory={<Status tone={status?.error ? 'bad' : status ? 'good' : 'busy'} />}
         />
-        <Row
-          title={w.game}
-          value={status?.gameConnected ? w.gameConnected : w.gameNotRunning}
-          accessory={<Status tone={status?.gameConnected ? 'good' : 'idle'} />}
-        />
+        {games.map((game) => {
+          const open = status?.gameConnected === true && status.game === game.kind
+          return (
+            <Row
+              key={game.kind}
+              title={game.name}
+              value={open ? w.gameConnected : w.gameNotRunning}
+              accessory={<Status tone={open ? 'good' : 'idle'} />}
+            />
+          )
+        })}
         <Row
           title={w.truckScreen}
           value={
@@ -186,4 +197,15 @@ const PHONE_WORDS: Record<'en' | 'pt' | 'tr', { title: string; text: string; pan
     panel: 'Tır paneli',
     handset: 'Oyundaki telefon',
   },
+}
+
+/**
+ * The games WestPlay is set up in, each a row of the connection (owner 2026-11-02: both games there, the one open
+ * green, to tell which is): American Truck Simulator first. None set up yet: the game, by the words' name.
+ */
+function gamesSetUp(setup: PageProps['setup'], name: string): { kind: GameInfo['kind']; name: string }[] {
+  const games = [setup.game, ...setup.others].filter((game): game is GameInfo => game !== null)
+  if (games.length === 0) return [{ kind: 'ats', name }]
+  const unique = games.filter((game, at) => games.findIndex((other) => other.kind === game.kind) === at)
+  return unique.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'ats' ? -1 : 1))
 }

@@ -49,7 +49,8 @@ const ETS2: GameInfo = {
 const setup: SetupState = {
   finished: !query.has('onboarding'),
   game: query.has('onboarding') ? null : GAME,
-  others: [],
+  // `?both`: set up in Euro Truck Simulator 2 too.
+  others: query.has('both') ? [ETS2] : [],
   found: [GAME, ETS2],
   updated: query.has('updated'),
   gameRunning: gameState !== 'off',
@@ -138,6 +139,8 @@ function status(): HostStatus {
     adapters: ADAPTERS,
     framesPerSecond: live ? 58 + Math.round(Math.random() * 3) : 0,
     droppedTotal: live ? 3 : 0,
+    // `?played=ets2`: Euro Truck Simulator 2 the one played.
+    game: query.get('played') === 'ets2' ? 'ets2' : 'ats',
     gameConnected: gameState !== 'off',
     screenDrawing: live,
     // `?game=unsupported`: in a truck WestPlay doesn't show in.

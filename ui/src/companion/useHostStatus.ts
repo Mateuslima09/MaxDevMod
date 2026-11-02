@@ -13,6 +13,8 @@ export interface HostStatus {
   adapters: Adapter[]
   framesPerSecond: number
   droppedTotal: number
+  /** The game WestPlay works with (the one played, switched to as it starts): the one `gameConnected` says of. */
+  game: 'ats' | 'ets2'
   gameConnected: boolean
   screenDrawing: boolean
   /** Whether the truck the player is in is one WestPlay shows in, as the plugin last saw (`null`: not known yet). */
