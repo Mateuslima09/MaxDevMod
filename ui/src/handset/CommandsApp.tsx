@@ -11,20 +11,20 @@ import type { CommandWords } from './commandWords'
 export function CommandsApp({ words }: { words: CommandWords }) {
   return (
     <>
-      <Group title={words.windows}>
+      <Group title={words.windows} tone="blue">
         <Hold command="lwinopen" label={words.leftDown} glyph={DOWN} />
         <Hold command="lwinclose" label={words.leftUp} glyph={UP} />
         <Hold command="rwinopen" label={words.rightDown} glyph={DOWN} />
         <Hold command="rwinclose" label={words.rightUp} glyph={UP} />
       </Group>
-      <Group title={words.suspension}>
+      <Group title={words.suspension} tone="green">
         <Hold command="frontsuspup" label={words.frontUp} glyph={UP} />
         <Hold command="frontsuspdwn" label={words.frontDown} glyph={DOWN} />
         <Hold command="rearsuspup" label={words.rearUp} glyph={UP} />
         <Hold command="rearsuspdwn" label={words.rearDown} glyph={DOWN} />
         <Hold command="suspreset" label={words.reset} glyph={RESET} wide />
       </Group>
-      <Group title={words.truck}>
+      <Group title={words.truck} tone="orange">
         <Hold command="beacon" label={words.beacon} glyph={BEACON} />
         <Hold command="flasher4way" label={words.hazard} glyph={HAZARD} />
         <Hold command="liftaxle" label={words.liftAxle} glyph={AXLE} />
@@ -39,9 +39,10 @@ export function CommandsApp({ words }: { words: CommandWords }) {
   )
 }
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+/** A group of commands, its buttons in its colour (`tone`). */
+function Group({ title, tone, children }: { title: string; tone: string; children: ReactNode }) {
   return (
-    <section className="handset-card handset-commands">
+    <section className={`handset-card handset-commands tone-${tone}`}>
       <div className="handset-kicker">{title}</div>
       <div className="handset-command-grid">{children}</div>
     </section>
@@ -86,10 +87,12 @@ function Hold({
       onLostPointerCapture={() => send(false)}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <svg viewBox="0 0 24 24" aria-hidden>
-        {glyph}
-      </svg>
-      <span>{label}</span>
+      <span className="handset-command-icon">
+        <svg viewBox="0 0 24 24" aria-hidden>
+          {glyph}
+        </svg>
+      </span>
+      <span className="handset-command-label">{label}</span>
     </button>
   )
 }

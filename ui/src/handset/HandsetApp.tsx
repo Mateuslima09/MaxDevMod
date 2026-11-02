@@ -348,6 +348,11 @@ function SettingsApp({ words, prefs }: { words: Words; prefs: Prefs }) {
         <div className="handset-kicker">{words.howTo}</div>
         <p className="handset-text">{words.howToText}</p>
       </div>
+      {/* A new version installed: the page again, without scanning the QR code again (owner 2026-11-02). */}
+      <button type="button" className="handset-reload" onClick={() => location.reload()}>
+        {words.reload}
+      </button>
+      <p className="handset-hint">{words.reloadHint}</p>
       <p className="handset-hint">WestPlay ATS</p>
     </>
   )
@@ -523,6 +528,8 @@ const WORDS = {
     miles: 'Miles (mph)',
     kilometres: 'Kilometres (km/h)',
     howTo: 'How to use',
+    reload: 'Reload the page',
+    reloadHint: 'After a WestPlay update: loads the new version here, without scanning the QR code again.',
     howToText:
       'Alt+4 takes the phone out and puts it away. Hold Alt to use it with the mouse. The key can be changed in WestPlay’s Controls.',
   },
@@ -572,6 +579,8 @@ const WORDS = {
     miles: 'Milhas (mph)',
     kilometres: 'Quilômetros (km/h)',
     howTo: 'Como usar',
+    reload: 'Atualizar página',
+    reloadHint: 'Depois de uma atualização do WestPlay: carrega a versão nova aqui, sem escanear o QR Code de novo.',
     howToText:
       'Alt+4 tira e guarda o celular. Segure o Alt para mexer nele com o mouse. A tecla pode ser trocada em Controles, no WestPlay.',
   },

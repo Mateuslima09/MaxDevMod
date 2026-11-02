@@ -643,39 +643,109 @@ body,
   margin-top: 8px;
 }
 
-.handset-command {
+/* Each group's colour: its buttons' icons, and the button held. */
+.handset-commands.tone-blue {
+  --tone: #0a84ff;
+}
+
+.handset-commands.tone-green {
+  --tone: #30d158;
+}
+
+.handset-commands.tone-orange {
+  --tone: #ff9f0a;
+}
+
+/* A button as a Control Center tile: rounded, outlined, its icon in a circle of its group's colour (owner
+   2026-11-02: "rounded, outlined, not a button that looks like text"). Above the shell's own button look. */
+.handset .handset-command {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
+  gap: 10px;
+  min-height: 52px;
   padding: 8px 10px;
-  border: 0;
-  border-radius: 12px;
-  background: rgb(127 127 127 / 0.18);
-  font-size: 13px !important;
+  border: 1.5px solid rgb(127 127 127 / 0.35);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.03));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 2px 6px rgb(0 0 0 / 0.25);
+  color: var(--text);
+  font-size: 12.5px !important;
   font-weight: 600;
+  line-height: 1.2;
   text-align: left;
   touch-action: none;
   -webkit-touch-callout: none;
   transition:
-    background 100ms ease,
-    transform 100ms ease;
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
 }
 
-.handset-command.wide {
+.appearance-light .handset .handset-command,
+.handset.appearance-light .handset-command {
+  background: linear-gradient(180deg, #fff, #f2f2f6);
+  border-color: rgb(0 0 0 / 0.12);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+.handset .handset-command.wide {
   grid-column: span 2;
   justify-content: center;
 }
 
-.handset-command:active {
-  background: #0a84ff;
-  color: #fff !important;
-  transform: scale(0.97);
+.handset .handset-command:hover {
+  border-color: var(--tone);
 }
 
-.handset-command svg {
+.handset .handset-command:active {
+  background: var(--tone);
+  border-color: var(--tone);
+  color: #fff;
+  transform: scale(0.96);
+}
+
+.handset-command-icon {
   flex: none;
-  width: 20px;
-  height: 20px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: #fff;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--tone) 45%, transparent);
+}
+
+.handset .handset-command:active .handset-command-icon {
+  background: rgb(255 255 255 / 0.25);
+  box-shadow: none;
+}
+
+.handset-command-icon svg {
+  width: 18px;
+  height: 18px;
   fill: currentColor;
+}
+
+.handset-command-label {
+  min-width: 0;
+}
+
+/* Settings: the page again, after an update. */
+.handset .handset-reload {
+  flex: none;
+  padding: 12px;
+  border: 1.5px solid #0a84ff;
+  border-radius: 14px;
+  background: rgb(10 132 255 / 0.12);
+  color: #0a84ff;
+  font-size: 15px !important;
+  font-weight: 600;
+}
+
+.handset .handset-reload:active {
+  background: #0a84ff;
+  color: #fff;
 }
