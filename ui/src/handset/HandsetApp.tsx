@@ -14,7 +14,7 @@ import { PhoneVolume } from '../phone/PhoneVolume'
 import { useNowPlaying } from '../cabin/dashboard/useNowPlaying'
 import { CommandsApp } from './CommandsApp'
 import { COMMAND_WORDS } from './commandWords'
-import { goFullScreen, useFullScreen } from './fullScreen'
+import { goFullScreen } from './fullScreen'
 import { Home } from './Home'
 import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
@@ -53,7 +53,6 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   // Light or dark as chosen in its Settings, else as the cab is.
   const cab = useLook().appearance
   const appearance = prefs.look === 'auto' ? cab : prefs.look
-  useFullScreen(remote)
   const words = WORDS[language === 'pt' ? 'pt' : 'en']
   const [app, setApp] = useState<AppId | null>(null)
   const home = () => setApp(null)

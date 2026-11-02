@@ -18,8 +18,8 @@ import { Scaled } from './Scaled'
 const MINIMAP_SCALE = 0.45
 /** How far a drag goes before it's a swipe to the other page, not a tap (px). */
 const SWIPE = 50
-/** How far a pointer moves before it's a drag, not a tap (px). */
-const DRAG = 8
+/** How far a pointer moves before it's a drag, not a tap (px): a finger's tap wanders a little. */
+const DRAG = 14
 
 /** The apps in the dock, on every page; and each page's own. */
 const DOCK: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify']

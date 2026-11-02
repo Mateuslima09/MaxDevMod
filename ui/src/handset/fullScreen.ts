@@ -1,20 +1,9 @@
-import { useEffect } from 'react'
-
 /**
  * On the player's own phone, the page full screen, without the browser's bar (owner 2026-11-02: "full screen, as
- * the truck's panel"): a browser goes full screen only for a touch, so at the first one, once, as the phone page
- * does. Not again at every touch while it isn't (owner 2026-11-03: "it goes black, the browser stalls"): while
- * the phone was still going full screen it said it wasn't, and each touch asked again, each time the whole page
- * laid out anew and the browser's notice shown. Left (the phone's back), it's Settings' to ask again.
+ * the truck's panel"), from Settings only: going full screen at the first touch, the page stalled as it did
+ * (the phone's report: its frames and its touches lost going full screen and back), and the touch that did it
+ * went nowhere (owner 2026-11-03: "take out going full screen at a touch").
  */
-export function useFullScreen(on: boolean): void {
-  useEffect(() => {
-    if (!on || !document.fullscreenEnabled) return
-    const touched = () => void goFullScreen()
-    window.addEventListener('pointerup', touched, { once: true })
-    return () => window.removeEventListener('pointerup', touched)
-  }, [on])
-}
 
 let asking = false
 
@@ -25,7 +14,7 @@ export async function goFullScreen(): Promise<void> {
   try {
     await document.documentElement.requestFullscreen({ navigationUI: 'hide' })
   } catch {
-    // The browser said no (a touch it didn't count): the page as it is.
+    // The browser said no: the page as it is.
   } finally {
     asking = false
   }
