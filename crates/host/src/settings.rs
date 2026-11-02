@@ -268,6 +268,10 @@ pub struct Binding {
 pub struct ScreenSettings {
     #[serde(deserialize_with = "lenient")]
     pub truck_strip: TruckStrip,
+    /// The split screen (the companion's Truck Screen): the game's map squeezed into one half of its GPS screens,
+    /// from the game's next start (WestPlay's mod is made again for it), or off, the game's own.
+    #[serde(deserialize_with = "lenient")]
+    pub split: westplay_setup::game_mod::Split,
 }
 
 /// The truck's own strip beside WestPlay (the Scania Smart Dash's, the DAF's status bar): kept where the
@@ -449,7 +453,7 @@ mod tests {
                 volume_up: Binding { key: KeyCode::new(0x6b).unwrap(), with_interaction_key: false },
                 ..Keybinds::default()
             },
-            screen: ScreenSettings { truck_strip: TruckStrip::Off },
+            screen: ScreenSettings { truck_strip: TruckStrip::Off, ..Default::default() },
             look: LookSettings {
                 wallpaper: Some("custom:Dusk".into()),
                 icon_set: Some("Retro".into()),

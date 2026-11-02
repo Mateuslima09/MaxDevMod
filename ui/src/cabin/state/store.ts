@@ -90,6 +90,12 @@ interface CabinState {
    * like CarPlay's car button. Not kept: WestPlay comes back with every power-up, like CarPlay reconnecting.
    */
   truckScreen: boolean
+  /** The split screen as the player set it (the companion: the game's map squeezed into one half of the truck's
+   * screen, from the game's start), and whether WestPlay keeps to the other half now (the sidebar's button; off, it
+   * takes the whole screen, over the map). Not kept: split again with every start. */
+  split: 'off' | 'mapLeft' | 'mapRight'
+  splitShown: boolean
+  setSplitShown(shown: boolean): void
   navigate(action: NavigationAction): void
   setAppearanceMode(mode: AppearanceMode): void
   setWallpaper(id: string): void
@@ -167,6 +173,9 @@ export const useCabin = create<CabinState>()(
         }),
       truckScreen: false,
       setTruckScreen: (truckScreen) => set({ truckScreen }),
+      split: 'off',
+      splitShown: true,
+      setSplitShown: (splitShown) => set({ splitShown }),
     }),
     {
       // The onboarding's demo keeps its own: it never changes the player's.
@@ -477,6 +486,8 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       case 'settings': {
         const cabin = useCabin.getState()
         cabin.setOemMode(message.truckStrip === 'off' ? 'off' : 'auto')
+        const split = message.split
+        useCabin.setState({ split: split === 'mapLeft' || split === 'mapRight' ? split : 'off' })
         if (message.wallpaper) useCabin.setState({ wallpaperId: message.wallpaper })
         // Chosen here before WestPlay kept it with its settings: kept now.
         else if (cabin.wallpaperId !== DEFAULT_WALLPAPER_ID) postToHost({ type: 'wallpaper', id: cabin.wallpaperId })

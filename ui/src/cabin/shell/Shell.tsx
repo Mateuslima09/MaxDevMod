@@ -31,6 +31,9 @@ interface ShellProps {
  * Glass style, room for the truck's own OEM strip beside it. Everything outside the CarPlay area is
  * transparent: the game draws the truck's real strip there, underneath.
  */
+/** How much smaller WestPlay is drawn in its half of the split screen. */
+const SPLIT_SCALE = 0.7
+
 export function Shell({ children, overlay, entering = false }: ShellProps) {
   useLookChanges()
   usePreparedIcons()
@@ -38,7 +41,13 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   const profile = useScreenProfile()
   const { key: fitKey, fit } = useScreenFit()
   const handedOver = useCabin((state) => state.truckScreen)
-  useFittedRoot(fit, handedOver)
+  // The split screen, shown: WestPlay in its half, the game's map (squeezed into the other by the mod) beside it.
+  // Not on the tablet (no map under it), nor handed to the truck.
+  const split = useCabin((state) => state.split)
+  const splitShown = useCabin((state) => state.splitShown)
+  const shownLayout = useLive((state) => state.screenLayout)
+  const halved = split !== 'off' && splitShown && shownLayout !== 'tablet' && !handedOver ? split : null
+  useFittedRoot(fit, handedOver, halved)
   // The phones' Adjust Screen shows what this screen's is (state/screenFit.ts).
   useEffect(() => announceFit(fitKey, fit), [fitKey, fit])
   const stripId = useOemStrip()
@@ -48,7 +57,8 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   const style = {
     '--oem-left': `${insets.left}px`,
     '--oem-bottom': `${insets.bottom}px`,
-    '--ui-scale': profile.scale * fit.size,
+    // In its half (the split screen), smaller: as much of it fits as on a screen of its own.
+    '--ui-scale': profile.scale * fit.size * (halved ? SPLIT_SCALE : 1),
   } as CSSProperties
   // The screen changes' snapshots hang off <html>, not the shell: they're cut to the CarPlay area with these
   // too (transitions.css).
@@ -139,11 +149,29 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
  * but while the screen is handed to the truck (`handedOver`), whose own screen shows whole. A transform on the root:
  * what's clicked is still what's under the cursor.
  */
-function useFittedRoot({ top, bottom, left, right, stretch }: ScreenFit, handedOver: boolean) {
+function useFittedRoot(
+  { top, bottom, left, right, stretch }: ScreenFit,
+  handedOver: boolean,
+  halved: 'mapLeft' | 'mapRight' | null,
+) {
   useLayoutEffect(() => {
     const root = document.getElementById('root')
     if (!root) return
     const page = document.documentElement.style
+    // The split screen: the page in its half, the rest of the screen see-through, the game's map there.
+    if (halved) {
+      const at = halved === 'mapLeft' ? '50vw' : '0'
+      Object.assign(root.style, {
+        position: 'fixed',
+        left: at,
+        top: '0',
+        width: '50vw',
+        height: '100vh',
+        transform: 'none',
+      })
+      page.removeProperty('background')
+      return
+    }
     const style = fitStyle({ top, bottom, left, right, stretch, size: 1 })
     if (!style) {
       root.removeAttribute('style')
@@ -153,7 +181,7 @@ function useFittedRoot({ top, bottom, left, right, stretch }: ScreenFit, handedO
     Object.assign(root.style, { position: 'fixed', transformOrigin: '0 0', ...style })
     if (handedOver) page.removeProperty('background')
     else page.setProperty('background', '#000')
-  }, [top, bottom, left, right, stretch, handedOver])
+  }, [top, bottom, left, right, stretch, handedOver, halved])
 }
 
 /** A mask showing everything but a rounded rectangle, through which what's under the page shows. */

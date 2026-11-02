@@ -132,6 +132,8 @@ export type HostMessage =
   | {
       type: 'settings'
       truckStrip: string
+      /** The split screen (`westplay_host::settings::ScreenSettings::split`): `off`, `mapLeft` or `mapRight`. */
+      split?: string
       wallpaper?: string | null
       iconSet?: string | null
       /** Light or dark icons, or as the screen is (`IconStyle`). */

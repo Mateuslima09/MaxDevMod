@@ -2134,6 +2134,7 @@ fn settings_message(settings: &settings::Settings) -> String {
     serde_json::json!({
         "type": "settings",
         "truckStrip": settings.screen.truck_strip,
+        "split": settings.screen.split,
         "wallpaper": settings.look.wallpaper,
         "iconSet": settings.look.icon_set,
         "iconStyle": settings.look.icon_style,
@@ -2609,6 +2610,7 @@ mod tests {
             serde_json::json!({
                 "type": "settings",
                 "truckStrip": "auto",
+                "split": "off",
                 "wallpaper": null,
                 "iconSet": null,
                 "iconStyle": "auto",

@@ -1,8 +1,10 @@
+import { useContext } from 'react'
 import { setWestplayOpen } from '../useHostStatus'
 import { Group, Note, Panel, Row, Status, Switch, Tick } from '../room/parts'
-import { banner } from '../room/room'
+import { banner, WordsContext } from '../room/room'
 import { GLOW, useScreenAt } from '../room/screen'
 import type { GameInfo } from '../setup'
+import type { Split } from '../useSettings'
 import { type PageProps, screenState } from './page'
 
 /**
@@ -100,10 +102,73 @@ export function ScreenPage({ status, settings, setup, cw }: PageProps) {
         </Note>
       )}
       <PhoneCode status={status} language={setup.language} />
+      <SplitChooser settings={settings} running={status?.gameConnected === true} />
       <GpuChooser status={status} settings={settings} cw={cw} />
       {status?.error && <Note tone="bad">{status.error}</Note>}
     </Panel>
   )
+}
+
+/**
+ * The split screen (owner 2026-11-02): the game's own map squeezed into one half of the truck's screen, WestPlay in the
+ * other, or off, the game's own screen as it is. WestPlay's mod is made again for it once the game is closed, and the
+ * game reads it as it starts; the cab's sidebar then switches WestPlay between its half and the whole screen. Its words
+ * in English, Portuguese and Turkish for now, as the phone's codes.
+ */
+function SplitChooser({ settings: state, running }: { settings: PageProps['settings']; running: boolean }) {
+  const { settings, update } = state
+  const { code } = useContext(WordsContext)
+  if (!settings) return null
+  const w = SPLIT_WORDS[code.startsWith('pt') ? 'pt' : code.startsWith('tr') ? 'tr' : 'en']
+  const chosen = settings.screen.split ?? 'off'
+  const choose = (split: Split) => {
+    if (split !== chosen) void update({ ...settings, screen: { ...settings.screen, split } })
+  }
+  return (
+    <>
+      <Group title={w.title} place={6}>
+        {(['off', 'mapLeft', 'mapRight'] as const).map((split) => (
+          <Row
+            key={split}
+            title={w[split]}
+            accessory={chosen === split ? <Tick key={split} /> : undefined}
+            onClick={() => choose(split)}
+          />
+        ))}
+      </Group>
+      <Note tone="calm">{running ? `${w.note} ${w.restart}` : w.note}</Note>
+    </>
+  )
+}
+
+const SPLIT_WORDS: Record<
+  'en' | 'pt' | 'tr',
+  { title: string; off: string; mapLeft: string; mapRight: string; note: string; restart: string }
+> = {
+  en: {
+    title: 'Split screen',
+    off: 'Off: the game’s screen as it is',
+    mapLeft: 'The game’s map on the left',
+    mapRight: 'The game’s map on the right',
+    note: 'The game’s map squeezed into one half of the truck’s screen, not stretched, and WestPlay in the other: the split screen button in WestPlay’s sidebar switches between that and WestPlay on the whole screen. Changed here, it takes the game’s next start.',
+    restart: 'Restart the game for it.',
+  },
+  pt: {
+    title: 'Tela dividida',
+    off: 'Desligada: a tela do jogo como ela é',
+    mapLeft: 'Mapa do jogo à esquerda',
+    mapRight: 'Mapa do jogo à direita',
+    note: 'O mapa do jogo fica espremido numa metade da tela do caminhão, sem esticar, e o WestPlay na outra: o botão de tela dividida na barra lateral do WestPlay troca entre isso e o WestPlay na tela inteira. Mudando aqui, vale quando o jogo abrir de novo.',
+    restart: 'Reinicie o jogo para aplicar.',
+  },
+  tr: {
+    title: 'Bölünmüş ekran',
+    off: 'Kapalı: oyunun ekranı olduğu gibi',
+    mapLeft: 'Oyunun haritası solda',
+    mapRight: 'Oyunun haritası sağda',
+    note: 'Oyunun haritası tırın ekranının bir yarısına sığdırılır, uzatılmadan; WestPlay diğer yarıda. WestPlay’in kenar çubuğundaki bölünmüş ekran düğmesi bununla tam ekran WestPlay arasında geçiş yapar. Burada değişince oyunun bir sonraki açılışında geçerli olur.',
+    restart: 'Uygulamak için oyunu yeniden başlatın.',
+  },
 }
 
 /**

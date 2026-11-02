@@ -8,8 +8,9 @@ import { useText } from '../state/text'
 import { cabClock } from '../../shared/host'
 
 /**
- * The CarPlay sidebar: clock and signal, the recent apps (the open one on top), and at the bottom the truck
- * button (back to the truck's own screen, like CarPlay's car button) and the Home button.
+ * The CarPlay sidebar: clock and signal, the recent apps (the open one on top), and at the bottom the split
+ * screen's switch (with the split screen set: WestPlay in its half or on the whole screen), the truck button (back
+ * to the truck's own screen, like CarPlay's car button) and the Home button.
  */
 export function Sidebar() {
   const recents = useCabin((state) => state.navigation.recents)
@@ -17,6 +18,10 @@ export function Sidebar() {
   const homeTarget = useCabin((state) => homeButtonTarget(state.navigation))
   const gameTime = useLive((state) => (state.telemetry ? cabClock(state.telemetry, state.clockShift) : null))
   const shown = useScreenProfile().recents ?? 3
+  // The split screen set (the companion), on a screen with the game's map under it: its switch.
+  const split = useCabin((state) => state.split)
+  const splitShown = useCabin((state) => state.splitShown)
+  const canSplit = useLive((state) => split !== 'off' && state.screenLayout !== 'tablet')
 
   return (
     // Its own transition name: it stays put while screens change (shell/transitions.css).
@@ -38,6 +43,17 @@ export function Sidebar() {
           ))}
       </nav>
       <div className="sidebar-actions">
+        {canSplit && (
+          <button
+            type="button"
+            className={`sidebar-button${splitShown ? ' on' : ''}`}
+            aria-label="Split screen"
+            aria-pressed={splitShown}
+            onClick={() => useCabin.getState().setSplitShown(!splitShown)}
+          >
+            <SplitGlyph mapLeft={split === 'mapLeft'} />
+          </button>
+        )}
         <button
           type="button"
           className="sidebar-button"
@@ -117,6 +133,17 @@ function DashboardGlyph({ shown }: { shown: boolean }) {
 }
 
 /** Back to the truck: the front of a truck cab (our own glyph, not CarPlay's car). */
+/** The split screen's switch: a screen in two, the map's half (`mapLeft`: the left) filled. */
+function SplitGlyph({ mapLeft }: { mapLeft: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="3" />
+      <path d="M12 5v14" />
+      <rect x={mapLeft ? 4.5 : 13.5} y="6.5" width="6" height="11" rx="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 function TruckGlyph() {
   return (
     <svg

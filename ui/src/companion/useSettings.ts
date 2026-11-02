@@ -16,6 +16,9 @@ export interface Settings {
   keybinds: Record<KeybindId, Binding>
   screen: {
     truckStrip: TruckStrip
+    /** The split screen: the game's map squeezed into one half of its GPS screens (from the game's next start), or
+     * off. */
+    split: Split
   }
   /** How the screen looks (Customize): a wallpaper's id and one of the player's icon sets, by name; `null`:
    * none chosen (the cab's default wallpaper, WestPlay's own icons). */
@@ -34,6 +37,8 @@ export interface Settings {
 
 /** Mirrors `westplay_host::settings::TruckStrip`: the truck's own strip beside WestPlay, kept or not. */
 export type TruckStrip = 'auto' | 'off'
+/** Which half of the truck's screen the game's map is squeezed into, WestPlay in the other (`off`: the game's own). */
+export type Split = 'off' | 'mapLeft' | 'mapRight'
 
 /** Mirrors `westplay_host::settings::KeyCode`: a key of the keyboard or a button of the mouse, as Windows
  * numbers it (its virtual-key code: 0x05 the mouse's back button, 0x31 the 1 key, 0xA4 Left Alt). */

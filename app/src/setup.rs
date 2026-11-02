@@ -407,7 +407,7 @@ const MODS_LOOK: Duration = Duration::from_secs(30);
 
 /// What WestPlay's mod was last worked out from: the game (its folder, version and DLCs) and each installed mod's
 /// files (their path, size and when they last changed).
-type ModsStamp = (PathBuf, Option<String>, usize, Vec<(PathBuf, u64, Option<SystemTime>)>);
+type ModsStamp = (PathBuf, Option<String>, usize, Vec<(PathBuf, u64, Option<SystemTime>)>, game_mod::Split);
 
 /// Keeps WestPlay's mod as the installed mods want it: the tablet in every truck with its slots, the game's and its
 /// installed mods' (owner 2026-10-24: "any truck, of any mod"), the screens of the mod vehicles WestPlay draws
@@ -447,7 +447,8 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
         })
         .collect();
     stamps.sort();
-    let stamp = (game.dir.clone(), game.version.map(|version| version.to_string()), game.dlcs.len(), stamps);
+    let stamp =
+        (game.dir.clone(), game.version.map(|version| version.to_string()), game.dlcs.len(), stamps, game_mod::split());
     if looked.as_ref() == Some(&stamp) {
         return;
     }
@@ -478,7 +479,12 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
     let layouts_current = game_mod::layouts_current(&ours);
     let found = mod_screens::find(&files, &mods);
     let found_current = mod_screens::current(&found, &ours);
-    if wanted != present || !screens_current || !marks_current || !layouts_current || !found_current {
+    // The split screen switched on or off, or to the other side (the companion): the game's map as it wants.
+    let split_current = game_mod::split_current(&ours);
+    if wanted != present || !screens_current || !marks_current || !layouts_current || !found_current || !split_current {
+        if !split_current {
+            log!("setup: WestPlay's mod made again for the split screen: {:?}", game_mod::split());
+        }
         let made =
             game_mod::build_with(&files, &mod_trucks, &screen_mods, &marks, &found).map_err(|error| error.to_string());
         let made = made.and_then(|(bytes, built)| {

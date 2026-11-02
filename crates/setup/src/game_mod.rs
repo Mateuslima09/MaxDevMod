@@ -20,6 +20,7 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use westplay_mapdata::archive::Archive;
 use westplay_mapdata::files::{GameFiles, Mount};
@@ -35,6 +36,123 @@ const SCREEN_DIR: &str = "material/ui/westplay";
 const SCREEN_LAYER: u32 = 100;
 /// The "screen on" group's id in the GPS scripts.
 const SCREEN_ON_GROUP: &str = "100";
+
+/// The split screen (owner 2026-11-02: "YouTube Music on one side, the game's own map on the other half"): off, or
+/// the game's map squeezed into one half of each GPS screen, WestPlay's page in the other. The game reads its
+/// scripts only as it starts, so the map stays in its half while the game runs; the cab's page fills the whole
+/// screen over it, or only its half, as the player switches (the cab's sidebar).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Split {
+    #[default]
+    Off,
+    MapLeft,
+    MapRight,
+}
+
+impl Split {
+    fn id(self) -> &'static str {
+        match self {
+            Split::Off => "off",
+            Split::MapLeft => "mapLeft",
+            Split::MapRight => "mapRight",
+        }
+    }
+}
+
+static SPLIT: AtomicU8 = AtomicU8::new(0);
+
+/// The split screen the mod is built with from now on (the player's setting).
+pub fn set_split(split: Split) {
+    SPLIT.store(split as u8, Ordering::Release);
+}
+
+/// The split screen the mod is built with.
+pub fn split() -> Split {
+    match SPLIT.load(Ordering::Acquire) {
+        1 => Split::MapLeft,
+        2 => Split::MapRight,
+        _ => Split::Off,
+    }
+}
+
+/// The split screen a mod was built with, in it.
+const SPLIT_FILE: &str = "westplay/split.txt";
+
+/// Whether the mod at `built` was built with the split screen as it is now ([`split`]).
+pub fn split_current(built: &Path) -> bool {
+    let Ok(archive) = Archive::open(built) else { return false };
+    let ours = GameFiles::new(vec![Mount::Archive(archive)]);
+    let written = ours.read(SPLIT_FILE).ok().flatten();
+    // A mod from before the split screen: off.
+    written.as_deref().map_or(split() == Split::Off, |text| text == split().id().as_bytes())
+}
+
+/// The game's map in a GPS script (`text`, patched: WestPlay's image over `[left, right]` of its screen) squeezed into
+/// one half of that (`split`'s), not stretched: each element showing the map (`bare_map.mat`) goes to that half, and
+/// shows as much less of the map across, round the same middle (the truck), so the map keeps its scale.
+fn squeeze_map(text: &str, newline: &str, [left, right]: [f64; 2], split: Split) -> String {
+    let middle = (left + right) / 2.0;
+    let (to_left, to_right) = match split {
+        Split::Off => return text.to_owned(),
+        Split::MapLeft => (left, middle),
+        Split::MapRight => (middle, right),
+    };
+    let mut lines: Vec<String> = text.split(newline).map(str::to_owned).collect();
+    let borrowed: Vec<&str> = text.split(newline).collect();
+    for block in blocks(&borrowed) {
+        let shows_map = |line: &&str| line.contains("bare_map.mat");
+        if block.kind != "ui::text" || !borrowed[block.start + 1..block.end].iter().any(shows_map) {
+            continue;
+        }
+        let at = |name| field(&borrowed, &block, name)?.parse::<f64>().ok();
+        let (Some(from_left), Some(from_right)) = (at("coords_l"), at("coords_r")) else { continue };
+        if from_right <= from_left {
+            continue;
+        }
+        let kept = (to_right - to_left) / (from_right - from_left);
+        for line in &mut lines[block.start + 1..block.end] {
+            let trimmed = line.trim();
+            if trimmed.starts_with("coords_l:") {
+                *line = format!(" coords_l: {}", to_left.round() as i64);
+            } else if trimmed.starts_with("coords_r:") {
+                *line = format!(" coords_r: {}", to_right.round() as i64);
+            } else if line.contains("bare_map.mat") {
+                *line = narrow_map_image(line, kept);
+            }
+        }
+    }
+    lines.join(newline)
+}
+
+/// A line with the map's image (`<img src=…bare_map.mat left=0.125 right=0.875 …>`), its `left` and `right` showing
+/// `kept` as much of the map across, round the same middle.
+fn narrow_map_image(line: &str, kept: f64) -> String {
+    let Some(at) = line.find("bare_map.mat") else { return line.to_owned() };
+    let end = line[at..].find('>').map_or(line.len(), |end| at + end);
+    let tag = &line[at..end];
+    let value = |name: &str| -> Option<(usize, usize, f64)> {
+        let start = tag.find(&format!(" {name}="))? + name.len() + 2;
+        let len =
+            tag[start..].find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).unwrap_or(tag.len() - start);
+        Some((start, start + len, tag[start..start + len].parse().ok()?))
+    };
+    let (Some((l_start, l_end, u0)), Some((r_start, r_end, u1))) = (value("left"), value("right")) else {
+        return line.to_owned();
+    };
+    let (middle, half) = ((u0 + u1) / 2.0, (u1 - u0) / 2.0 * kept);
+    let (u0, u1) = (format!("{:.4}", middle - half), format!("{:.4}", middle + half));
+    // The later one first, so the earlier one's place holds.
+    let mut tag = tag.to_owned();
+    if r_start > l_start {
+        tag.replace_range(r_start..r_end, &u1);
+        tag.replace_range(l_start..l_end, &u0);
+    } else {
+        tag.replace_range(l_start..l_end, &u0);
+        tag.replace_range(r_start..r_end, &u1);
+    }
+    format!("{}{tag}{}", &line[..at], &line[end..])
+}
 
 /// A screen of WestPlay's own making, for interiors the game gives the same screen script as others: the Smart
 /// Dash Advanced (12.9") includes the same screens file as the 10.1" (`computers_2025.sui`, naming one GPS
@@ -584,6 +702,7 @@ pub fn build_with(
     files.push((format!("{SCREEN_DIR}/{mark}.tobj"), tobj(&format!("/{SCREEN_DIR}/{mark}.dds"))));
     files.push((format!("{SCREEN_DIR}/{mark}.dds"), transparent_dds(CAB_MARK_WIDTH, CAB_MARK_HEIGHT)));
     files.push((cab_mark::LIST.to_owned(), cab_marks.list().into_bytes()));
+    files.push((SPLIT_FILE.to_owned(), split().id().as_bytes().to_vec()));
     files.extend(cab_marks.scripts.iter().cloned());
     built.cab_marks = cab_marks.scripts.len();
     // The 7" screen at a size it shows sharp, if its interiors are as read (else the game's size stays, and
@@ -816,7 +935,12 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) ->
     patched.extend(lines[group.end..=last_end].iter().map(|line| (*line).to_owned()));
     patched.extend(screen);
     patched.extend(lines[last_end + 1..].iter().map(|line| (*line).to_owned()));
-    Ok(patched.join(newline))
+    let patched = patched.join(newline);
+    // The split screen: the game's map in its half of what WestPlay's image covers.
+    match (left.parse::<f64>(), right.parse::<f64>()) {
+        (Ok(l), Ok(r)) if split() != Split::Off => Ok(squeeze_map(&patched, newline, [l, r], split())),
+        _ => Ok(patched),
+    }
 }
 
 /// Adds the cab's mark (`texture`, `cab_mark`) to a dashboard script: a child of its window (its one block with no
@@ -1010,6 +1134,21 @@ pub(crate) fn zip(files: &[(String, Vec<u8>)]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_split_screen_squeezes_the_map_into_its_half_unstretched() {
+        let script = "SiiNunit\n{\nui::text : _nameless._.bare_map {\n text: \"<img src=/material/ui/dashboard/bare_map.mat left=0.125 right=0.875 bottom=0.35 top=0.68 xscale=stretch yscale=stretch>\"\n coords_l: 0\n coords_r: 1280\n coords_t: 656\n coords_b: 106\n my_parent: _nameless.group\n}\n\nui::text : _nameless._.clock {\n text: \"12:00\"\n coords_l: 0\n coords_r: 200\n}\n\n}";
+        let right = squeeze_map(script, "\n", [0.0, 1280.0], Split::MapRight);
+        assert!(right.contains(" coords_l: 640\n coords_r: 1280"));
+        // Half as wide on the screen, half as much of the map across, round the same middle.
+        assert!(right.contains("left=0.3125 right=0.6875 bottom=0.35 top=0.68"));
+        // Its height, and what doesn't show the map, as they were.
+        assert!(right.contains(" coords_t: 656\n coords_b: 106"));
+        assert!(right.contains(" coords_l: 0\n coords_r: 200"));
+        let left = squeeze_map(script, "\n", [0.0, 1280.0], Split::MapLeft);
+        assert!(left.contains(" coords_l: 0\n coords_r: 640"));
+        assert_eq!(squeeze_map(script, "\n", [0.0, 1280.0], Split::Off), script);
+    }
 
     #[test]
     fn installs_the_mod_whole_and_says_which_step_failed_where() {

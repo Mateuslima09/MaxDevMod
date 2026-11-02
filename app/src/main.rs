@@ -149,6 +149,7 @@ fn get_settings(store: State<SettingsStore>) -> Settings {
 fn update_settings(settings: Settings, store: State<SettingsStore>, app: AppHandle) -> Result<Settings, String> {
     store.file.save(&settings).map_err(|e| format!("Couldn't save the settings: {e}"))?;
     store.shared.set(settings.clone());
+    westplay_setup::game_mod::set_split(settings.screen.split);
     let _ = app.emit("settings-changed", &settings);
     Ok(settings)
 }
@@ -226,7 +227,10 @@ fn main() {
             }
             let config_dir = app.path().app_config_dir()?;
             let file = SettingsFile::in_dir(&config_dir);
-            let shared = Arc::new(SharedSettings::new(file.load()));
+            let loaded = file.load();
+            // The split screen WestPlay's mod is made with (from the next look at it, the game closed).
+            westplay_setup::game_mod::set_split(loaded.screen.split);
+            let shared = Arc::new(SharedSettings::new(loaded));
             let setup = SetupStore::load(&config_dir, app.handle());
             setup::watch_installed_mods(&setup);
             setup::follow_the_game_played(&setup);

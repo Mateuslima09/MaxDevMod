@@ -77,7 +77,7 @@ let settings: Settings = {
     volumeUp: { key: 0x33, withInteractionKey: true },
     phone: { key: 0x34, withInteractionKey: true },
   },
-  screen: { truckStrip: 'auto' },
+  screen: { truckStrip: 'auto', split: 'off' },
   look: { wallpaper: null, iconSet: null, iconStyle: 'auto' },
   graphics: { gpu: null },
 }
