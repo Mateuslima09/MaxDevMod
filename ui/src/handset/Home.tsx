@@ -1,7 +1,7 @@
-import { type PointerEvent, type ReactNode, useRef, useState } from 'react'
+import { type PointerEvent, type ReactNode, Suspense, useRef, useState } from 'react'
 import { formatGameTime } from '../shared/format'
 import { cabClock } from '../shared/host'
-import { MapView } from '../cabin/dashboard/MapView'
+import { MapView } from './lazy'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
 import { nearestCity } from '../cabin/dashboard/destination'
 import { weatherView } from '../cabin/dashboard/weather'
@@ -60,7 +60,11 @@ export function Home({ words, open, units }: { words: HomeWords; open: (app: App
             {/* The map following the truck, its route on it (owner 2026-11-02: "a tiny minimap, the route"); drawn
                 only while its page shows (or is swiped to): a map costs the GPU, which the game needs. */}
             <Scaled scale={MINIMAP_SCALE} className="ios-widget ios-widget-map">
-              {(page === 1 || swipe.offset !== 0) && <MapView />}
+              {(page === 1 || swipe.offset !== 0) && (
+                <Suspense fallback={null}>
+                  <MapView />
+                </Suspense>
+              )}
             </Scaled>
             <Icons apps={PAGE_TWO} words={words} open={open} />
           </div>

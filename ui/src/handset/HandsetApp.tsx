@@ -1,11 +1,7 @@
-import { type CSSProperties, type ReactNode, useEffect, useState } from 'react'
+import { type CSSProperties, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { formatGameTime, formatGear } from '../shared/format'
 import { cabClock } from '../shared/host'
-import { MapView } from '../cabin/dashboard/MapView'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
-import { SpotifyApp } from '../cabin/apps/spotify/SpotifyApp'
-import { YouTubeMusicApp } from '../cabin/apps/youtubeMusic/YouTubeMusicApp'
-import { Keyboard } from '../cabin/keyboard/Keyboard'
 import { useLook, useLookChanges } from '../cabin/state/hooks'
 import { connectHost, useLive } from '../cabin/state/store'
 import { languageOf } from '../cabin/state/strings'
@@ -23,6 +19,7 @@ import { NupayApp } from './NupayApp'
 import { ServicesApp } from './ServicesApp'
 import { SERVICES_WORDS } from './servicesWords'
 import { Scaled } from './Scaled'
+import { Keyboard, MapView, SpotifyApp, YouTubeMusicApp } from './lazy'
 import '../cabin/dashboard/dashboard.css'
 import '../cabin/apps/apps.css'
 
@@ -117,8 +114,11 @@ function CabScreen({ scale, children }: { scale: number; children: ReactNode }) 
   return (
     <Scaled scale={scale} className="handset-cab">
       <div className="screen app-window" style={{ '--content-left': '16px', '--edge': '16px' } as CSSProperties}>
-        {children}
-        <Keyboard />
+        {/* Its parts loaded as it opens (lazy.tsx): nothing until then. */}
+        <Suspense fallback={null}>
+          {children}
+          <Keyboard />
+        </Suspense>
       </div>
     </Scaled>
   )

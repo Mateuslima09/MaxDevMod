@@ -6,6 +6,9 @@
 
 /** How often it's told, ms. */
 const EVERY_MS = 4000
+/** How long, of each, the frames are counted: asking a frame each frame keeps the phone drawing without end
+ * (at 120 a second on the owner's), what's measured made heavier by measuring it. */
+const FRAMES_MS = 1000
 
 export function reportHealth(send: (report: object) => void): void {
   let frames = 0
@@ -13,11 +16,17 @@ export function reportHealth(send: (report: object) => void): void {
   let errors: string[] = []
   let renders = 0
   const started = performance.now()
-  const count = () => {
+  let counting = 0
+  const count = (now: number) => {
     frames++
+    if (now < counting) requestAnimationFrame(count)
+  }
+  const countFrames = () => {
+    frames = 0
+    counting = performance.now() + FRAMES_MS
     requestAnimationFrame(count)
   }
-  requestAnimationFrame(count)
+  countFrames()
   try {
     new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) busy += entry.duration
@@ -51,7 +60,7 @@ export function reportHealth(send: (report: object) => void): void {
     send({
       type: 'diag',
       s: Math.round((performance.now() - started) / 1000),
-      fps: Math.round((frames * 1000) / EVERY_MS),
+      fps: Math.round((frames * 1000) / FRAMES_MS),
       busyMs: Math.round(busy),
       mutations: renders,
       nodes: document.getElementsByTagName('*').length,
@@ -62,7 +71,7 @@ export function reportHealth(send: (report: object) => void): void {
       errors,
       touches,
     })
-    frames = 0
+    countFrames()
     busy = 0
     renders = 0
     errors = []
