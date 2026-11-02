@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { TruckInfo } from '../../shared/host'
+import { isInHost, postToHost, type ScreenFitValues, type TruckInfo } from '../../shared/host'
 import type { ScreenLayoutId } from './screen'
 
 /**
@@ -9,17 +9,11 @@ import type { ScreenLayoutId } from './screen'
  * margins the display cuts off, the proportion the game stretches the page to, and the size of what's on it. Done
  * on the page alone, it shows as it's changed, the game left running.
  */
-export interface ScreenFit {
-  /** Each edge's margin, a fraction of the page (0: none). */
-  top: number
-  bottom: number
-  left: number
-  right: number
-  /** How wide the page is drawn for its height (1: as laid out; less: narrower, for a screen stretching it). */
-  stretch: number
-  /** What's on it, times the screen's own size (1: as it is). */
-  size: number
-}
+/**
+ * Each edge's margin, a fraction of the page (0: none); `stretch`, how wide the page is drawn for its height (1: as
+ * laid out; less: narrower, for a screen stretching it); `size`, what's on it, times the screen's own size.
+ */
+export type ScreenFit = ScreenFitValues
 
 export type FitEdge = 'top' | 'bottom' | 'left' | 'right'
 
@@ -110,3 +104,23 @@ export const useScreenFits = create<FitState>()(
     },
   ),
 )
+
+/**
+ * The fit on the cab's screen as the phones know it (owner 2026-11-02: "and if the screen is so small I can't reach
+ * Settings?"): Adjust Screen is on the phone in the game, and the player's own, too; the cab's page tells them.
+ */
+export const useShownFit = create<{ key: string | null; fit: ScreenFit }>()(() => ({ key: null, fit: NO_FIT }))
+
+/** The cab's page's own fit, for the phones (`screenFitShown`). */
+export function announceFit(key: string | null, fit: ScreenFit): void {
+  if (isInHost()) postToHost({ type: 'screenFitShown', key, fit })
+}
+
+/** A phone's Adjust Screen (`screenFit`), in the cab's page alone (the phones hear it too, and keep none): `key` the
+ * cab's screen's; told back, whatever it changed. */
+export function applyPhoneFit(key: string | null, change: Partial<ScreenFit> | undefined, reset: boolean): void {
+  const fits = useScreenFits.getState()
+  if (key !== null && reset) fits.reset(key)
+  else if (key !== null && change) fits.change(key, change)
+  announceFit(key, key === null ? NO_FIT : (useScreenFits.getState().fits[key] ?? NO_FIT))
+}

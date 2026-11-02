@@ -19,6 +19,7 @@ import { NupayApp } from './NupayApp'
 import { ServicesApp } from './ServicesApp'
 import { SERVICES_WORDS } from './servicesWords'
 import { Scaled } from './Scaled'
+import { ScreenFitList } from './ScreenFitList'
 import { Keyboard, MapView, SpotifyApp, YouTubeMusicApp } from './lazy'
 import '../cabin/dashboard/dashboard.css'
 import '../cabin/apps/apps.css'
@@ -335,6 +336,7 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
         </div>
       </List>
       <Volume words={words} />
+      <ScreenFitList words={words} />
       {/* A new version installed: the page again, without scanning the QR code again (owner 2026-11-02). */}
       <List footer={words.reloadHint}>
         <button type="button" className="ios-row ios-row-action" onClick={() => location.reload()}>
@@ -444,6 +446,16 @@ const WORDS = {
     howTo: 'How to use',
     reload: 'Reload the page',
     reloadHint: 'After a WestPlay update: loads the new version here, without scanning the QR code again.',
+    screenFit: 'Vehicle screen',
+    screenFitHint: 'Fits WestPlay on the screen of the vehicle you’re in, there at once: for when it’s too small or cut off to reach its own Settings.',
+    screenFitNone: 'Get in a vehicle with WestPlay on its screen.',
+    edgeTop: 'Top edge',
+    edgeBottom: 'Bottom edge',
+    edgeLeft: 'Left edge',
+    edgeRight: 'Right edge',
+    proportion: 'Proportion',
+    fitSize: 'Size',
+    restoreFit: 'Restore default',
     howToText:
       'Alt+4 takes the phone out and puts it away. Hold Alt to use it with the mouse. The key can be changed in WestPlay’s Controls.',
   },
@@ -504,6 +516,16 @@ const WORDS = {
     howTo: 'Como usar',
     reload: 'Atualizar página',
     reloadHint: 'Depois de uma atualização do WestPlay: carrega a versão nova aqui, sem escanear o QR Code de novo.',
+    screenFit: 'Tela do veículo',
+    screenFitHint: 'Ajusta o WestPlay na tela do veículo em que você está, na hora: para quando ela fica pequena ou cortada demais para chegar nos Ajustes dela.',
+    screenFitNone: 'Entre num veículo com o WestPlay na tela.',
+    edgeTop: 'Borda de cima',
+    edgeBottom: 'Borda de baixo',
+    edgeLeft: 'Borda esquerda',
+    edgeRight: 'Borda direita',
+    proportion: 'Proporção',
+    fitSize: 'Tamanho',
+    restoreFit: 'Restaurar padrão',
     howToText:
       'Alt+4 tira e guarda o celular. Segure o Alt para mexer nele com o mouse. A tecla pode ser trocada em Controles, no WestPlay.',
   },

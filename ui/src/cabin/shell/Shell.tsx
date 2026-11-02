@@ -1,7 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
 import { isInHost } from '../../shared/host'
 import { useLook, useLookChanges, useOemStrip, useScreenFit, useScreenProfile } from '../state/hooks'
-import { fitStyle, type ScreenFit } from '../state/screenFit'
+import { announceFit, fitStyle, type ScreenFit } from '../state/screenFit'
 import { usePreparedIcons } from '../state/looks'
 import { frameInsets, NO_INSETS, OEM_STRIPS } from '../state/oem'
 import { RETURN_BUTTON_SIZE, returnButtonCentre } from '../state/screen'
@@ -36,9 +36,11 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   usePreparedIcons()
   const { appearance, wallpaperSrc } = useLook()
   const profile = useScreenProfile()
-  const { fit } = useScreenFit()
+  const { key: fitKey, fit } = useScreenFit()
   const handedOver = useCabin((state) => state.truckScreen)
   useFittedRoot(fit, handedOver)
+  // The phones' Adjust Screen shows what this screen's is (state/screenFit.ts).
+  useEffect(() => announceFit(fitKey, fit), [fitKey, fit])
   const stripId = useOemStrip()
   const strip = stripId && OEM_STRIPS[stripId]
   const layout = useLive((state) => state.screenLayout)

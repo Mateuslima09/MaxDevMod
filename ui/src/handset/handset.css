@@ -1207,3 +1207,37 @@ body,
   border: 0;
   color: var(--ios-label);
 }
+
+/* Adjust Screen's settings (ScreenFitList.tsx): a value between a minus and a plus, round and tinted. */
+.ios-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ios-stepper button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ios-fill);
+  color: var(--ios-tint);
+  font-size: 18px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.ios-stepper button:disabled {
+  color: var(--ios-secondary);
+  opacity: 0.5;
+}
+
+.ios-stepper-value {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ios-row-action:disabled {
+  color: var(--ios-secondary) !important;
+}

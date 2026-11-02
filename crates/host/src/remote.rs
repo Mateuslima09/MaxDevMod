@@ -44,8 +44,14 @@ const COMMANDS: &[&str] = &[
 ];
 /// YouTube's, whose videos the phone doesn't show: what plays, paused or played on, and its volume.
 const YOUTUBE: &[&str] = &["play", "pause", "seek", "volume"];
-/// The Maps app's route requests, the volume the phone set (for the cab to show), and the truck's commands.
-const PAGE_MESSAGES: &[&str] = &["ready", "route", "routes", "follow", "detours", "volumeShown", "truckCommand"];
+/// The Maps app's route requests, the volume the phone set (for the cab to show), the truck's commands, and Adjust
+/// Screen's changes.
+const PAGE_MESSAGES: &[&str] =
+    &["ready", "route", "routes", "follow", "detours", "volumeShown", "truckCommand", "screenFit"];
+/// Messages the host only passes on to the pages, the cab's and the phones' (mirrored): Adjust Screen's, a phone's
+/// change for the cab's page, and the cab's fit for the phones (owner 2026-11-02: the screen fitted from the phone
+/// when it's too small to reach Settings on).
+const RELAYED: &[&str] = &["screenFit", "screenFitShown"];
 
 /// Messages from the phones not taken yet, at most this many (a phone sending more than the host takes loses
 /// the oldest).
@@ -111,6 +117,11 @@ impl Remote {
             handset_qr: qr_of(&handset_url),
             handset_url: Some(handset_url),
         }
+    }
+
+    /// Whether a page's message is only passed on to the pages ([`RELAYED`]).
+    pub fn relayed(json: &str) -> bool {
+        RELAYED.contains(&message_type(json).as_str())
     }
 
     /// Whether a host message (JSON) is for the phones too: all but the cab's alone ([`CAB_ONLY`]).
@@ -384,6 +395,18 @@ mod tests {
         assert_eq!(message_type(r#"{"type":"keybind","action":"volumeUp"}"#), "keybind");
         assert_eq!(message_type(r#"{ "type" : "telemetry", "data": {}}"#), "telemetry");
         assert_eq!(message_type(r#"{"data":1}"#), "");
+    }
+
+    #[test]
+    fn a_phone_may_fit_the_cabs_screen_and_only_the_cab_tells_its_fit() {
+        let change = r#"{"type":"screenFit","change":{"top":0.05}}"#;
+        assert!(allowed(change));
+        assert!(Remote::relayed(change));
+        let shown = r#"{"type":"screenFitShown","key":null,"fit":{}}"#;
+        assert!(!allowed(shown));
+        assert!(Remote::relayed(shown));
+        assert!(Remote::mirrored(shown));
+        assert!(!Remote::relayed(r#"{"type":"truckCommand","command":"horn","down":true}"#));
     }
 
     #[test]

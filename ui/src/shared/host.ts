@@ -99,6 +99,16 @@ export interface JobInfo {
 /** What a keybind does: the music's volume a step up or down, or it paused or played on. */
 export type KeybindAction = 'volumeUp' | 'volumeDown' | 'playPause'
 
+/** A vehicle screen's fit (cabin/state/screenFit.ts): each edge's margin, the proportion and the size. */
+export interface ScreenFitValues {
+  top: number
+  bottom: number
+  left: number
+  right: number
+  stretch: number
+  size: number
+}
+
 export type HostMessage =
   | { type: 'telemetry'; data: Telemetry }
   | { type: 'truck'; data: TruckInfo }
@@ -108,6 +118,11 @@ export type HostMessage =
   | { type: 'wallet'; balance: number | null; entries: WalletEntry[] }
   /** `null` until the game has drawn a WestPlay screen. Checked against the known ids on arrival. */
   | { type: 'screen'; layout: string | null }
+  /** Adjust Screen from a phone (cabin/state/screenFit.ts), relayed by the host to the cab's page: a change, the fit
+   * set back (`reset`), or neither (the phone asking what it is). */
+  | { type: 'screenFit'; change?: Partial<ScreenFitValues>; reset?: boolean }
+  /** The cab's page's fit on the vehicle's screen now (`key`: `null`, no screen yet), relayed to the phones. */
+  | { type: 'screenFitShown'; key: string | null; fit: ScreenFitValues }
   /** The settings the page applies: whether the truck's own strip stays beside WestPlay
    * (`westplay_host::settings::TruckStrip`), the wallpaper (`null`: none chosen yet) and the player's icon set
    * (`null`: WestPlay's own). Sent as the page loads and whenever they change. */
@@ -281,6 +296,11 @@ export function toEqualizer(value: unknown): Equalizer {
 
 export type PageMessage =
   | { type: 'ready' }
+  /** Adjust Screen from a phone (cabin/state/screenFit.ts), relayed by the host to the cab's page: a change, the fit
+   * set back (`reset`), or neither (the phone asking what it is). */
+  | { type: 'screenFit'; change?: Partial<ScreenFitValues>; reset?: boolean }
+  /** The cab's page's fit on the vehicle's screen now (`key`: `null`, no screen yet), relayed to the phones. */
+  | { type: 'screenFitShown'; key: string | null; fit: ScreenFitValues }
   /** A startup stage reached (the boot screens shown), for the host's startup log. */
   | { type: 'startup'; stage: string }
   /** Whether WestPlay is open on the truck's screen (or the truck's original screen shows): posted as the

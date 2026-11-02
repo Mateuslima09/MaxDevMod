@@ -836,6 +836,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         for message in
             webview.take_page_messages().into_iter().chain(remote.take()).chain(handset_messages(handset.as_deref()))
         {
+            // Adjust Screen's: passed on, the cab's page and the phones each taking what's theirs.
+            if remote::Remote::relayed(&message) {
+                let _ = webview.post_json(&message);
+                continue;
+            }
             match parse_page_message(&message) {
                 // The page announces itself when it (re)loads; it missed everything sent before, so send the
                 // current state again (some of it is otherwise only sent when it changes).
@@ -1766,12 +1771,7 @@ fn is_shown(game: u32) -> bool {
                 return BOOL(1);
             }
             let mut cloaked = 0u32;
-            let read = DwmGetWindowAttribute(
-                window,
-                DWMWA_CLOAKED,
-                (&raw mut cloaked).cast(),
-                size_of::<u32>() as u32,
-            );
+            let read = DwmGetWindowAttribute(window, DWMWA_CLOAKED, (&raw mut cloaked).cast(), size_of::<u32>() as u32);
             looking.shown = read.is_err() || cloaked == 0;
             // Found one showing: done.
             BOOL(i32::from(!looking.shown))

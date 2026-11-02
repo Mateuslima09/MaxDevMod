@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import type { TruckInfo } from '../../shared/host'
-import { fitKey, fitStyle, isFitted, NO_FIT, readFit, useScreenFits } from './screenFit'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PageMessage, TruckInfo } from '../../shared/host'
+import { applyPhoneFit, fitKey, fitStyle, isFitted, NO_FIT, readFit, useScreenFits } from './screenFit'
 
 const bronco = { id: 'vehicle.ford.bronco_24' } as TruckInfo
 
@@ -38,6 +38,21 @@ describe('screen fit', () => {
       size: 0.6,
     })
     expect(readFit(null)).toEqual(NO_FIT)
+  })
+
+  it("takes a phone's change for the cab's screen, and its reset, telling the phones", () => {
+    const posted: PageMessage[] = []
+    vi.stubGlobal('window', { chrome: { webview: { postMessage: (message: PageMessage) => posted.push(message) } } })
+    applyPhoneFit('ford-cars|ford.bronco_24', { left: 0.04, stretch: 0.92 }, false)
+    const fit = { ...NO_FIT, left: 0.04, stretch: 0.92 }
+    expect(useScreenFits.getState().fits['ford-cars|ford.bronco_24']).toEqual(fit)
+    expect(posted).toEqual([{ type: 'screenFitShown', key: 'ford-cars|ford.bronco_24', fit }])
+    applyPhoneFit('ford-cars|ford.bronco_24', undefined, true)
+    expect(useScreenFits.getState().fits).toEqual({})
+    // No screen yet: nothing to fit.
+    applyPhoneFit(null, { top: 0.1 }, false)
+    expect(useScreenFits.getState().fits).toEqual({})
+    vi.unstubAllGlobals()
   })
 
   it('forgets a fit set back to none', () => {

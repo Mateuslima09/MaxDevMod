@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { applyPhoneFit, fitKey, readFit, useShownFit } from './screenFit'
 import {
   type Equalizer,
   FLAT,
@@ -459,6 +460,16 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       case 'screen':
         // A layout this UI doesn't know yet (newer plugin) is treated like a screen without a profile.
         useLive.setState({ screenLayout: isScreenLayoutId(message.layout) ? message.layout : null })
+        break
+      // A phone's Adjust Screen: the cab's page keeps the fit (the phones hear it too: theirs is what it tells).
+      case 'screenFit':
+        if (!window.westplayHandset && !window.westplayPhone) {
+          const { screenLayout, truck } = useLive.getState()
+          applyPhoneFit(fitKey(screenLayout, truck), message.change, message.reset === true)
+        }
+        break
+      case 'screenFitShown':
+        useShownFit.setState({ key: message.key, fit: readFit(message.fit) })
         break
       case 'settings': {
         const cabin = useCabin.getState()
