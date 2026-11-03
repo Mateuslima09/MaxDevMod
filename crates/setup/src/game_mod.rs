@@ -76,16 +76,22 @@ pub fn split() -> Split {
     }
 }
 
-/// The split screen a mod was built with, in it.
-const SPLIT_FILE: &str = "westplay/split.txt";
+/// The split screen a mod was built with, in it. Named anew when the squeeze changes, so a mod made with the one
+/// before is made again (`split_v2`: round the truck, not the script's middle).
+const SPLIT_FILE: &str = "westplay/split_v2.txt";
 
 /// Whether the mod at `built` was built with the split screen as it is now ([`split`]).
 pub fn split_current(built: &Path) -> bool {
     let Ok(archive) = Archive::open(built) else { return false };
     let ours = GameFiles::new(vec![Mount::Archive(archive)]);
     let written = ours.read(SPLIT_FILE).ok().flatten();
-    // A mod from before the split screen: off.
-    written.as_deref().map_or(split() == Split::Off, |text| text == split().id().as_bytes())
+    // A mod from before the split screen: off. One with the squeeze before: made again, unless it's off.
+    let before = ours.read("westplay/split.txt").ok().flatten();
+    match (written, before) {
+        (Some(text), _) => text == split().id().as_bytes(),
+        (None, Some(text)) => split() == Split::Off && text == Split::Off.id().as_bytes(),
+        (None, None) => split() == Split::Off,
+    }
 }
 
 /// The game's map in a GPS script (`text`, patched: WestPlay's image over `[left, right]` of its screen) squeezed into
@@ -125,8 +131,11 @@ fn squeeze_map(text: &str, newline: &str, [left, right]: [f64; 2], split: Split)
     lines.join(newline)
 }
 
+/// Where the truck is across the game's map (`bare_map`): its middle, as the screens that show the map evenly have it.
+const TRUCK_ACROSS: f64 = 0.5;
+
 /// A line with the map's image (`<img src=…bare_map.mat left=0.125 right=0.875 …>`), its `left` and `right` showing
-/// `kept` as much of the map across, round the same middle.
+/// `kept` as much of the map across, round the truck ([`TRUCK_ACROSS`]).
 fn narrow_map_image(line: &str, kept: f64) -> String {
     let Some(at) = line.find("bare_map.mat") else { return line.to_owned() };
     let end = line[at..].find('>').map_or(line.len(), |end| at + end);
@@ -140,7 +149,10 @@ fn narrow_map_image(line: &str, kept: f64) -> String {
     let (Some((l_start, l_end, u0)), Some((r_start, r_end, u1))) = (value("left"), value("right")) else {
         return line.to_owned();
     };
-    let (middle, half) = ((u0 + u1) / 2.0, (u1 - u0) / 2.0 * kept);
+    // Round the truck, in the middle of the game's map across, not the script's own middle: some screens show the
+    // map off to one side (the Volvo FH 2024's 0 to 0.75, its truck right of the middle), which in a half put the
+    // truck by its edge (owner 2026-11-02).
+    let (middle, half) = (TRUCK_ACROSS, (u1 - u0) / 2.0 * kept);
     let (u0, u1) = (format!("{:.4}", middle - half), format!("{:.4}", middle + half));
     // The later one first, so the earlier one's place holds.
     let mut tag = tag.to_owned();
@@ -1148,6 +1160,10 @@ mod tests {
         let left = squeeze_map(script, "\n", [0.0, 1280.0], Split::MapLeft);
         assert!(left.contains(" coords_l: 0\n coords_r: 640"));
         assert_eq!(squeeze_map(script, "\n", [0.0, 1280.0], Split::Off), script);
+        // A screen showing the map off to one side (the Volvo FH 2024's): round the truck, in the map's middle.
+        let aside = script.replace("left=0.125 right=0.875", "left=0 right=0.75");
+        let squeezed = squeeze_map(&aside, "\n", [0.0, 1280.0], Split::MapLeft);
+        assert!(squeezed.contains("left=0.3125 right=0.6875"), "{squeezed}");
     }
 
     #[test]
