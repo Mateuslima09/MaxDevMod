@@ -92,7 +92,7 @@ interface CabinState {
   truckScreen: boolean
   /** The split screen as the player set it (the companion: the game's map squeezed into one half of the truck's
    * screen, from the game's start), and whether WestPlay keeps to the other half now (the sidebar's button; off, it
-   * takes the whole screen, over the map). Not kept: split again with every start. */
+   * takes the whole screen, over the map). Not kept: the whole screen at every start, split only when picked. */
   split: 'off' | 'mapLeft' | 'mapRight'
   splitShown: boolean
   setSplitShown(shown: boolean): void
@@ -169,12 +169,18 @@ export const useCabin = create<CabinState>()(
       powerEvent: (event) =>
         set((state) => {
           const next = power(state.power, event)
-          return { power: next, truckScreen: next.phase === 'off' ? false : state.truckScreen }
+          // Off: back to the truck, and WestPlay on the whole screen again at the next start (the split screen only when
+          // the player picks it: owner 2026-11-02).
+          return {
+            power: next,
+            truckScreen: next.phase === 'off' ? false : state.truckScreen,
+            splitShown: next.phase === 'off' ? false : state.splitShown,
+          }
         }),
       truckScreen: false,
       setTruckScreen: (truckScreen) => set({ truckScreen }),
       split: 'off',
-      splitShown: true,
+      splitShown: false,
       setSplitShown: (splitShown) => set({ splitShown }),
     }),
     {
