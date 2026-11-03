@@ -55,6 +55,9 @@ westernstar-57x   ui/dashboard/westernstar_57x_gps.sii
 # interiors' (interior/computers.sui) screens alike, 1280 x 800, shown whole (a player's Bronco, in the cab).
 # The Mustang (1967) and Crown Victoria (2006) have no screen.
 ford-cars         ui/dashboard/ford_bronco_gps_24.sii ui/dashboard/ford_f150_gps_23.sii
+# MAN TGX (2020), ETS2 (owner 2026-11-02, a player's MAN in the cab): its 1440 x 540 screen, the map on its left
+# two thirds and the lion beside it, all of it WestPlay's, as the Cascadias'.
+man-tgx-2020      ui/dashboard/man_tgx_2020_gps.sii
 # Mod vehicles' own screens found by setup (owner 2026-11-02: "identify the screen in mods automatically"):
 # crates/setup mod_screens.rs gives each GPS script an installed mod's vehicles name a slot of these, WestPlay's
 # image on its whole screen, the page laid out at its shape (MOD_SCREENS_FILE). No script of their own here.

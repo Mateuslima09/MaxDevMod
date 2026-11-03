@@ -27,6 +27,7 @@ export const SCREEN_LAYOUT_IDS = [
   'westernstar-5700xe',
   'westernstar-57x',
   'ford-cars',
+  'man-tgx-2020',
   // Mod vehicles' own screens, found by setup (crates/setup mod_screens.rs): which is in each slot is setup's.
   'mod-1',
   'mod-2',
@@ -188,6 +189,7 @@ const PROFILES: readonly ProfileEntry[] = [
   // ATS's Ford Bronco and F-150 (owner 2026-11-02): a 1280 x 800 screen (the page laid out at it: crates/shared
   // page_height), at the DAF's sizing until tuned in the car.
   { layout: 'ford-cars', profile: { name: 'Ford Bronco / F-150', oemStrip: null, scale: 1 } },
+  { layout: 'man-tgx-2020', profile: { name: 'MAN TGX (2020)', oemStrip: null, scale: 0.75 } },
 ]
 
 /** Screens not tuned yet: CarPlay on the whole screen, its layout adapting to the space (responsive). */

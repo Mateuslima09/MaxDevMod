@@ -82,7 +82,7 @@ pub fn page_height(index: usize) -> u32 {
         Some("setra-516") => 777,
         Some("setra-531") => 761,
         Some("man-lions-coach") => 778,
-        Some("freightliner-cascadia" | "westernstar-57x") => 480,
+        Some("freightliner-cascadia" | "westernstar-57x" | "man-tgx-2020") => 480,
         Some("volvo-vnl-2018") => 768,
         Some("westernstar-5700xe") => 750,
         Some("ford-cars") => 800,
@@ -1051,6 +1051,7 @@ mod tests {
             ("westernstar-5700xe", 750),
             ("kenworth-t680-2022", SCREEN_HEIGHT),
             ("ford-cars", 800),
+            ("man-tgx-2020", 480),
         ] {
             assert_eq!(page_height(index(layout)), height, "{layout}");
         }

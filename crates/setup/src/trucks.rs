@@ -140,6 +140,13 @@ pub const TRUCKS: &[Truck] = &[
         source: Source::Game("westernstar.57x"),
         layout: Some("westernstar-57x"),
     },
+    // ETS2's MAN TGX (2020): its own 1440 x 540 screen (owner 2026-11-02).
+    Truck {
+        id: "man-tgx-2020",
+        name: "MAN TGX (2020)",
+        source: Source::Game("man.tgx_2020"),
+        layout: Some("man-tgx-2020"),
+    },
     // ATS's drivable cars with a screen (owner 2026-11-02).
     Truck {
         id: "ford-bronco-2024",
