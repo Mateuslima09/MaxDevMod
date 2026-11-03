@@ -479,12 +479,18 @@
     visibility 0s linear calc(var(--sidebar-hold, 0ms) + 450ms);
 }
 
+/* With the sidebar on the right (the split screen, shell.css `.sidebar-right`), it steps aside to the right. */
+.sidebar-right .carplay.watching .sidebar {
+  transform: translateX(calc(100% + var(--edge) + 24px));
+}
+
 .carplay.hold-sidebar {
   --sidebar-hold: 1600ms;
 }
 
 /* Pointing at the left edge, near the middle, brings it back over the video, on the same curve, to go Home
    or to the Dashboard; it steps aside again once the pointer leaves it (shell/sidebarPeek.ts). */
+.sidebar-right .carplay.watching.peek-sidebar .sidebar,
 .carplay.watching.peek-sidebar .sidebar {
   transform: none;
   visibility: visible;

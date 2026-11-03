@@ -3,7 +3,7 @@
    Scania Smart Dash's area at its 0.9 scale (1114). A drag sideways turns the page; dots below show which. */
 .screen.home {
   left: var(--content-left, 170px);
-  right: var(--edge);
+  right: var(--content-right, var(--edge));
   top: var(--edge);
   bottom: var(--edge);
 }

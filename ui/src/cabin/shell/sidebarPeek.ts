@@ -49,13 +49,19 @@ export function useSidebarPeek(watching: boolean, area: RefObject<HTMLElement | 
     const update = (pointer: { x: number; y: number } | null) => {
       const element = area.current
       if (!element) return
-      const sidebar = element.querySelector('.sidebar')
-      const next = sidebarPeeks(
-        current,
-        pointer,
-        element.getBoundingClientRect(),
-        sidebar?.getBoundingClientRect().right ?? 0,
-      )
+      const sidebar = element.querySelector('.sidebar')?.getBoundingClientRect()
+      const box = element.getBoundingClientRect()
+      // With the sidebar on the right (the split screen, shell.css `.sidebar-right`): the same, mirrored.
+      const mirrored = document.documentElement.classList.contains('sidebar-right')
+      const across = (x: number) => box.left + box.right - x
+      const next = mirrored
+        ? sidebarPeeks(
+            current,
+            pointer && { x: across(pointer.x), y: pointer.y },
+            box,
+            sidebar ? across(sidebar.left) : 0,
+          )
+        : sidebarPeeks(current, pointer, box, sidebar?.right ?? 0)
       if (next !== current) {
         current = next
         setPeeking(next)

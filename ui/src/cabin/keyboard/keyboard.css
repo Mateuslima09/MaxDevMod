@@ -25,7 +25,7 @@
   position: absolute;
   /* Right of the sidebar, inside the app area's margins. */
   left: calc(var(--content-left, 170px) + 8px);
-  right: 40px;
+  right: calc(var(--content-right, 32px) + 8px);
   bottom: 40px;
   height: 336px;
   z-index: 2;

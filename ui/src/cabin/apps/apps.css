@@ -7,7 +7,7 @@
 .app-panel {
   position: absolute;
   left: var(--content-left, 170px);
-  right: var(--edge);
+  right: var(--content-right, var(--edge));
   top: var(--edge);
   bottom: var(--edge);
 }

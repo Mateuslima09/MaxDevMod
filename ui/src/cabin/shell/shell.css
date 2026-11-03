@@ -43,6 +43,8 @@
   --sidebar-scale: 1.24;
   --sidebar-width: calc(118px + 89px * (var(--sidebar-scale) - 1));
   --content-left: calc(var(--edge) + var(--sidebar-width) + 20px);
+  /* Where the screens end: the edge, or with the sidebar on the right (`.sidebar-right`), after it. */
+  --content-right: var(--edge);
   /* The sidebar's corners: just short of half its width. */
   --sidebar-radius: calc(var(--sidebar-width) * 0.45);
   /* Apple-style shadows: a faint contact shadow hugging the edge plus a wide, light ambient one; never one
@@ -368,6 +370,18 @@ body,
 }
 
 /* The truck and Home buttons at the bottom of the sidebar. */
+/* The split screen with the game's map on the left (Shell.tsx): the sidebar on WestPlay's outer edge, the screen's right,
+   not in its middle against the map; the screens start at the edge and end before it. */
+:root.sidebar-right {
+  --content-left: var(--edge);
+  --content-right: calc(var(--edge) + var(--sidebar-width) + 20px);
+}
+
+.sidebar-right .sidebar {
+  left: auto;
+  right: var(--edge);
+}
+
 .sidebar-actions {
   display: flex;
   flex-direction: column;
@@ -478,6 +492,13 @@ body,
     --sidebar-width: calc(96px + 68px * (var(--sidebar-scale) - 1));
     --sidebar-radius: calc(var(--sidebar-width) * 0.45);
     --content-left: calc(var(--edge) + var(--sidebar-width) + 10px);
+  }
+
+  .sidebar-right .sidebar,
+  .sidebar-right .screen-slot,
+  .sidebar-right .keyboard {
+    --content-left: var(--edge);
+    --content-right: calc(var(--edge) + var(--sidebar-width) + 10px);
   }
 
   .sidebar {

@@ -44,6 +44,11 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   // The split screen, shown: WestPlay in its half, the game's map (squeezed into the other by the mod) beside it.
   const halved = useSplitShown()
   useFittedRoot(fit, handedOver, halved)
+  // With the game's map on the left, the sidebar on WestPlay's outer edge, the right (shell.css `.sidebar-right`): not in
+  // the middle of the screen, against the map (owner 2026-11-02).
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle('sidebar-right', halved === 'mapLeft')
+  }, [halved])
   // The phones' Adjust Screen shows what this screen's is (state/screenFit.ts).
   useEffect(() => announceFit(fitKey, fit), [fitKey, fit])
   const stripId = useOemStrip()
