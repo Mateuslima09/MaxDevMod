@@ -159,13 +159,17 @@ function useFittedRoot(
     const root = document.getElementById('root')
     if (!root) return
     const page = document.documentElement.style
-    // The split screen: the page in its half, the rest of the screen see-through, the game's map there; the player's
-    // fit there too (owner 2026-11-02: split, it kept stretched as if unfitted): its top and bottom, its side on the
-    // screen's outer edge, its proportion.
+    // The split screen: the page in its half, the rest of the screen see-through, the game's map there.
     if (halved) {
-      const half = halved === 'mapLeft' ? { left: 0.5, right } : { left, right: 0.5 }
-      const style = fitStyle({ top, bottom, ...half, stretch, size: 1 })
-      Object.assign(root.style, { position: 'fixed', transformOrigin: '0 0', ...style })
+      const at = halved === 'mapLeft' ? '50vw' : '0'
+      Object.assign(root.style, {
+        position: 'fixed',
+        left: at,
+        top: '0',
+        width: '50vw',
+        height: '100vh',
+        transform: 'none',
+      })
       page.removeProperty('background')
       return
     }
