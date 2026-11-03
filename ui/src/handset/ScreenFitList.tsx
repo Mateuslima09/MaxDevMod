@@ -1,15 +1,6 @@
 import { useEffect } from 'react'
 import { postToHost } from '../shared/host'
-import {
-  baseFit,
-  edgeFrom,
-  edgeLimits,
-  type FitEdge,
-  FIT_LIMITS,
-  isFitted,
-  type ScreenFit,
-  useShownFit,
-} from '../cabin/state/screenFit'
+import { FIT_LIMITS, isFitted, type ScreenFit, useShownFit } from '../cabin/state/screenFit'
 import { List, Row } from './ios'
 
 export interface ScreenFitWords {
@@ -42,13 +33,11 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
       </List>
     )
   }
-  // Each edge from where the screen starts: negative grows it past that (screenFit.ts edgeLimits).
-  const base = baseFit(key)
   const settings: [keyof ScreenFit, string, { min: number; max: number; step: number }][] = [
-    ['top', words.edgeTop, edgeLimits(base, 'top')],
-    ['bottom', words.edgeBottom, edgeLimits(base, 'bottom')],
-    ['left', words.edgeLeft, edgeLimits(base, 'left')],
-    ['right', words.edgeRight, edgeLimits(base, 'right')],
+    ['top', words.edgeTop, FIT_LIMITS.edge],
+    ['bottom', words.edgeBottom, FIT_LIMITS.edge],
+    ['left', words.edgeLeft, FIT_LIMITS.edge],
+    ['right', words.edgeRight, FIT_LIMITS.edge],
     ['stretch', words.proportion, FIT_LIMITS.stretch],
     ['size', words.fitSize, FIT_LIMITS.size],
   ]
@@ -61,14 +50,9 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
           value={
             <Stepper
               label={label}
-              value={isEdge(name) ? Number((fit[name] - base[name]).toFixed(4)) : fit[name]}
+              value={fit[name]}
               limits={limits}
-              onChange={(value) =>
-                postToHost({
-                  type: 'screenFit',
-                  change: { [name]: isEdge(name) ? edgeFrom(base, name, value) : value },
-                })
-              }
+              onChange={(value) => postToHost({ type: 'screenFit', change: { [name]: value } })}
             />
           }
         />
@@ -76,7 +60,7 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
       <button
         type="button"
         className="ios-row ios-row-action"
-        disabled={!isFitted(fit, baseFit(key))}
+        disabled={!isFitted(fit)}
         onClick={() => postToHost({ type: 'screenFit', reset: true })}
       >
         {words.restoreFit}
@@ -112,9 +96,4 @@ function Stepper({
       </button>
     </span>
   )
-}
-
-/** Whether a setting is one of the edges (shown from where the screen starts). */
-function isEdge(name: keyof ScreenFit): name is FitEdge {
-  return name === 'top' || name === 'bottom' || name === 'left' || name === 'right'
 }

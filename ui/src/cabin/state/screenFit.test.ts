@@ -1,18 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageMessage, TruckInfo } from '../../shared/host'
-import {
-  applyPhoneFit,
-  baseFit,
-  edgeFrom,
-  edgeLimits,
-  fitKey,
-  fitStyle,
-  GENERIC_FIT,
-  isFitted,
-  NO_FIT,
-  readFit,
-  useScreenFits,
-} from './screenFit'
+import { applyPhoneFit, fitKey, fitStyle, isFitted, NO_FIT, readFit, useScreenFits } from './screenFit'
 
 const bronco = { id: 'vehicle.ford.bronco_24' } as TruckInfo
 
@@ -75,32 +63,5 @@ describe('screen fit', () => {
     expect(isFitted(useScreenFits.getState().fits['ford-cars|ford.bronco_24'])).toBe(true)
     change('ford-cars|ford.bronco_24', { top: 0 })
     expect(useScreenFits.getState().fits).toEqual({})
-  })
-})
-
-describe('the stock screen', () => {
-  it('starts on the 7" Scania’s part, its edges going either way from there', () => {
-    const key = 'generic|mercedes.actros2014'
-    expect(baseFit(key)).toEqual(GENERIC_FIT)
-    expect(baseFit('daf-2021|daf.2021')).toEqual(NO_FIT)
-    const fits = useScreenFits.getState()
-    fits.change(key, { bottom: 0.1 })
-    expect(useScreenFits.getState().fits[key]).toEqual({ ...GENERIC_FIT, bottom: 0.1 })
-    // Back to where it starts: nothing kept.
-    fits.change(key, { bottom: GENERIC_FIT.bottom })
-    expect(useScreenFits.getState().fits[key]).toBeUndefined()
-    // All the way out: kept, the whole square.
-    fits.change(key, { top: 0, bottom: 0, left: 0, right: 0 })
-    expect(useScreenFits.getState().fits[key]).toEqual(NO_FIT)
-    fits.reset(key)
-  })
-})
-
-describe('an edge as the player adjusts it', () => {
-  it('goes negative from where the screen starts, as far as its image goes', () => {
-    expect(edgeLimits(GENERIC_FIT, 'bottom')).toEqual({ min: -0.265, max: 0.085, step: 0.005 })
-    expect(edgeFrom(GENERIC_FIT, 'bottom', -0.2)).toBe(0.065)
-    // A screen WestPlay is on whole: nothing to grow into.
-    expect(edgeLimits(NO_FIT, 'top').min).toBe(-0)
   })
 })

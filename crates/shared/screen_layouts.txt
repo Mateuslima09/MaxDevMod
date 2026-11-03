@@ -9,7 +9,6 @@
 # id              GPS script(s): a layout's scripts draw the same screen (one for km/h, one for mph), so they
 #                 share its texture
 # Most trucks and interiors.
-# WestPlay on its whole square; each truck's display shows its part of it (the cab's fit, from the 7" Scania's).
 generic           ui/gps.sii
 # DAF XF/XG 2021 (DLC), and the XF Electric (its own script and a UK one) and XD (DLCs: owner 2026-10-26):
 # the same 1280 x 720 screen, the map in the same place, on the same display (their models' screen pieces alike).

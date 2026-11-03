@@ -6,7 +6,7 @@ import { useWallpapers } from '../../state/looks'
 import { pickVariant, prepareWallpaper } from '../../wallpapers'
 import { type Appearance, resolveAppearance } from '../../state/appearance'
 import { useLook, useScreenFit, useScreenProfile } from '../../state/hooks'
-import { baseFit, edgeFrom, edgeLimits, type FitEdge, FIT_LIMITS, isFitted, useScreenFits } from '../../state/screenFit'
+import { type FitEdge, FIT_LIMITS, isFitted, useScreenFits } from '../../state/screenFit'
 import { DASHBOARD_WIDGETS, type DashboardWidget, useCabin, useLive } from '../../state/store'
 import { useText } from '../../state/text'
 import { TEXT_SIZES } from '../../state/textSize'
@@ -157,8 +157,6 @@ function ScreenFitPage() {
     ['right', words.edgeRight],
   ]
   const percent = (value: number) => `${Math.round(value * 1000) / 10}%`
-  // Each edge from where the screen starts: negative grows it past that (screenFit.ts edgeLimits).
-  const base = baseFit(key)
   return (
     <Page title={words.screenFit}>
       <Group header={words.edges} footer={words.screenFitFooter}>
@@ -166,10 +164,10 @@ function ScreenFitPage() {
           <FitSlider
             key={edge}
             label={label}
-            value={Number((fit[edge] - base[edge]).toFixed(4))}
-            shown={percent(fit[edge] - base[edge])}
-            limits={edgeLimits(base, edge)}
-            onChange={(value) => change(key, { [edge]: edgeFrom(base, edge, value) })}
+            value={fit[edge]}
+            shown={percent(fit[edge])}
+            limits={FIT_LIMITS.edge}
+            onChange={(value) => change(key, { [edge]: value })}
           />
         ))}
       </Group>
@@ -195,7 +193,7 @@ function ScreenFitPage() {
         <button
           type="button"
           className="settings-row settings-action"
-          disabled={!isFitted(fit, baseFit(key))}
+          disabled={!isFitted(fit)}
           onClick={() => reset(key)}
         >
           {words.restoreFit}

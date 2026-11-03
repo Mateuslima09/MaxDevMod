@@ -19,19 +19,6 @@ export type FitEdge = 'top' | 'bottom' | 'left' | 'right'
 
 export const NO_FIT: ScreenFit = { top: 0, bottom: 0, left: 0, right: 0, stretch: 1, size: 1 }
 
-/**
- * The stock GPS screen's fit to start from (owner 2026-11-02): WestPlay's image is on its whole square, and every
- * truck's display shows its own part of it; the 7" Scania's (its full width but 0.5% each side, rows 12.2% to 73.5%:
- * crates/setup game_mod.rs SHOWN_PARTS) until the player fits another truck's, its edges going either way from here (the
- * Actros 2014's display shows further down).
- */
-export const GENERIC_FIT: ScreenFit = { top: 0.122, bottom: 0.265, left: 0.005, right: 0.005, stretch: 1, size: 1 }
-
-/** The fit a screen has before the player's own (`key`, [`fitKey`]'s): the stock screen's, else none. */
-export function baseFit(key: string | null): ScreenFit {
-  return key?.startsWith('generic|') ? GENERIC_FIT : NO_FIT
-}
-
 /** How far each setting goes. */
 export const FIT_LIMITS = {
   edge: { min: 0, max: 0.35, step: 0.005 },
@@ -48,23 +35,9 @@ export function fitKey(layout: ScreenLayoutId | null, truck: TruckInfo | null): 
   return `${screen}|${truck ? truck.id.replace(/^vehicle\./, '') : ''}`
 }
 
-/**
- * An edge as the player adjusts it (owner 2026-11-02: "negative values too"): from where the screen starts (`base`,
- * [`baseFit`]), 0 there, negative growing WestPlay past it as far as its image goes (the stock screen's 7" part: the
- * Actros 2014's display shows further down), positive cutting it in. Its limits, and the fit's edge for a value.
- */
-export function edgeLimits(base: ScreenFit, edge: FitEdge): { min: number; max: number; step: number } {
-  const { max, step } = FIT_LIMITS.edge
-  return { min: -base[edge], max: Number((max - base[edge]).toFixed(4)), step }
-}
-
-export function edgeFrom(base: ScreenFit, edge: FitEdge, value: number): number {
-  return Number((base[edge] + value).toFixed(4))
-}
-
-/** Whether a fit changes anything from `base` (the screen's own, [`baseFit`]). */
-export function isFitted(fit: ScreenFit, base: ScreenFit = NO_FIT): boolean {
-  return (Object.keys(NO_FIT) as (keyof ScreenFit)[]).some((name) => fit[name] !== base[name])
+/** Whether a fit changes anything. */
+export function isFitted(fit: ScreenFit): boolean {
+  return (Object.keys(NO_FIT) as (keyof ScreenFit)[]).some((name) => fit[name] !== NO_FIT[name])
 }
 
 /** Where the page's root goes for `fit` (`null`: where it is, the whole page): inside the margins, laid out as wide
@@ -110,9 +83,9 @@ export const useScreenFits = create<FitState>()(
       fits: {},
       change: (key, change) =>
         set((state) => {
-          const fit = readFit({ ...(state.fits[key] ?? baseFit(key)), ...change })
+          const fit = readFit({ ...(state.fits[key] ?? NO_FIT), ...change })
           const fits = { ...state.fits }
-          if (isFitted(fit, baseFit(key))) fits[key] = fit
+          if (isFitted(fit)) fits[key] = fit
           else delete fits[key]
           return { fits }
         }),
@@ -125,13 +98,6 @@ export const useScreenFits = create<FitState>()(
     }),
     {
       name: 'westplay.screenFit',
-      // 1: the stock screen's fits from the whole of it, not the 7"'s part (those kept before let go).
-      version: 1,
-      migrate: (stored, version) => {
-        const fits = (stored as { fits?: Record<string, unknown> } | undefined)?.fits ?? {}
-        if (version >= 1) return { fits }
-        return { fits: Object.fromEntries(Object.entries(fits).filter(([key]) => !key.startsWith('generic|'))) }
-      },
       merge: (stored, current) => {
         const kept = (stored as { fits?: Record<string, unknown> } | undefined)?.fits ?? {}
         const fits = Object.fromEntries(Object.entries(kept).map(([key, fit]) => [key, readFit(fit)]))
@@ -158,5 +124,5 @@ export function applyPhoneFit(key: string | null, change: Partial<ScreenFit> | u
   const fits = useScreenFits.getState()
   if (key !== null && reset) fits.reset(key)
   else if (key !== null && change) fits.change(key, change)
-  announceFit(key, key === null ? NO_FIT : (useScreenFits.getState().fits[key] ?? baseFit(key)))
+  announceFit(key, key === null ? NO_FIT : (useScreenFits.getState().fits[key] ?? NO_FIT))
 }
