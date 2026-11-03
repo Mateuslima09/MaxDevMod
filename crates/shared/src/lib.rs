@@ -65,9 +65,9 @@ pub fn screen_layouts() -> &'static [ScreenLayout] {
 
 /// The height WestPlay's page is laid out at on the layout at `index` (in [`screen_layouts`]), its width
 /// [`SCREEN_WIDTH`]: the frame's own, but where the game shows the frame in another shape. The stock screen
-/// (`generic`, WestPlay's only in the Scania S and R's 7" display) shows it on a display of 1.615:1 (its model's
-/// screen piece: PLAN.md section C), stretching 16:9 to that: laid out at 1280 x 793, of that shape, and
-/// squeezed into the frame by the app, the page shows as laid out (owner 2026-10-21). WestPlay's tablet, an iPad
+/// (`generic`) is a square, laid out at 1280 x 1280: each truck's display shows a part of it, the 7" Scania's 1.615:1
+/// (its model's screen piece: PLAN.md section C), the cab's fit to start from (owner 2026-10-21, 2026-11-02: every
+/// truck's display its own part). WestPlay's tablet, an iPad
 /// Air 5 (owner 2026-10-27), shows the frame's 720 rows whole on its glass, 23.16 x 16.25 cm (1.425:1, its
 /// model's: crates/setup tablet.rs): laid out at 1280 x 898. Oyuncuyusbis' coaches' displays, each the shape of its model's screen (its corners,
 /// 2026-10-24): the Travego 16 SHD's 16.2 x 9.6 cm (1.691:1, both its bands), the Setra S 531 DT's 15.2 x 9.0 cm
@@ -79,7 +79,9 @@ pub fn screen_layouts() -> &'static [ScreenLayout] {
 /// shown whole (1.6:1).
 pub fn page_height(index: usize) -> u32 {
     match screen_layouts().get(index).map(|layout| layout.id) {
-        Some("generic") => 793,
+        // The whole 256 x 256 stock screen (every truck's display shows its own part of it: the cab's fit, from the 7"
+        // Scania's, 1280 x 793 of it).
+        Some("generic") => 1280,
         Some("tablet") => 898,
         Some("travego-16" | "travego-16-23") => 757,
         Some("setra-516") => 777,
@@ -1017,8 +1019,8 @@ mod tests {
     #[test]
     fn the_7_inch_screens_page_takes_its_displays_shape() {
         let index = |id: &str| screen_layouts().iter().position(|layout| layout.id == id).unwrap();
-        // 1280 x 793: 1.614, the display's 1.615.
-        assert_eq!(page_height(index("generic")), 793);
+        // The stock screen's whole square (the 7"'s 1.615:1 part of it the cab's fit: 1280 x 793).
+        assert_eq!(page_height(index("generic")), 1280);
         // The coaches' displays, each its shape.
         for (layout, height) in [
             ("travego-16", 757),

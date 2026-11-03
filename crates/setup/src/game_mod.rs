@@ -208,8 +208,15 @@ pub struct ShownPart {
 /// from its top: 254 x 157 of it, 1.615:1, as the interior's model maps its screen piece
 /// (`scania_2016/interior/model.pmg`, piece 80, `gps.tobj`: PLAN.md section C). Stretched over the whole
 /// square, the frame lost its bottom and top and was drawn 1.3 times too tall (owner 2026-10-21).
-const SHOWN_PARTS: &[(&str, ShownPart)] =
-    &[("generic", ShownPart { left: 0.005, right: 0.995, top: 0.122, bottom: 0.735 })];
+///
+/// Since the stock screen is WestPlay's in every truck that has it (owner 2026-11-02), whose displays show more or
+/// less of it (the Actros 2014's further down), WestPlay's image is on the whole square, and the 7"'s part is the
+/// cab's fit of it to start from (ui screenFit.ts `GENERIC_FIT`), each truck's own Adjust Screen from there: none here.
+const SHOWN_PARTS: &[(&str, ShownPart)] = &[];
+
+/// The 7" Scania's part of the stock screen, as above.
+#[cfg(test)]
+const SCANIA_7: ShownPart = ShownPart { left: 0.005, right: 0.995, top: 0.122, bottom: 0.735 };
 
 /// A mod vehicle's own screen WestPlay draws on (owner 2026-10-24, Oyuncuyusbis' coaches: "directly in their
 /// screen"), from the installed mod that brings the vehicle: the layout's script (its one, in
@@ -1213,7 +1220,7 @@ mod tests {
     fn puts_the_screen_on_the_part_the_display_shows() {
         // The 7" Scania's: the stock square's full width, rows 12.2%-73.5% from its top.
         let square = SCRIPT.replace("coords_r: 1279", "coords_r: 256").replace("coords_t: 719", "coords_t: 256");
-        let shown = SHOWN_PARTS.iter().find(|(id, _)| *id == "generic").map(|(_, part)| part);
+        let shown = Some(&SCANIA_7);
         let patched = patch_gps_script(&square, "screen_generic", shown).unwrap();
         let placed = "screen_generic.mat xscale=stretch yscale=stretch>\"\n coords_l: 1\n coords_r: 255\n coords_t: 225\n coords_b: 68\n";
         assert!(patched.contains(placed), "{patched}");
