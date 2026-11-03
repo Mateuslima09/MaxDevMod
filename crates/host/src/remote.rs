@@ -235,22 +235,27 @@ impl Served {
         let mut parts = line.split_whitespace();
         let (method, target) = (parts.next().unwrap_or_default(), parts.next().unwrap_or("/"));
         let path = decode(target.split(['?', '#']).next().unwrap_or("/"));
-        let found = if method != "GET" {
+        let query = target.split('#').next().and_then(|target| target.split_once('?')).map_or("", |(_, q)| q);
+        let body = if method != "GET" {
             None
-        } else if let Some(rest) = path.strip_prefix("/maps/") {
-            inside(&self.maps, rest)
-        } else if let Some(ui) = &self.ui {
-            let rest = path.trim_start_matches('/');
-            inside(ui, if rest.is_empty() { "phone.html" } else { rest })
+        } else if path == "/app.webmanifest" {
+            self.manifest(query).map(|json| ("application/manifest+json", json.into_bytes()))
         } else {
-            None
+            let found = if let Some(rest) = path.strip_prefix("/maps/") {
+                inside(&self.maps, rest)
+            } else if let Some(ui) = &self.ui {
+                let rest = path.trim_start_matches('/');
+                inside(ui, if rest.is_empty() { "phone.html" } else { rest })
+            } else {
+                None
+            };
+            found.and_then(|file| std::fs::read(&file).ok().map(|bytes| (content_type(&file), bytes)))
         };
-        let body = found.and_then(|file| std::fs::read(&file).ok().map(|bytes| (file, bytes)));
         let head = match &body {
-            Some((file, bytes)) => format!(
+            Some((kind, bytes)) => format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-cache\r\n\
                  Access-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
-                content_type(file),
+                kind,
                 bytes.len()
             ),
             None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned(),
@@ -261,17 +266,81 @@ impl Served {
         }
         Ok(())
     }
+
+    /// A phone page's web app manifest (owner 2026-11-03), for the phone to put it on its home screen with
+    /// WestPlay's W: the page (`page`: `phone` or `handset`) and its name (`name`, `short`) in the page's own
+    /// words (phone/installable.ts). Only with the key (`k`), which its start keeps: the app opens connected.
+    fn manifest(&self, query: &str) -> Option<String> {
+        let given =
+            |name: &str| query.split('&').find_map(|pair| pair.strip_prefix(name)?.strip_prefix('=')).map(decode);
+        let page = given("page").filter(|page| page == "phone" || page == "handset")?;
+        if given("k").as_deref() != Some(self.key.as_str()) {
+            return None;
+        }
+        let name: String = given("name").unwrap_or_else(|| "WestPlay".into()).chars().take(40).collect();
+        let short: String = given("short").unwrap_or_else(|| name.clone()).chars().take(12).collect();
+        Some(
+            serde_json::json!({
+                "id": format!("/{page}.html"),
+                "name": name,
+                "short_name": short,
+                "start_url": format!("/{page}.html#{}", self.key),
+                "scope": format!("/{page}.html"),
+                "display": "standalone",
+                "background_color": "#000000",
+                "theme_color": "#000000",
+                "icons": [
+                    { "src": "/icons/app/icon-192.png", "sizes": "192x192", "type": "image/png" },
+                    { "src": "/icons/app/icon-512.png", "sizes": "512x512", "type": "image/png" },
+                    { "src": "/icons/app/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+                ],
+            })
+            .to_string(),
+        )
+    }
 }
 
-/// An address as a QR code, an SVG image, for the companion to show.
+/// An address as a QR code, an SVG image, for the companion to show: WestPlay's W in its middle (owner
+/// 2026-11-03), which the highest error correction reads past.
 fn qr_of(url: &str) -> Option<String> {
-    qrcode::QrCode::new(url.as_bytes()).ok().map(|code| {
-        code.render::<qrcode::render::svg::Color>()
-            .min_dimensions(240, 240)
-            .dark_color(qrcode::render::svg::Color("#000000"))
-            .light_color(qrcode::render::svg::Color("#ffffff"))
-            .build()
+    qrcode::QrCode::with_error_correction_level(url.as_bytes(), qrcode::EcLevel::H).ok().map(|code| {
+        with_logo(
+            &code
+                .render::<qrcode::render::svg::Color>()
+                .min_dimensions(240, 240)
+                .dark_color(qrcode::render::svg::Color("#000000"))
+                .light_color(qrcode::render::svg::Color("#ffffff"))
+                .build(),
+        )
     })
+}
+
+/// WestPlay's W (assets/logo-flat.svg) on a white tile in the middle of a QR code's SVG: a quarter of its side
+/// at most, so the code's corner marks stay clear and its error correction covers what the tile hides.
+fn with_logo(svg: &str) -> String {
+    let size = svg
+        .split(" width=\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .and_then(|width| width.parse::<f64>().ok());
+    let (Some(size), Some(end)) = (size, svg.rfind("</svg>")) else { return svg.to_owned() };
+    let tile = size * 0.25;
+    let logo = size * 0.21;
+    format!(
+        concat!(
+            r##"{head}<rect x="{tile_at:.1}" y="{tile_at:.1}" width="{tile:.1}" height="{tile:.1}" rx="{round:.1}" fill="#ffffff"/>"##,
+            r##"<svg x="{logo_at:.1}" y="{logo_at:.1}" width="{logo:.1}" height="{logo:.1}" viewBox="48 48 927 927" shape-rendering="geometricPrecision">"##,
+            r##"<rect x="48" y="48" width="927" height="927" rx="220" fill="#232323"/>"##,
+            r##"<polyline points="250,330 380,700 512,470 645,700 775,330" fill="none" stroke="#3fc066" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"/>"##,
+            "</svg></svg>",
+        ),
+        head = &svg[..end],
+        tile_at = (size - tile) / 2.0,
+        tile = tile,
+        round = tile * 0.22,
+        logo_at = (size - logo) / 2.0,
+        logo = logo,
+    )
 }
 
 /// Whether a phone may send this ([`PAGE_MESSAGES`], [`COMMANDS`], [`YOUTUBE`]).
@@ -426,6 +495,33 @@ mod tests {
     fn undoes_a_paths_escapes() {
         assert_eq!(decode("/maps/usa%20map/map.json"), "/maps/usa map/map.json");
         assert_eq!(decode("/a%zz"), "/a%zz");
+    }
+
+    #[test]
+    fn its_qr_codes_carry_the_w_in_their_middle() {
+        let svg = qr_of("http://192.168.0.10:39217/#0123456789abcdef0123456789abcdef").unwrap();
+        assert!(svg.ends_with("</svg></svg>"));
+        assert!(svg.contains(r##"stroke="#3fc066""##));
+        assert_eq!(with_logo("not an svg"), "not an svg");
+    }
+
+    #[test]
+    fn gives_a_pages_manifest_only_with_the_key() {
+        let served = Served {
+            ui: None,
+            maps: PathBuf::new(),
+            key: "k3y".into(),
+            phones: Default::default(),
+            incoming: Default::default(),
+        };
+        let manifest = served.manifest("page=handset&k=k3y&name=Celular%20WestPlay&short=Celular").unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+        assert_eq!(manifest["start_url"], "/handset.html#k3y");
+        assert_eq!(manifest["name"], "Celular WestPlay");
+        assert_eq!(manifest["short_name"], "Celular");
+        assert_eq!(manifest["icons"][0]["src"], "/icons/app/icon-192.png");
+        assert!(served.manifest("page=handset&k=wrong").is_none());
+        assert!(served.manifest("page=index&k=k3y").is_none());
     }
 
     #[test]

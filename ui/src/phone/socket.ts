@@ -1,4 +1,5 @@
 import type { HostMessage, PageMessage } from '../shared/host'
+import { makeInstallable } from './installable'
 
 /**
  * The phone page's way to the host (crates/host remote.rs): a WebSocket to the PC it was served from, put where
@@ -30,6 +31,7 @@ function setConnected(connected: boolean) {
 export function installPhoneSocket(): boolean {
   const key = keyOf()
   if (!key) return false
+  makeInstallable(key)
   const listeners = new Set<Listener>()
   const waiting: string[] = []
   let socket: WebSocket | null = null

@@ -6,6 +6,12 @@
     <meta name="theme-color" content="#000000" />
     <meta name="google" content="notranslate" />
     <title>WestPlay</title>
+    <!-- On the phone's home screen: WestPlay's W, full screen on an iPhone (its manifest: src/phone/installable.ts). -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/app/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/app/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <!-- Before any of the page's code: the code it shares with the cab (in chunks of their own, run first) asks
          which page it runs in as it loads (shared/host.ts firstRequestId). -->
     <script>

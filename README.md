@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Mateuslima09/ATS-CarPlay/releases/latest"><img alt="Baixar para Windows" src="https://img.shields.io/badge/baixar-para%20Windows-409c42?style=for-the-badge"></a>
+  <a href="https://github.com/Mateuslima09/ETS-ATS-CarPlay/releases/latest"><img alt="Baixar para Windows" src="https://img.shields.io/badge/baixar-para%20Windows-409c42?style=for-the-badge"></a>
   <img alt="Windows 10 e 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-2b2b2b?style=for-the-badge">
   <img alt="American Truck Simulator 1.61" src="https://img.shields.io/badge/ATS-1.61-2b2b2b?style=for-the-badge">
   <img alt="Euro Truck Simulator 2 1.61" src="https://img.shields.io/badge/ETS2-1.61-2b2b2b?style=for-the-badge">
@@ -207,14 +207,14 @@ A música sai dos alto-falantes do caminhão, cada um onde fica na cabine. Os ou
 
 ## Instalação
 
-1. Baixe o instalador na [última versão](https://github.com/Mateuslima09/ATS-CarPlay/releases/latest) e rode, com os
+1. Baixe o instalador na [última versão](https://github.com/Mateuslima09/ETS-ATS-CarPlay/releases/latest) e rode, com os
    jogos fechados.
 2. O app abre e guia você no resto: acha o jogo, instala o plugin e o mod de telas do WestPlay e monta o seu mapa.
 3. Para usar também no outro jogo, vá em **Configuração → Outros jogos** e clique em **Instalar**.
 4. Abra o jogo e entre num caminhão.
 
 O instalador não é assinado. Se o Windows bloquear, clique em **Mais informações → Executar assim mesmo**. Esta versão
-não procura atualizações sozinha: as novas ficam na página de [versões](https://github.com/Mateuslima09/ATS-CarPlay/releases).
+não procura atualizações sozinha: as novas ficam na página de [versões](https://github.com/Mateuslima09/ETS-ATS-CarPlay/releases).
 
 **Requisitos:** Windows 10 ou 11 (64 bits), American Truck Simulator e/ou Euro Truck Simulator 2 na versão 1.61 (outras
 podem funcionar; o app avisa quando uma não foi testada) e o Microsoft Edge WebView2 (já vem no Windows 11; o
