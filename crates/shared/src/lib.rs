@@ -183,8 +183,8 @@ pub const TRUCK_UNSUPPORTED: u32 = 2;
 
 /// The trucks WestPlay shows in on a layout that trucks it doesn't support share (SDK model ids, without the
 /// `vehicle.` prefix): most trucks' interiors name the stock GPS screen (`generic`, `ui/gps.sii`), and of
-/// those only the Scania S and R's and the S BEV's (the S's 7" display) are WestPlay's in ETS2. In ATS every truck
-/// whose interiors name it is (the Cascadias' analogue interiors too), shown on the 7"'s part of it until each
+/// those only the Scania S and R's and the S BEV's (the S's 7" display) and the classic Volvo FH16's are WestPlay's in
+/// ETS2. In ATS every truck whose interiors name it is (the Cascadias' analogue interiors too), shown on the 7"'s part of it until each
 /// truck's display is measured. The other layouts are their own trucks' scripts.
 const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
     (
@@ -193,6 +193,8 @@ const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
             "scania.s_2016",
             "scania.r_2016",
             "scania.s_2024e",
+            // The classic Volvo FH16 (2009), its pop-up screen (owner 2026-11-02), on the 7"'s part until it's measured.
+            "volvo.fh16",
             "freightliner.cascadia2019",
             "freightliner.cascadia2024",
             "intnational.9900i",
@@ -1200,6 +1202,8 @@ mod tests {
         assert!(screen_supported(generic, "vehicle.scania.s_2016"));
         assert!(screen_supported(generic, "scania.r_2016"));
         assert!(screen_supported(generic, "vehicle.scania.s_2024e"));
+        // The classic FH16 (2009), not its 2012 successor.
+        assert!(screen_supported(generic, "vehicle.volvo.fh16"));
         // The Actros MP4 (and the game's other trucks) name the same stock screen.
         assert!(!screen_supported(generic, "vehicle.mercedes.actros2014"));
         assert!(!screen_supported(generic, "vehicle.volvo.fh16_2012"));

@@ -60,6 +60,12 @@ pub const TRUCKS: &[Truck] = &[
         layout: Some("generic"),
     },
     Truck {
+        id: "volvo-fh16-2009",
+        name: "Volvo FH16 (2009)",
+        source: Source::Game("volvo.fh16"),
+        layout: Some("generic"),
+    },
+    Truck {
         id: "scania-s-bev",
         name: "Scania S BEV - 7\" screen",
         source: Source::Game("scania.s_2024e"),
