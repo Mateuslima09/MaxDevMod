@@ -26,3 +26,6 @@ dist/
 
 # Signing keys (the updater's private key stays with its owner, outside the repository)
 *.key
+
+# graphify knowledge graph (rebuilt locally)
+graphify-out/
