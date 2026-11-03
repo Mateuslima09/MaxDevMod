@@ -65,6 +65,48 @@ pub const TRUCKS: &[Truck] = &[
         source: Source::Game("volvo.fh16"),
         layout: Some("generic"),
     },
+    // The rest of ETS2's trucks with the game's stock GPS screen (owner 2026-11-02: "every truck with a screen").
+    Truck {
+        id: "volvo-fh16-2012",
+        name: "Volvo FH16 (2012)",
+        source: Source::Game("volvo.fh16_2012"),
+        layout: Some("generic"),
+    },
+    Truck {
+        id: "mercedes-actros-2014",
+        name: "Mercedes-Benz Actros (2014)",
+        source: Source::Game("mercedes.actros2014"),
+        layout: Some("generic"),
+    },
+    Truck { id: "daf-xf", name: "DAF XF (105)", source: Source::Game("daf.xf"), layout: Some("generic") },
+    Truck { id: "daf-xf-euro6", name: "DAF XF Euro 6", source: Source::Game("daf.xf_euro6"), layout: Some("generic") },
+    Truck { id: "iveco-hiway", name: "Iveco Hi-Way", source: Source::Game("iveco.hiway"), layout: Some("generic") },
+    Truck {
+        id: "iveco-stralis",
+        name: "Iveco Stralis",
+        source: Source::Game("iveco.stralis"),
+        layout: Some("generic"),
+    },
+    Truck { id: "man-tgx", name: "MAN TGX", source: Source::Game("man.tgx"), layout: Some("generic") },
+    Truck {
+        id: "man-tgx-euro6",
+        name: "MAN TGX Euro 6",
+        source: Source::Game("man.tgx_euro6"),
+        layout: Some("generic"),
+    },
+    Truck { id: "scania-r-2009", name: "Scania R (2009)", source: Source::Game("scania.r"), layout: Some("generic") },
+    Truck {
+        id: "scania-streamline",
+        name: "Scania Streamline",
+        source: Source::Game("scania.streamline"),
+        layout: Some("generic"),
+    },
+    Truck {
+        id: "renault-etech-t",
+        name: "Renault E-Tech T",
+        source: Source::Game("renault.etech_t"),
+        layout: Some("renault-t-2024"),
+    },
     Truck {
         id: "scania-s-bev",
         name: "Scania S BEV - 7\" screen",
@@ -288,9 +330,9 @@ mod tests {
         // Its script isn't in this game.
         assert_eq!(of("Scania S and R - Smart Dash"), Fit::NotYet);
         // Its scripts weren't patched (the DLC's not in this game's files).
-        assert_eq!(of("Iveco"), Fit::NotYet);
+        assert_eq!(of("Iveco S-Way"), Fit::NotYet);
         let with_sway = fit(&files, &["iveco-sway"], &profiles, &[]);
-        assert_eq!(with_sway.iter().find(|(truck, _)| truck.name.starts_with("Iveco")).unwrap().1, Fit::Ready);
+        assert_eq!(with_sway.iter().find(|(truck, _)| truck.name.starts_with("Iveco S-Way")).unwrap().1, Fit::Ready);
         // Not in the game.
         assert_eq!(of("Renault"), Fit::NotInGame);
         // Any truck with the tablet: in every game, once the mod has it.

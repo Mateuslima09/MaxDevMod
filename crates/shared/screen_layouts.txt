@@ -16,7 +16,7 @@ daf-2021          ui/dashboard/daf_2021_gps.sii ui/dashboard/daf_xf_electric_gps
 # Scania S/R with a Smart Dash interior (through interior/computers_2025.sui).
 scania-2025       ui/dashboard/scania_2025_gps.sii
 # Renault T 2024.
-renault-t-2024    ui/dashboard/renault_t_2024_gps.sii
+renault-t-2024    ui/dashboard/renault_t_2024_gps.sii ui/dashboard/renault_etech_t_gps.sii
 # Iveco S-Way (DLC): its interiors' (interior/computers.sui), and its UK interiors' in mph (computers_uk.sui).
 iveco-sway        ui/dashboard/iveco_sway_ic10_gps.sii ui/dashboard/iveco_sway_ic10_gps_mph.sii
 # Scania S/R with a Smart Dash Advanced interior (12.9"): the game gives it the 10.1"'s script, so the mod

@@ -53,10 +53,13 @@ impl ScreenLayout {
     }
 }
 
+/// `screen_layouts.txt` as WestPlay was built with it: WestPlay's mod keeps a copy, and is made again once it differs
+/// (a script added to a layout: the Renault E-Tech T's to the T 2024's, owner 2026-11-02).
+pub const SCREEN_LAYOUTS_TEXT: &str = include_str!("../screen_layouts.txt");
+
 /// All screen layouts, in `screen_layouts.txt` order (the order defines the texture sizes).
 pub fn screen_layouts() -> &'static [ScreenLayout] {
-    static LAYOUTS: LazyLock<Vec<ScreenLayout>> =
-        LazyLock::new(|| parse_screen_layouts(include_str!("../screen_layouts.txt")));
+    static LAYOUTS: LazyLock<Vec<ScreenLayout>> = LazyLock::new(|| parse_screen_layouts(SCREEN_LAYOUTS_TEXT));
     &LAYOUTS
 }
 
@@ -182,34 +185,11 @@ pub const TRUCK_SUPPORTED: u32 = 1;
 pub const TRUCK_UNSUPPORTED: u32 = 2;
 
 /// The trucks WestPlay shows in on a layout that trucks it doesn't support share (SDK model ids, without the
-/// `vehicle.` prefix): most trucks' interiors name the stock GPS screen (`generic`, `ui/gps.sii`), and of
-/// those only the Scania S and R's and the S BEV's (the S's 7" display) and the classic Volvo FH16's are WestPlay's in
-/// ETS2. In ATS every truck whose interiors name it is (the Cascadias' analogue interiors too), shown on the 7"'s part of it until each
-/// truck's display is measured. The other layouts are their own trucks' scripts.
+/// `vehicle.` prefix). The stock GPS screen (`generic`, `ui/gps.sii`), which most trucks' interiors name, isn't one:
+/// WestPlay's in every truck that has it (owner 2026-11-02: "every truck with a screen"), on the 7" Scania's part of it
+/// until each truck's display is measured (the cab's Adjust Screen fits it meanwhile). The other layouts are their own
+/// trucks' scripts.
 const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
-    (
-        "generic",
-        &[
-            "scania.s_2016",
-            "scania.r_2016",
-            "scania.s_2024e",
-            // The classic Volvo FH16 (2009), its pop-up screen (owner 2026-11-02), on the 7"'s part until it's measured.
-            "volvo.fh16",
-            "freightliner.cascadia2019",
-            "freightliner.cascadia2024",
-            "intnational.9900i",
-            "intnational.lonestar",
-            "intnational.lt",
-            "kenworth.t680",
-            "kenworth.w900",
-            "mack.anthem",
-            "mack.pinnacle",
-            "peterbilt.389",
-            "peterbilt.579",
-            "volvo.vnl",
-            "westernstar.49x",
-        ],
-    ),
     // The game's toy GPS (Cabin Accessories), WestPlay's only on Oyuncuyusbis' Setra S 516 HD/2's tablet part.
     ("setra-516", &["setra516hd"]),
 ];
@@ -1196,18 +1176,19 @@ mod tests {
     }
 
     #[test]
-    fn the_stock_screen_is_westplays_only_in_the_scania_s_and_r() {
+    fn the_stock_screen_is_westplays_in_every_truck_that_has_it() {
         let layout = |id: &str| screen_layouts().iter().position(|layout| layout.id == id).unwrap();
         let generic = layout("generic");
-        assert!(screen_supported(generic, "vehicle.scania.s_2016"));
-        assert!(screen_supported(generic, "scania.r_2016"));
-        assert!(screen_supported(generic, "vehicle.scania.s_2024e"));
-        // The classic FH16 (2009), not its 2012 successor.
-        assert!(screen_supported(generic, "vehicle.volvo.fh16"));
-        // The Actros MP4 (and the game's other trucks) name the same stock screen.
-        assert!(!screen_supported(generic, "vehicle.mercedes.actros2014"));
-        assert!(!screen_supported(generic, "vehicle.volvo.fh16_2012"));
-        assert!(!screen_supported(generic, ""));
+        for truck in [
+            "vehicle.scania.s_2016",
+            "scania.r_2016",
+            "vehicle.volvo.fh16",
+            "vehicle.mercedes.actros2014",
+            "vehicle.volvo.fh16_2012",
+            "vehicle.kenworth.w900",
+        ] {
+            assert!(screen_supported(generic, truck), "{truck}");
+        }
         // A truck's own layout is its own.
         assert!(screen_supported(layout("daf-2021"), "vehicle.daf.2021"));
         assert!(screen_supported(layout("iveco-sway"), "vehicle.iveco.sway"));

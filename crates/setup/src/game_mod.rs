@@ -394,10 +394,16 @@ pub fn mod_screens_current(screen_mods: &GameFiles, built: &Path) -> bool {
 pub fn layouts_current(built: &Path) -> bool {
     let Ok(archive) = Archive::open(built) else { return false };
     let ours = GameFiles::new(vec![Mount::Archive(archive)]);
-    screen_layouts()
-        .iter()
-        .all(|layout| ours.read(&format!("{SCREEN_DIR}/{}.mat", texture_name(layout))).ok().flatten().is_some())
+    // The layouts as it was made with them: a script added to one is in it only once it's made again.
+    let listed = ours.read(LAYOUTS_FILE).ok().flatten();
+    listed.as_deref() == Some(westplay_shared::SCREEN_LAYOUTS_TEXT.as_bytes())
+        && screen_layouts()
+            .iter()
+            .all(|layout| ours.read(&format!("{SCREEN_DIR}/{}.mat", texture_name(layout))).ok().flatten().is_some())
 }
+
+/// The screen layouts a mod was made with, in it (`screen_layouts.txt`'s copy).
+const LAYOUTS_FILE: &str = "westplay/screen_layouts.txt";
 
 /// The quoted value of a definition's one `name:` line (`gps_path: "/ui/gps.sii"`, however spaced); `None` without
 /// one, or with more than one.
@@ -715,6 +721,7 @@ pub fn build_with(
     files.push((format!("{SCREEN_DIR}/{mark}.dds"), transparent_dds(CAB_MARK_WIDTH, CAB_MARK_HEIGHT)));
     files.push((cab_mark::LIST.to_owned(), cab_marks.list().into_bytes()));
     files.push((SPLIT_FILE.to_owned(), split().id().as_bytes().to_vec()));
+    files.push((LAYOUTS_FILE.to_owned(), westplay_shared::SCREEN_LAYOUTS_TEXT.as_bytes().to_vec()));
     files.extend(cab_marks.scripts.iter().cloned());
     built.cab_marks = cab_marks.scripts.len();
     // The 7" screen at a size it shows sharp, if its interiors are as read (else the game's size stays, and
