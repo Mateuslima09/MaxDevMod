@@ -93,3 +93,15 @@ export function useOemStrip(): OemStripId | null {
   const mode = useCabin((state) => state.oemMode)
   return resolveOemStrip(mode, useScreenProfile().oemStrip)
 }
+
+/**
+ * The split screen as shown now: the half the game's map is in (`mapLeft`, `mapRight`), WestPlay in the other, or
+ * `null` with WestPlay on the whole screen (the split screen not set, not picked in the sidebar, on the tablet, which
+ * has no map under it, or the screen handed to the truck).
+ */
+export function useSplitShown(): 'mapLeft' | 'mapRight' | null {
+  const split = useCabin((state) => state.split)
+  const shown = useCabin((state) => state.splitShown && !state.truckScreen)
+  const tablet = useLive((state) => state.screenLayout === 'tablet')
+  return split !== 'off' && shown && !tablet ? split : null
+}

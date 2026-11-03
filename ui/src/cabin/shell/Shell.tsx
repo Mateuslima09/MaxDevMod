@@ -1,6 +1,6 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
 import { isInHost } from '../../shared/host'
-import { useLook, useLookChanges, useOemStrip, useScreenFit, useScreenProfile } from '../state/hooks'
+import { useLook, useLookChanges, useOemStrip, useScreenFit, useScreenProfile, useSplitShown } from '../state/hooks'
 import { announceFit, fitStyle, type ScreenFit } from '../state/screenFit'
 import { usePreparedIcons } from '../state/looks'
 import { frameInsets, NO_INSETS, OEM_STRIPS } from '../state/oem'
@@ -42,11 +42,7 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   const { key: fitKey, fit } = useScreenFit()
   const handedOver = useCabin((state) => state.truckScreen)
   // The split screen, shown: WestPlay in its half, the game's map (squeezed into the other by the mod) beside it.
-  // Not on the tablet (no map under it), nor handed to the truck.
-  const split = useCabin((state) => state.split)
-  const splitShown = useCabin((state) => state.splitShown)
-  const shownLayout = useLive((state) => state.screenLayout)
-  const halved = split !== 'off' && splitShown && shownLayout !== 'tablet' && !handedOver ? split : null
+  const halved = useSplitShown()
   useFittedRoot(fit, handedOver, halved)
   // The phones' Adjust Screen shows what this screen's is (state/screenFit.ts).
   useEffect(() => announceFit(fitKey, fit), [fitKey, fit])

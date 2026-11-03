@@ -21,6 +21,12 @@
   container: widgets / size;
 }
 
+/* In its half of the split screen (Dashboard.tsx): no map, the widgets across the half. */
+.screen.dashboard.split .widgets {
+  width: 100%;
+  flex: 1;
+}
+
 /* No widget to show (Dashboard.tsx): the map takes the whole width. */
 .widgets[hidden] {
   display: none;
