@@ -5,7 +5,7 @@ import type { Strings } from '../state/strings'
  * The game's weather, for the Dashboard's weather widget, as CarPlay's: where the truck is (the nearest
  * city) and the weather there, with its symbol. The game has two weathers, clear and rain, and turns from
  * one to the other over about a minute (the host reads both: crates/host weather.rs). It has no
- * temperature, so none is shown.
+ * temperature: the widgets' is an estimate (temperature.ts).
  */
 export interface WeatherView {
   place: string | null

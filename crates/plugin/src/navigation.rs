@@ -12,6 +12,9 @@
 //! - the routing mode at `+0x1C8`: a job's (1-4, 6, 7) is kept; otherwise waypoints alone are mode 5, and no
 //!   route at all mode 0. Without a job, the last waypoint is where the route ends.
 //!
+//! (Those are 1.61's: ATS 1.62 has them all 0x10 on. They're read from the "set targets" function itself:
+//! westplay_shared::navigator.)
+//!
 //! Its "set targets" function (`navigator, mode, four lists`) copies the lists in and plans the route again;
 //! a list passed as the navigator's own is left as it is. Map nodes come from the game's node table by
 //! uid (the function the `goto` console command uses). The game allows ten waypoints.
@@ -22,6 +25,7 @@
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
+use westplay_shared::navigator::{NavigatorLists, find_set_targets};
 use westplay_shared::{RouteAction, RouteAnswer};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 
@@ -29,11 +33,6 @@ use crate::{bridge, log};
 
 /// The game's limit on waypoints.
 const MAX_WAYPOINTS: u64 = 10;
-/// Offsets in the navigator.
-const MODE: usize = 0x1c8;
-const ROUTE: usize = 0x1f8;
-const AVOID: usize = 0x220;
-const WAYPOINTS: usize = 0x248;
 /// More targets than a route can hold: a count past this is a misread.
 const MAX_TARGETS: u64 = 64;
 
@@ -56,6 +55,8 @@ struct Game {
     /// The global holding the game's core object (the navigator's owner, and the node table's).
     core: *const *mut u8,
     navigator: usize,
+    /// The navigator's mode and lists, where its "set targets" names them (ATS 1.62 moved them).
+    lists: NavigatorLists,
     set_targets: SetTargets,
     find_node: FindNode,
 }
@@ -123,10 +124,13 @@ unsafe fn change(game: &Game, action: RouteAction, uid: u64, vias: &[u64]) -> Ro
                 node => through.push(target(node as usize)),
             }
         }
-        let (Some(route), Some(waypoints)) = (targets(navigator.add(ROUTE)), targets(navigator.add(WAYPOINTS))) else {
+        let lists = game.lists;
+        let (Some(route), Some(waypoints)) =
+            (targets(navigator.add(lists.route)), targets(navigator.add(lists.waypoints)))
+        else {
             return RouteAnswer::Unexpected;
         };
-        let mode = (navigator.add(MODE) as *const u32).read();
+        let mode = (navigator.add(lists.mode) as *const u32).read();
         let planned = match action {
             RouteAction::Follow => follow(mode, &through, node),
             _ => {
@@ -146,7 +150,7 @@ unsafe fn change(game: &Game, action: RouteAction, uid: u64, vias: &[u64]) -> Ro
             Ok(planned) => planned,
             Err(answer) => return answer,
         };
-        let allocator = (navigator.add(WAYPOINTS) as *const List).read().allocator;
+        let allocator = (navigator.add(lists.waypoints) as *const List).read().allocator;
         let list = |targets: &[Target]| List {
             allocator,
             data: if targets.is_empty() { std::ptr::null() } else { targets.as_ptr() },
@@ -158,7 +162,7 @@ unsafe fn change(game: &Game, action: RouteAction, uid: u64, vias: &[u64]) -> Ro
             mode,
             &list(&[]),
             &list(&route),
-            navigator.add(AVOID) as *const List,
+            navigator.add(lists.avoid) as *const List,
             &list(&waypoints),
         );
     }
@@ -308,10 +312,10 @@ unsafe fn locate() -> Option<Game> {
         // SAFETY: `base` is the game's executable, as mapped.
         let image = unsafe { Image::of(base) }?;
         let (core, navigator) = image.navigator()?;
-        let set_targets = image.unique(SET_TARGETS)?;
+        let (set_targets, lists) = find_set_targets(image.code()).map(|(at, lists)| (image.text.0 + at, lists))?;
         let find_node = image.find_node()?;
         log!(
-            "waypoint: game code found: core {:#x}, navigator +{navigator:#x}, set targets {:#x}, find node {:#x}",
+            "waypoint: game code found: core {:#x}, navigator +{navigator:#x}, set targets {:#x}, find node {:#x}, {lists:x?}",
             core - base,
             set_targets - base,
             find_node - base
@@ -321,20 +325,13 @@ unsafe fn locate() -> Option<Game> {
         let (set_targets, find_node) = unsafe {
             (std::mem::transmute::<usize, SetTargets>(set_targets), std::mem::transmute::<usize, FindNode>(find_node))
         };
-        Some(Game { core: core as *const *mut u8, navigator, set_targets, find_node })
+        Some(Game { core: core as *const *mut u8, navigator, lists, set_targets, find_node })
     })();
     if found.is_none() {
         log!("waypoint: the game's waypoint code isn't the version WestPlay knows; waypoints can't be added");
     }
     found
 }
-
-/// The start of the navigator's "set targets": it saves its registers, keeps the mode
-/// (`mov [rcx+1C8h], edx`) and starts on the first list (`add rcx, 1D0h`).
-const SET_TARGETS: &[u8] = &[
-    0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xf9, 0x89,
-    0x91, 0xc8, 0x01, 0x00, 0x00, 0x48, 0x81, 0xc1, 0xd0, 0x01, 0x00, 0x00,
-];
 
 /// The start of a lookup by uid in a table at `+0x38` of its object (`lea rbx, [rcx+38h]`).
 const FIND_IN_TABLE_38: &[u8] = &[
@@ -443,13 +440,6 @@ impl Image {
     pub(crate) fn unique_masked(&self, pattern: &[Option<u8>]) -> Option<usize> {
         let fits = |window: &[u8]| window.iter().zip(pattern).all(|(byte, wanted)| wanted.is_none_or(|w| *byte == w));
         let mut found = self.code().windows(pattern.len()).enumerate().filter(|(_, w)| fits(w));
-        let (at, _) = found.next()?;
-        found.next().is_none().then_some(self.text.0 + at)
-    }
-
-    /// Where `pattern` starts in the code, if exactly once.
-    fn unique(&self, pattern: &[u8]) -> Option<usize> {
-        let mut found = self.code().windows(pattern.len()).enumerate().filter(|(_, w)| *w == pattern);
         let (at, _) = found.next()?;
         found.next().is_none().then_some(self.text.0 + at)
     }

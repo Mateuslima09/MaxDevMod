@@ -31,6 +31,7 @@ use crate::maps::PlayedMap;
 use westplay_mapdata::junctions::{self, Junctions, Maneuver};
 use westplay_setup::map;
 use westplay_shared::BridgeMapping;
+use westplay_shared::navigator::find_set_targets;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -43,22 +44,24 @@ const READ_EVERY: Duration = Duration::from_millis(500);
 
 const NAVIGATOR_ROUTE_ID: usize = 0x10;
 const NAVIGATOR_HOLDER: usize = 0x28;
-const NAVIGATOR_NEXT_ID: usize = 0x190;
-const NAVIGATOR_NEXT: usize = 0x198;
 const HOLDER_ROUTE: usize = 0x78;
-/// The navigator's waypoints, in the order they were put in (an array: its entries at `+0x08`, their count at
-/// `+0x10`); each entry 0x18 bytes, its map node's pointer at `+0x08` (the destination isn't among them).
-const NAVIGATOR_WAYPOINTS: usize = 0x248;
 const WAYPOINT_SIZE: usize = 0x18;
 const WAYPOINT_NODE: usize = 0x08;
 /// More waypoints than the game takes: a count past this is a layout misread.
 const MAX_WAYPOINTS: usize = 64;
-const NODE_SIZE: usize = 0x30;
 /// A route node's distance left to the destination (a float).
 const ROUTE_NODE_DISTANCE: usize = 0x24;
 const MAP_NODE_SIZE: usize = 0x38;
 /// More nodes than any route across the map has: a count past this is a layout misread.
 const MAX_NODES: usize = 200_000;
+/// The node sizes tried when a route doesn't read as its version's (1.61's 0x30, 1.62's 0x38: a later one's,
+/// owner 2026-11-03: "not to change it at every update"). None smaller than what a node is read for (its distance
+/// left, the last of it).
+const NODE_SIZES: std::ops::RangeInclusive<usize> = ROUTE_NODE_DISTANCE + 4..=0x80;
+/// Where in the navigator the next node's pair (its route's id, then the node) is looked for.
+const NEXT_SEARCH: std::ops::Range<usize> = 0x100..0x400;
+/// The fewest map nodes a route needs for its layout to be taken from it: a short one reads in several.
+const MIN_DETECT_NODES: usize = 8;
 
 /// Where the game keeps its navigator: a global (its offset in the executable) pointing to an object, and
 /// the navigator's offset in it.
@@ -66,6 +69,39 @@ const MAX_NODES: usize = 200_000;
 pub struct Layout {
     pub global_rva: usize,
     pub navigator: usize,
+    /// What the game's version moved (ATS 1.62).
+    pub fields: Fields,
+}
+
+/// The navigator's fields that ATS 1.62 moved 0x10 on, and its route's nodes, which grew (owner 2026-11-03: read
+/// in the running game, a route of 456 nodes): which, from where the game's "set targets" keeps the routing mode
+/// (westplay_shared::navigator).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fields {
+    /// The navigator's waypoints, in the order they were put in (an array: its entries at `+0x08`, their count at
+    /// `+0x10`); each entry 0x18 bytes, its map node's pointer at `+0x08` (the destination isn't among them).
+    pub waypoints: usize,
+    /// The next node ahead: the route it's of (its id) and where it is.
+    pub next_id: usize,
+    pub next: usize,
+    /// A route node's size in the holder's array.
+    pub node_size: usize,
+}
+
+impl Fields {
+    /// ETS2 and ATS 1.61's, the routing mode at `+0x1C8`.
+    pub const V1_61: Fields = Fields { waypoints: 0x248, next_id: 0x190, next: 0x198, node_size: 0x30 };
+    /// ATS 1.62's, the mode at `+0x1D8`: 0x10 on, and 0x38-byte nodes.
+    pub const V1_62: Fields = Fields { waypoints: 0x258, next_id: 0x1a0, next: 0x1a8, node_size: 0x38 };
+
+    /// The fields of the version whose navigator keeps its mode at `mode` (`None`: neither's).
+    fn of_mode(mode: usize) -> Option<Fields> {
+        match mode {
+            0x1c8 => Some(Self::V1_61),
+            0x1d8 => Some(Self::V1_62),
+            _ => None,
+        }
+    }
 }
 
 /// One of the route's map nodes: where it is, which way it points (the way of the roads through it,
@@ -135,15 +171,19 @@ impl RouteWatch {
                 if game.as_ref().map(|game| game.process.pid) != Some(pid) {
                     game = None;
                     let retry = failed.is_none_or(|(failed_pid, at)| failed_pid != pid || at.elapsed() >= RETRY_AFTER);
+                    reader.new_game();
                     if pid != 0 && retry {
                         game = Game::open(pid);
                         failed = game.is_none().then(|| (pid, Instant::now()));
                     }
                 }
                 let updates = match &game {
-                    Some(game) => {
-                        reader.poll(&game.process, game.process.base + game.layout.global_rva, game.layout.navigator)
-                    }
+                    Some(game) => reader.poll(
+                        &game.process,
+                        game.process.base + game.layout.global_rva,
+                        game.layout.navigator,
+                        game.layout.fields,
+                    ),
                     None => reader.lost(),
                 };
                 for update in updates {
@@ -178,6 +218,10 @@ const RETRY_AFTER: Duration = Duration::from_secs(30);
 /// for another's (the game's own route ids may come again).
 #[derive(Default)]
 struct RouteReader {
+    /// The game's route layout, once a route has shown it (`detect_fields`); the version's until then.
+    fields: Option<Fields>,
+    /// The route it was last looked for in, so a route it can't be found in isn't searched again and again.
+    detected_for: Option<RouteKey>,
     /// The route followed: which it is in the game's memory, its map nodes, and for each of its nodes in
     /// memory, the map node at or after it.
     route: Option<(RouteKey, Vec<RouteNode>, Vec<usize>)>,
@@ -191,15 +235,34 @@ type RouteKey = (u32, usize, usize);
 
 impl RouteReader {
     /// What changed since the last poll, read from the navigator (`navigator` bytes into the object the
-    /// global at `global` points to).
-    fn poll(&mut self, memory: &impl Memory, global: usize, navigator: usize) -> Vec<RouteUpdate> {
-        let Some(header) = read_header(memory, global, navigator) else { return self.lost() };
+    /// global at `global` points to): laid out as its route showed (`detect_fields`), or else as `version` (the
+    /// version's fields, from its code).
+    fn poll(&mut self, memory: &impl Memory, global: usize, navigator: usize, version: Fields) -> Vec<RouteUpdate> {
+        let fields = self.fields.unwrap_or(version);
+        let Some(header) = read_header(memory, global, navigator, fields) else { return self.lost() };
         let key = (header.id, header.array, header.count);
         let mut updates = Vec::new();
         if self.route.as_ref().map(|(seen, _, _)| *seen) != Some(key) {
+            let (first, again) = (read_nodes(memory, &header), read_nodes(memory, &header));
+            // The layout from the route itself: on the first route seen, and again on one that doesn't read as it.
+            // Taken only when the route shows exactly one (`detect_fields`); then the route is read again with it.
+            if (self.fields.is_none() || first.is_none()) && self.detected_for != Some(key) {
+                self.detected_for = Some(key);
+                if let Some(found) = detect_fields(memory, global, navigator, fields) {
+                    if self.fields != Some(found) {
+                        log!(
+                            "route: the game's route laid out as {found:x?}, from its memory (its version's: {version:x?})"
+                        );
+                    }
+                    self.fields = Some(found);
+                    if found != fields {
+                        return self.poll(memory, global, navigator, version);
+                    }
+                }
+            }
             // A new route that doesn't read (it doesn't add up): no route. One that reads differently twice
             // (still being written): looked at again next time.
-            let (Some(first), Some(again)) = (read_nodes(memory, &header), read_nodes(memory, &header)) else {
+            let (Some(first), Some(again)) = (first, again) else {
                 return self.lost();
             };
             if first != again {
@@ -209,7 +272,7 @@ impl RouteReader {
             self.number = self.number.wrapping_add(1);
             self.sent_next = None;
             // Its waypoints with it: the game plans anew as they change.
-            let waypoints = read_waypoints(memory, global, navigator).unwrap_or_default();
+            let waypoints = read_waypoints(memory, global, navigator, fields.waypoints).unwrap_or_default();
             updates.push(RouteUpdate::Route { id: self.number, nodes: nodes.clone(), waypoints });
             self.route = Some((key, nodes, after));
         }
@@ -220,6 +283,12 @@ impl RouteReader {
             updates.push(RouteUpdate::Next(next));
         }
         updates
+    }
+
+    /// Another game process: its layout found again (another version may be running).
+    fn new_game(&mut self) {
+        self.fields = None;
+        self.detected_for = None;
     }
 
     /// No route (or no game): says so once.
@@ -250,9 +319,12 @@ struct Header {
     array: usize,
     count: usize,
     next_index: usize,
+    node_size: usize,
 }
 
-fn read_header(memory: &impl Memory, global: usize, navigator: usize) -> Option<Header> {
+/// The navigator's route as it stands, whatever its version: the navigator's address, the route's id, and where
+/// its nodes are and how many (none of which 1.62 moved).
+fn route_of(memory: &impl Memory, global: usize, navigator: usize) -> Option<(usize, u32, usize, usize)> {
     let owner = memory.u64_at(global)? as usize;
     if owner == 0 {
         return None;
@@ -269,20 +341,92 @@ fn read_header(memory: &impl Memory, global: usize, navigator: usize) -> Option<
     if array == 0 || count == 0 || count > MAX_NODES {
         return None;
     }
-    let end = array.checked_add(count * NODE_SIZE)?;
-    let next_id = memory.u64_at(navigator.checked_add(NAVIGATOR_NEXT_ID)?)? as u32;
-    let next = memory.u64_at(navigator.checked_add(NAVIGATOR_NEXT)?)? as usize;
+    Some((navigator, id, array, count))
+}
+
+fn read_header(memory: &impl Memory, global: usize, navigator: usize, fields: Fields) -> Option<Header> {
+    let node_size = fields.node_size;
+    let (navigator, id, array, count) = route_of(memory, global, navigator)?;
+    let end = array.checked_add(count.checked_mul(node_size)?)?;
+    let next_id = memory.u64_at(navigator.checked_add(fields.next_id)?)? as u32;
+    let next = memory.u64_at(navigator.checked_add(fields.next)?)? as usize;
     // The next node ahead: a node of this route (the pointer may still be an old route's).
-    let in_route = next >= array && next < end && (next - array).is_multiple_of(NODE_SIZE);
-    let next_index = if next_id == id && in_route { (next - array) / NODE_SIZE } else { 0 };
-    Some(Header { id, array, count, next_index })
+    let in_route = next >= array && next < end && (next - array).is_multiple_of(node_size);
+    let next_index = if next_id == id && in_route { (next - array) / node_size } else { 0 };
+    Some(Header { id, array, count, next_index, node_size })
+}
+
+/// The route's layout, from the route in the game's memory (owner 2026-11-03: a later version's found by itself, as
+/// 1.62's was by hand): the one node size its nodes all read in (each a map node or a junction point, the map nodes'
+/// distances left to go never growing, at least [`MIN_DETECT_NODES`] of them), and the one place in the navigator
+/// with the route's id and then a pointer to one of those nodes (the next ahead). Where several fit, the version's
+/// (`version`) if it's one of them, or else nothing; no next node's pair found, the version's. `None` without a route
+/// to tell, or one telling no one layout: the version's stands, and nothing is guessed.
+fn detect_fields(memory: &impl Memory, global: usize, navigator: usize, version: Fields) -> Option<Fields> {
+    let (navigator, id, array, count) = route_of(memory, global, navigator)?;
+    let pick = |fits: Vec<usize>, versions: usize| match fits[..] {
+        [one] => Some(one),
+        _ if fits.contains(&versions) => Some(versions),
+        _ => None,
+    };
+    let sizes = NODE_SIZES.step_by(8).filter(|&size| nodes_add_up(memory, array, count, size)).collect();
+    let node_size = pick(sizes, version.node_size)?;
+    let end = array.checked_add(count.checked_mul(node_size)?)?;
+    let mut block = vec![0u8; NEXT_SEARCH.end - NEXT_SEARCH.start + 8];
+    let next_id = if memory.read(navigator.checked_add(NEXT_SEARCH.start)?, &mut block) {
+        let word = |at: usize| u64::from_le_bytes(block[at..at + 8].try_into().unwrap()) as usize;
+        let pairs = (0..NEXT_SEARCH.end - NEXT_SEARCH.start)
+            .step_by(8)
+            .filter(|&at| {
+                let next = word(at + 8);
+                word(at) as u32 == id && next >= array && next < end && (next - array).is_multiple_of(node_size)
+            })
+            .map(|at| NEXT_SEARCH.start + at)
+            .collect();
+        pick(pairs, version.next_id).unwrap_or(version.next_id)
+    } else {
+        version.next_id
+    };
+    Some(Fields { waypoints: version.waypoints, next_id, next: next_id + 8, node_size })
+}
+
+/// Whether the route's `count` nodes at `array` read as nodes of `size`: each a map node (0, its map node there,
+/// with an id) or a junction point (1), the map nodes' distances left never growing, and enough of them to tell.
+fn nodes_add_up(memory: &impl Memory, array: usize, count: usize, size: usize) -> bool {
+    let Some(len) = count.checked_mul(size) else { return false };
+    let mut raw = vec![0u8; len];
+    if !memory.read(array, &mut raw) {
+        return false;
+    }
+    let kind = |node: &[u8]| u32::from_le_bytes(node[0..4].try_into().unwrap());
+    // The kinds first (one read of the whole route): most wrong sizes go here.
+    if !raw.chunks_exact(size).all(|node| matches!(kind(node), 0 | 1)) {
+        return false;
+    }
+    let mut map_nodes = 0;
+    let mut left = f32::INFINITY;
+    for node in raw.chunks_exact(size).filter(|node| kind(node) == 0) {
+        let distance = f32::from_le_bytes(node[ROUTE_NODE_DISTANCE..ROUTE_NODE_DISTANCE + 4].try_into().unwrap());
+        // Never growing along the route (a metre's leeway: the game's own rounding).
+        if !distance.is_finite() || distance < 0.0 || distance > left + 1.0 {
+            return false;
+        }
+        left = distance;
+        let pointer = u64::from_le_bytes(node[8..16].try_into().unwrap()) as usize;
+        let mut map_node = [0u8; MAP_NODE_SIZE];
+        if !memory.read(pointer, &mut map_node) || map_node_of(&map_node).uid == 0 {
+            return false;
+        }
+        map_nodes += 1;
+    }
+    map_nodes >= MIN_DETECT_NODES
 }
 
 /// The navigator's waypoints: their map nodes' uids, in the order they were put in; `None` if what's read
 /// doesn't add up.
-fn read_waypoints(memory: &impl Memory, global: usize, navigator: usize) -> Option<Vec<u64>> {
+fn read_waypoints(memory: &impl Memory, global: usize, navigator: usize, waypoints: usize) -> Option<Vec<u64>> {
     let owner = memory.u64_at(global)? as usize;
-    let list = owner.checked_add(navigator)?.checked_add(NAVIGATOR_WAYPOINTS)?;
+    let list = owner.checked_add(navigator)?.checked_add(waypoints)?;
     let count = memory.u64_at(list.checked_add(0x10)?)? as usize;
     if count == 0 {
         return Some(Vec::new());
@@ -307,14 +451,14 @@ fn read_waypoints(memory: &impl Memory, global: usize, navigator: usize) -> Opti
 /// The route's map nodes, and for each of its nodes in memory, the map node at or after it (where the truck
 /// is along the map nodes when it's at that node); `None` without any, or if what's read doesn't add up.
 fn read_nodes(memory: &impl Memory, header: &Header) -> Option<(Vec<RouteNode>, Vec<usize>)> {
-    let mut raw = vec![0u8; header.count * NODE_SIZE];
+    let mut raw = vec![0u8; header.count * header.node_size];
     if !memory.read(header.array, &mut raw) {
         return None;
     }
     let mut nodes = Vec::new();
     // For each node in memory, the map node before which it lies.
     let mut before = Vec::with_capacity(header.count);
-    for node in raw.chunks_exact(NODE_SIZE) {
+    for node in raw.chunks_exact(header.node_size) {
         before.push(nodes.len());
         match u32::from_le_bytes(node[0..4].try_into().unwrap()) {
             0 => {
@@ -580,7 +724,9 @@ fn locate(text: &Section, rdata: &Section) -> Option<Layout> {
             let Some(getter) = site.checked_sub(back).and_then(lea_target) else { continue };
             let Some(start) = getter.checked_sub(text.rva) else { continue };
             if let Some(layout) = read_getter(code, start, getter) {
-                return Some(layout);
+                // The version's fields, from where the game's "set targets" keeps the mode (1.61's without it).
+                let fields = find_set_targets(code).and_then(|(_, lists)| Fields::of_mode(lists.mode));
+                return Some(Layout { fields: fields.unwrap_or(layout.fields), ..layout });
             }
         }
     }
@@ -598,7 +744,7 @@ fn read_getter(code: &[u8], start: usize, rva: usize) -> Option<Layout> {
     let global_rva = (rva + 11).wrapping_add_signed(i32::from_le_bytes(b[7..11].try_into().unwrap()) as isize);
     let at = (11..b.len() - 7).find(|&i| b[i..i + 3] == [0x48, 0x8d, 0x88])?;
     let navigator = u32::from_le_bytes(b[at + 3..at + 7].try_into().unwrap()) as usize;
-    Some(Layout { global_rva, navigator })
+    Some(Layout { global_rva, navigator, fields: Fields::V1_61 })
 }
 
 #[cfg(test)]
@@ -637,28 +783,42 @@ mod tests {
     const HOLDER: usize = 0x20_000;
     const ARRAY: usize = 0x30_000;
     const MAP_NODES: usize = 0x40_000;
+    const NAVIGATOR_WAYPOINTS: usize = Fields::V1_61.waypoints;
+    const NAVIGATOR_NEXT_ID: usize = Fields::V1_61.next_id;
+    const NAVIGATOR_NEXT: usize = Fields::V1_61.next;
+    const NODE_SIZE: usize = Fields::V1_61.node_size;
 
     /// A navigator with a route of `kinds` (0 a map node, 1 a junction point), id `id`, the next node ahead
-    /// at index `next` (of the route `next_id`).
+    /// at index `next` (of the route `next_id`), laid out as 1.61's.
     fn navigator(id: u32, kinds: &[u32], next: usize, next_id: u32) -> FakeMemory {
+        navigator_in(Fields::V1_61, id, kinds, next, next_id)
+    }
+
+    /// As [`navigator`], laid out as `fields`; each map node's distance left 10 m less than the one before's.
+    fn navigator_in(fields: Fields, id: u32, kinds: &[u32], next: usize, next_id: u32) -> FakeMemory {
+        let size = fields.node_size;
         let mut memory = FakeMemory::default();
         memory.blocks.insert(GLOBAL, (OWNER as u64).to_le_bytes().to_vec());
-        let mut owner = vec![0u8; NAVIGATOR + NAVIGATOR_NEXT + 8];
+        let mut owner = vec![0u8; NAVIGATOR + NEXT_SEARCH.end + 0x10];
         let put = |bytes: &mut Vec<u8>, at: usize, value: u64| bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
         put(&mut owner, NAVIGATOR + NAVIGATOR_ROUTE_ID, u64::from(id));
         put(&mut owner, NAVIGATOR + NAVIGATOR_HOLDER, HOLDER as u64);
-        put(&mut owner, NAVIGATOR + NAVIGATOR_NEXT_ID, u64::from(next_id));
-        put(&mut owner, NAVIGATOR + NAVIGATOR_NEXT, (ARRAY + next * NODE_SIZE) as u64);
+        put(&mut owner, NAVIGATOR + fields.next_id, u64::from(next_id));
+        put(&mut owner, NAVIGATOR + fields.next, (ARRAY + next * size) as u64);
         memory.blocks.insert(OWNER, owner);
         let mut holder = vec![0u8; HOLDER_ROUTE + 0x18];
         put(&mut holder, HOLDER_ROUTE + 8, ARRAY as u64);
         put(&mut holder, HOLDER_ROUTE + 0x10, kinds.len() as u64);
         memory.blocks.insert(HOLDER, holder);
-        let mut array = vec![0u8; kinds.len() * NODE_SIZE];
+        let mut array = vec![0u8; kinds.len() * size];
         for (index, &kind) in kinds.iter().enumerate() {
-            let node = &mut array[index * NODE_SIZE..(index + 1) * NODE_SIZE];
+            let node = &mut array[index * size..(index + 1) * size];
             node[0..4].copy_from_slice(&kind.to_le_bytes());
             node[8..16].copy_from_slice(&((MAP_NODES + index * 0x100) as u64).to_le_bytes());
+            let left = ((kinds.len() - index) * 10) as f32;
+            node[ROUTE_NODE_DISTANCE..ROUTE_NODE_DISTANCE + 4].copy_from_slice(&left.to_le_bytes());
+            // Past 1.61's 0x30 bytes, what a later version keeps there: not a node's kind.
+            node[NODE_SIZE.min(size)..].fill(0xee);
             let mut map_node = vec![0u8; MAP_NODE_SIZE];
             map_node[0..4].copy_from_slice(&((index as i32) * 256 * 10).to_le_bytes());
             map_node[0x10..0x14].copy_from_slice(&1.0f32.to_le_bytes());
@@ -670,7 +830,7 @@ mod tests {
     }
 
     fn poll(reader: &mut RouteReader, memory: &FakeMemory) -> Vec<RouteUpdate> {
-        reader.poll(memory, GLOBAL, NAVIGATOR)
+        reader.poll(memory, GLOBAL, NAVIGATOR, Fields::V1_61)
     }
 
     fn summary(updates: &[RouteUpdate]) -> Vec<String> {
@@ -705,11 +865,13 @@ mod tests {
         let updates = poll(&mut reader, &memory);
         assert!(matches!(&updates[0], RouteUpdate::Route { waypoints, .. } if waypoints == &[2, 1]), "{updates:?}");
         // A list that can't be read: none known (not an empty list).
-        assert_eq!(read_waypoints(&navigator(77, &[0], 0, 77), GLOBAL, NAVIGATOR), None);
+        let mut unread = navigator(77, &[0], 0, 77);
+        unread.blocks.get_mut(&OWNER).unwrap().truncate(NAVIGATOR + NAVIGATOR_WAYPOINTS);
+        assert_eq!(read_waypoints(&unread, GLOBAL, NAVIGATOR, NAVIGATOR_WAYPOINTS), None);
         // An empty one: none.
         let mut empty = navigator(77, &[0], 0, 77);
         empty.blocks.get_mut(&OWNER).unwrap().resize(NAVIGATOR + NAVIGATOR_WAYPOINTS + 0x18, 0);
-        assert_eq!(read_waypoints(&empty, GLOBAL, NAVIGATOR), Some(Vec::new()));
+        assert_eq!(read_waypoints(&empty, GLOBAL, NAVIGATOR, NAVIGATOR_WAYPOINTS), Some(Vec::new()));
     }
 
     #[test]
@@ -761,12 +923,96 @@ mod tests {
         // No navigator object.
         let mut memory = navigator(4, &[0], 0, 4);
         memory.blocks.insert(GLOBAL, 0u64.to_le_bytes().to_vec());
-        assert!(read_header(&memory, GLOBAL, NAVIGATOR).is_none());
+        assert!(read_header(&memory, GLOBAL, NAVIGATOR, Fields::V1_61).is_none());
         // A count past any real route's.
         let mut memory = navigator(4, &[0], 0, 4);
         let holder = memory.blocks.get_mut(&HOLDER).unwrap();
         holder[HOLDER_ROUTE + 0x10..HOLDER_ROUTE + 0x18].copy_from_slice(&((MAX_NODES + 1) as u64).to_le_bytes());
-        assert!(read_header(&memory, GLOBAL, NAVIGATOR).is_none());
+        assert!(read_header(&memory, GLOBAL, NAVIGATOR, Fields::V1_61).is_none());
+    }
+
+    #[test]
+    fn reads_the_route_where_its_version_keeps_it() {
+        // ATS 1.62: the next node 0x10 on, and nodes of 0x38 bytes.
+        assert_eq!(Fields::of_mode(0x1d8), Some(Fields::V1_62));
+        assert_eq!(Fields::of_mode(0x1c8), Some(Fields::V1_61));
+        assert_eq!(Fields::of_mode(0x1e8), None);
+        let memory = navigator_in(Fields::V1_62, 5, &[0, 1, 0], 2, 5);
+        let header = read_header(&memory, GLOBAL, NAVIGATOR, Fields::V1_62).unwrap();
+        assert_eq!((header.count, header.next_index), (3, 2));
+        let (route, _) = read_nodes(&memory, &header).unwrap();
+        assert_eq!(route.iter().map(|node| node.uid).collect::<Vec<_>>(), [1, 3]);
+        // Its nodes read as 1.61's don't add up.
+        let as_1_61 = read_header(&memory, GLOBAL, NAVIGATOR, Fields::V1_61).unwrap();
+        assert!(read_nodes(&memory, &as_1_61).is_none());
+    }
+
+    /// A route long enough to tell its layout: map nodes with junction points between some.
+    const LONG: [u32; 14] = [0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0];
+
+    #[test]
+    fn finds_the_route_layout_in_the_route_itself() {
+        // 1.61's and 1.62's, whichever version's it was told (the waypoints its: they're the game code's).
+        for fields in [Fields::V1_61, Fields::V1_62] {
+            for told in [Fields::V1_61, Fields::V1_62] {
+                let memory = navigator_in(fields, 9, &LONG, 4, 9);
+                let found = Fields { waypoints: told.waypoints, ..fields };
+                assert_eq!(detect_fields(&memory, GLOBAL, NAVIGATOR, told), Some(found), "{fields:x?} told {told:x?}");
+            }
+        }
+        // A later version's: nodes of 0x48 bytes, the next node's pair further on.
+        let later = Fields { waypoints: 0x268, next_id: 0x1c0, next: 0x1c8, node_size: 0x48 };
+        let memory = navigator_in(later, 9, &LONG, 4, 9);
+        assert_eq!(
+            detect_fields(&memory, GLOBAL, NAVIGATOR, Fields::V1_62),
+            Some(Fields { waypoints: 0x258, ..later })
+        );
+    }
+
+    #[test]
+    fn guesses_nothing_when_the_route_doesnt_tell() {
+        // Too short a route: it reads in several sizes; the version's stands if it's among them, or nothing.
+        let short = navigator_in(Fields::V1_62, 9, &[0, 0, 0], 1, 9);
+        assert_eq!(detect_fields(&short, GLOBAL, NAVIGATOR, Fields::V1_61), None);
+        // A node of neither kind: no size it reads in.
+        let mut kinds = LONG;
+        kinds[5] = 7;
+        assert_eq!(
+            detect_fields(&navigator_in(Fields::V1_62, 9, &kinds, 4, 9), GLOBAL, NAVIGATOR, Fields::V1_62),
+            None
+        );
+        // The distances left growing: not a route.
+        let mut memory = navigator_in(Fields::V1_62, 9, &LONG, 4, 9);
+        let array = memory.blocks.get_mut(&ARRAY).unwrap();
+        let at = 8 * Fields::V1_62.node_size + ROUTE_NODE_DISTANCE;
+        array[at..at + 4].copy_from_slice(&1000.0f32.to_le_bytes());
+        assert_eq!(detect_fields(&memory, GLOBAL, NAVIGATOR, Fields::V1_62), None);
+        // The next node's pair not found (its id another route's): the version's place for it.
+        let memory = navigator_in(Fields::V1_62, 9, &LONG, 4, 8);
+        assert_eq!(
+            detect_fields(&memory, GLOBAL, NAVIGATOR, Fields::V1_61),
+            Some(Fields { node_size: 0x38, ..Fields::V1_61 })
+        );
+        // No route.
+        let mut memory = navigator_in(Fields::V1_62, 9, &LONG, 4, 9);
+        memory.blocks.insert(GLOBAL, 0u64.to_le_bytes().to_vec());
+        assert_eq!(detect_fields(&memory, GLOBAL, NAVIGATOR, Fields::V1_62), None);
+    }
+
+    #[test]
+    fn follows_a_route_laid_out_otherwise_than_its_version_said() {
+        // Told 1.61, the game 1.62's: the route still read, and its progress.
+        let mut reader = RouteReader::default();
+        let memory = navigator_in(Fields::V1_62, 9, &LONG, 4, 9);
+        let updates = reader.poll(&memory, GLOBAL, NAVIGATOR, Fields::V1_61);
+        assert_eq!(summary(&updates), ["route 1: 10 nodes", "next 3"]);
+        assert_eq!(reader.fields, Some(Fields { waypoints: Fields::V1_61.waypoints, ..Fields::V1_62 }));
+        // The next route as found, without looking again.
+        let memory = navigator_in(Fields::V1_62, 10, &LONG, 0, 10);
+        assert_eq!(summary(&reader.poll(&memory, GLOBAL, NAVIGATOR, Fields::V1_61)), ["route 2: 10 nodes", "next 0"]);
+        // Another game: found again.
+        reader.new_game();
+        assert_eq!(reader.fields, None);
     }
 
     #[test]
@@ -793,7 +1039,7 @@ mod tests {
         lea(&mut code, 0x100, 0x1040);
         lea(&mut code, 0x10d, 0x2010);
         let layout = locate(&Section { rva: 0x1000, bytes: &code }, &Section { rva: 0x2000, bytes: &rdata });
-        assert_eq!(layout, Some(Layout { global_rva: 0x9000, navigator: 0x4128 }));
+        assert_eq!(layout, Some(Layout { global_rva: 0x9000, navigator: 0x4128, fields: Fields::V1_61 }));
         // Without the name, or with a different getter, nothing.
         let other = vec![0u8; 0x40];
         assert_eq!(locate(&Section { rva: 0x1000, bytes: &code }, &Section { rva: 0x2000, bytes: &other }), None);

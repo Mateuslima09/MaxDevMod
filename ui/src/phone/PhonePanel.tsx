@@ -4,6 +4,7 @@ import { installDragScroll } from '../cabin/shell/dragScroll'
 import { Shell } from '../cabin/shell/Shell'
 import { useCabin } from '../cabin/state/store'
 import { SCREEN_WIDTH } from '../cabin/state/screen'
+import { PhoneSplitPane } from './PhoneSplit'
 
 /**
  * The truck's panel on the phone held sideways (owner 2026-11-01: "as if I had the panel"): the cab's own CarPlay,
@@ -18,7 +19,7 @@ export function PhonePanel() {
   useEffect(() => installDragScroll(), [])
   return (
     <div className="phone-panel" style={{ width: SCREEN_WIDTH, height: size.height, zoom: size.zoom }}>
-      <Shell entering={false} overlay={null}>
+      <Shell entering={false} overlay={null} phone={{ height: size.height, beside: <PhoneSplitPane main={route} /> }}>
         <Screens route={route} />
       </Shell>
     </div>

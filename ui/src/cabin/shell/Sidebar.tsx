@@ -21,7 +21,9 @@ export function Sidebar() {
   // The split screen set (the companion), on a screen with the game's map under it: its switch.
   const split = useCabin((state) => state.split)
   const splitShown = useCabin((state) => state.splitShown)
-  const canSplit = useLive((state) => split !== 'off' && state.screenLayout !== 'tablet')
+  // On the player's phone, always: its split screen is its own, a second app beside the screen (phone/PhoneSplit.tsx).
+  const onPhone = window.westplayPhone === true
+  const canSplit = useLive((state) => onPhone || (split !== 'off' && state.screenLayout !== 'tablet'))
 
   return (
     // Its own transition name: it stays put while screens change (shell/transitions.css).
@@ -51,7 +53,7 @@ export function Sidebar() {
             aria-pressed={splitShown}
             onClick={() => useCabin.getState().setSplitShown(!splitShown)}
           >
-            <SplitGlyph mapLeft={split === 'mapLeft'} />
+            <SplitGlyph mapLeft={!onPhone && split === 'mapLeft'} />
           </button>
         )}
         <button

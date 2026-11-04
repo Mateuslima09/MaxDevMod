@@ -117,6 +117,97 @@ body,
   touch-action: none;
 }
 
+/* The panel's split screen (PhoneSplit.tsx): the screen in the left of the space after the sidebar, a second app in
+   the right, each half of it. The screen's own pieces end at the middle (`--content-right`); its opaque window
+   reaches under the second one, drawn over it. */
+.phone-split-main {
+  display: contents;
+  --split-middle: calc(50% + (var(--content-left) - var(--edge)) / 2);
+  --content-right: calc(100% - var(--split-middle) + 10px);
+}
+
+.phone-split-pane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% + (var(--content-left) - var(--edge)) / 2 + 10px);
+  right: 0;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Inside it, the app's pieces from its left edge (set here: the pane's own place reads the sidebar's). */
+.phone-split-inner {
+  position: absolute;
+  inset: 0;
+  --content-left: 0px;
+  --content-right: var(--edge);
+}
+
+.phone-split-picker {
+  position: absolute;
+  inset: var(--edge) var(--edge) var(--edge) 0;
+  border-radius: var(--panel-radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  color: var(--text);
+}
+
+.phone-split-picker h2 {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 600;
+}
+
+.phone-split-apps {
+  display: grid;
+  grid-template-columns: repeat(3, 180px);
+  gap: 32px 36px;
+}
+
+.phone-split-apps button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 26px;
+  transition: scale 160ms var(--motion-ease);
+}
+
+.phone-split-apps button:active {
+  scale: 0.92;
+}
+
+.phone-split-apps img {
+  width: 136px;
+  height: 136px;
+  filter: var(--shadow-icon);
+}
+
+/* Over the second app's bottom corner, clear of its own buttons at the top: back to the choice. */
+.phone-split-change {
+  position: absolute;
+  bottom: calc(var(--edge) + 12px);
+  right: calc(var(--edge) + 12px);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text);
+}
+
 .phone-link-over {
   position: absolute;
   top: 8px;

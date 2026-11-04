@@ -3,7 +3,9 @@ import { formatGameTime } from '../shared/format'
 import { cabClock } from '../shared/host'
 import { MapView } from './lazy'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
+import { useTemperature } from '../cabin/dashboard/useTemperature'
 import { nearestCity } from '../cabin/dashboard/destination'
+import { formatTemperature } from '../cabin/dashboard/temperature'
 import { weatherView } from '../cabin/dashboard/weather'
 import { WeatherGlyph } from '../cabin/dashboard/WeatherGlyph'
 import { EMPTY, useDestinationView } from '../cabin/dashboard/widgetState'
@@ -190,7 +192,7 @@ function WeatherOrTruckWidget({ units, noGame }: { units: Prefs['units']; noGame
   // What it shows, as it shows it: drawn again only as that changes, not at each of the game's twenty a second.
   const fuel = useLive((state) => (state.telemetry ? Math.round(state.telemetry.fuel) : null))
   const shownSpeed = useLive((state) => (state.telemetry ? speed(state.telemetry.speed, units) : null))
-  if (weather) return <WeatherWidget weather={weather} />
+  if (weather) return <WeatherWidget weather={weather} units={units} />
   return (
     <Small className="ios-widget-truck" kicker={fuel === null ? noGame : `${fuel} L`}>
       <div className="ios-widget-big">{shownSpeed ?? '–'}</div>
@@ -199,8 +201,15 @@ function WeatherOrTruckWidget({ units, noGame }: { units: Prefs['units']; noGame
   )
 }
 
-/** The weather and the nearest city: the map's names (the whole map's data, heavy on a phone) only for it. */
-function WeatherWidget({ weather }: { weather: NonNullable<ReturnType<typeof useLive.getState>['weather']> }) {
+/** The weather, its temperature (in the phone's units) and the nearest city: the map's names (the whole map's data,
+ * heavy on a phone) only for it. */
+function WeatherWidget({
+  weather,
+  units,
+}: {
+  weather: NonNullable<ReturnType<typeof useLive.getState>['weather']>
+  units: Prefs['units']
+}) {
   const text = useText()
   const labels = useMapData()?.labels
   const gameTime = useLive((state) => (state.telemetry ? cabClock(state.telemetry, state.clockShift) : 0))
@@ -208,11 +217,15 @@ function WeatherWidget({ weather }: { weather: NonNullable<ReturnType<typeof use
     const t = state.telemetry
     return t && labels ? nearestCity([t.x, t.z], labels) : null
   })
+  const temperature = useTemperature(labels)
   const view = weatherView(weather, gameTime, place, text)
   return (
     <article className="ios-widget ios-widget-small ios-widget-weather">
       <div className="ios-widget-kicker">{view.place}</div>
-      <WeatherGlyph symbol={view.symbol} size={46} />
+      <div className="ios-weather-now">
+        <WeatherGlyph symbol={view.symbol} size={temperature === null ? 46 : 36} />
+        {temperature !== null && <span className="ios-widget-big">{formatTemperature(temperature, units)}</span>}
+      </div>
       <div className="ios-widget-line">{view.condition}</div>
     </article>
   )

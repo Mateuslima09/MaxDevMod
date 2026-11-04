@@ -1,10 +1,10 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
-import { isInHost } from '../../shared/host'
+import { hasVideoUnder, isInHost } from '../../shared/host'
 import { useLook, useLookChanges, useOemStrip, useScreenFit, useScreenProfile, useSplitShown } from '../state/hooks'
-import { announceFit, fitStyle, type ScreenFit } from '../state/screenFit'
+import { announceFit, fitStyle, NO_FIT, type ScreenFit } from '../state/screenFit'
 import { usePreparedIcons } from '../state/looks'
 import { frameInsets, NO_INSETS, OEM_STRIPS } from '../state/oem'
-import { RETURN_BUTTON_SIZE, returnButtonCentre } from '../state/screen'
+import { RETURN_BUTTON_SIZE, returnButtonCentre, SCREEN_HEIGHT } from '../state/screen'
 import { textScale } from '../state/textSize'
 import { Player } from '../apps/youtube/Player'
 import { type Hole, useYouTube } from '../apps/youtube/youtube'
@@ -24,6 +24,12 @@ interface ShellProps {
   overlay?: ReactNode
   /** The first moments after the boot sequence: the screen fades in. */
   entering?: boolean
+  /**
+   * On the player's phone (phone/PhonePanel.tsx): the panel's height (in the cab screen's units), which the CarPlay
+   * area is drawn to whole, and what its split screen shows beside the screen (phone/PhoneSplit.tsx): no game's map
+   * under it there, nor the truck's screen to fit.
+   */
+  phone?: { height: number; beside: ReactNode }
 }
 
 /**
@@ -34,16 +40,23 @@ interface ShellProps {
 /** How much smaller WestPlay is drawn in its half of the split screen. */
 const SPLIT_SCALE = 0.7
 
-export function Shell({ children, overlay, entering = false }: ShellProps) {
+export function Shell({ children, overlay, entering = false, phone }: ShellProps) {
   useLookChanges()
   usePreparedIcons()
   const { appearance, wallpaperSrc } = useLook()
   const profile = useScreenProfile()
   const { key: fitKey, fit } = useScreenFit()
   const handedOver = useCabin((state) => state.truckScreen)
-  // The split screen, shown: WestPlay in its half, the game's map (squeezed into the other by the mod) beside it.
-  const halved = useSplitShown()
-  useFittedRoot(fit, handedOver, halved)
+  // The split screen, shown: WestPlay in its half, the game's map (squeezed into the other by the mod) beside it. On
+  // the phone, nothing under the page: its own split, a second app beside the screen (owner 2026-11-03: the half
+  // was black, the sidebar gone with it).
+  const cabHalved = useSplitShown()
+  const phoneSplit = useCabin((state) => state.splitShown && !state.truckScreen) && phone !== undefined
+  const halved = phone ? null : cabHalved
+  // YouTube's picture under the page, in full or in small: nothing the page paints may cover it.
+  const videoShown = useYouTube((state) => state.open || state.hole !== null)
+  // The cab's fit is the truck's screen's, not the phone's (owner 2026-11-03: it cut the panel's edges off there).
+  useFittedRoot(phone ? NO_FIT : fit, handedOver || videoShown, halved)
   // With the game's map on the left, the sidebar on WestPlay's outer edge, the right (shell.css `.sidebar-right`): not in
   // the middle of the screen, against the map (owner 2026-11-02).
   useLayoutEffect(() => {
@@ -58,8 +71,11 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
   const style = {
     '--oem-left': `${insets.left}px`,
     '--oem-bottom': `${insets.bottom}px`,
-    // In its half (the split screen), smaller: as much of it fits as on a screen of its own.
-    '--ui-scale': profile.scale * fit.size * (halved ? SPLIT_SCALE : 1),
+    // In its half (the split screen), smaller: as much of it fits as on a screen of its own. On the phone, drawn to
+    // its height whole: a phone wider than the cab's screen has less of its height, where the sidebar didn't fit.
+    '--ui-scale':
+      (phone ? Math.min(1, phone.height / SCREEN_HEIGHT) : profile.scale * fit.size) *
+      (halved || phoneSplit ? SPLIT_SCALE : 1),
   } as CSSProperties
   // The screen changes' snapshots hang off <html>, not the shell: they're cut to the CarPlay area with these
   // too (transitions.css).
@@ -110,14 +126,21 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
         className={`carplay${truckScreen ? ' handed-over' : ''}${watching ? ' watching' : ''}${watching && holdSidebar ? ' hold-sidebar' : ''}${peek ? ' peek-sidebar' : ''}`}
         style={{
           transformOrigin: `${button.x - insets.left}px ${button.y}px`,
-          ...(hole && !watching && isInHost() ? holeMask(hole) : {}),
+          ...(hole && !watching && hasVideoUnder() ? holeMask(hole) : {}),
         }}
         aria-hidden={truckScreen}
       >
         <Wallpaper src={wallpaperSrc} />
         <div className={entering ? 'carplay-content entering' : 'carplay-content'}>
           <Sidebar />
-          {children}
+          {phoneSplit ? (
+            <>
+              <div className="phone-split-main">{children}</div>
+              {phone?.beside}
+            </>
+          ) : (
+            children
+          )}
           <Player />
           <Keyboard />
           <VolumeHud />
@@ -147,12 +170,13 @@ export function Shell({ children, overlay, entering = false }: ShellProps) {
 /**
  * The player's fit of this screen (state/screenFit.ts) on the page's root: everything, menus and the keyboard
  * included, inside its margins and in its proportion, and black round it (the game's own screen would show there),
- * but while the screen is handed to the truck (`handedOver`), whose own screen shows whole. A transform on the root:
- * what's clicked is still what's under the cursor.
+ * but while something under the page shows (`under`): the truck's own screen, handed to it, or YouTube's picture,
+ * which the black, painted over all of what's under the page, hid (owner 2026-11-03: the video black on a fitted
+ * screen, its controls over it). A transform on the root: what's clicked is still what's under the cursor.
  */
 function useFittedRoot(
   { top, bottom, left, right, stretch }: ScreenFit,
-  handedOver: boolean,
+  under: boolean,
   halved: 'mapLeft' | 'mapRight' | null,
 ) {
   useLayoutEffect(() => {
@@ -180,9 +204,9 @@ function useFittedRoot(
       return
     }
     Object.assign(root.style, { position: 'fixed', transformOrigin: '0 0', ...style })
-    if (handedOver) page.removeProperty('background')
+    if (under) page.removeProperty('background')
     else page.setProperty('background', '#000')
-  }, [top, bottom, left, right, stretch, handedOver, halved])
+  }, [top, bottom, left, right, stretch, under, halved])
 }
 
 /** A mask showing everything but a rounded rectangle, through which what's under the page shows. */

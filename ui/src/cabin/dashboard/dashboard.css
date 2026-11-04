@@ -243,6 +243,19 @@
   font-weight: 650;
 }
 
+/* With the temperature (temperature.ts), as CarPlay's: it large, the sky under it smaller. */
+.weather .temperature {
+  font-size: calc(40px * var(--text-scale, 1));
+  font-weight: 650;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather .temperature + .condition {
+  font-size: calc(22px * var(--text-scale, 1));
+  font-weight: 600;
+}
+
 /* A rain cloud in a soft grey of the text's colour (light in dark mode), its drops blue. */
 .weather .weather-glyph {
   flex: none;
@@ -317,6 +330,14 @@
 
   .weather .condition {
     font-size: calc(24px * var(--text-scale, 1));
+  }
+
+  .weather .temperature {
+    font-size: calc(28px * var(--text-scale, 1));
+  }
+
+  .weather .temperature + .condition {
+    font-size: calc(17px * var(--text-scale, 1));
   }
 
   .weather .weather-glyph {

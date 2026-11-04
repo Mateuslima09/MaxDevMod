@@ -337,6 +337,8 @@ export type PageMessage =
   | { type: 'follow'; id: number; index: number }
   /** What stopping at each of these map nodes (uids, hex) would add to the trip the game's route makes. */
   | { type: 'detours'; id: number; nodes: string[] }
+  /** Nupay's history let go, its balance kept (crates/host wallet.rs): the account comes back without it. */
+  | { type: 'walletClear' }
   /** The text field selected, a number that changes with every selection (0: none), for the player's own
    * keyboard to type into while the truck stands still. */
   | { type: 'typing'; selection: number }
@@ -1057,6 +1059,20 @@ export function firstRequestId(): number {
 /** Whether the page runs inside the WestPlay host (and not in a plain browser preview, nor as the demo). */
 export function isInHost(): boolean {
   return !IS_DEMO && window.chrome?.webview !== undefined
+}
+
+/**
+ * Whether YouTube's picture is under this page: the cab's alone, inside the host. Not on a player's phone (its way
+ * to the PC stands in for WebView2's: isInHost) nor the phone in the game, which have nothing under them (owner
+ * 2026-11-03: the phone's panel was cut open to nothing).
+ */
+export function hasVideoUnder(): boolean {
+  return isInHost() && !window.westplayPhone && !window.westplayHandset
+}
+
+/** Whether the page is one of the phones' (a player's, or the phone in the game): YouTube's picture can't show there. */
+export function isPhonePage(): boolean {
+  return window.westplayPhone === true || window.westplayHandset === true
 }
 
 /**

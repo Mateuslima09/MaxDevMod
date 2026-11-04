@@ -908,6 +908,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     // The account, as it is now.
                     let _ = webview.post_json(&wallet.message());
                 }
+                Some(PageMessage::WalletClear) => {
+                    wallet.clear_history();
+                    log!("wallet: its history cleared (Nupay)");
+                    let _ = webview.post_json(&wallet.message());
+                }
                 Some(PageMessage::Westplay { open }) => {
                     if status.westplay_open != Some(open) {
                         status.westplay_open = Some(open);
@@ -1051,7 +1056,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             let handover = handover::Handover::new(picked, roads, &positions);
                             // The last hand-over's waypoints go as this one sets the game's (without them).
                             held_vias.clear();
-                            following = Some(Following { id, handover, positions, asked: route_number, answered: None });
+                            following =
+                                Some(Following { id, handover, positions, asked: route_number, answered: None });
                         }
                         _ => {
                             let _ = webview.post_json(&followed_message(id, false, "unexpected"));
@@ -2206,6 +2212,8 @@ enum PageMessage {
     /// What stopping at each of these map nodes (uids in hex) would add to the trip the game's route makes
     /// (`planner`); `{"type":"detours"}` comes back with `id`.
     Detours { id: u32, nodes: Vec<String> },
+    /// Nupay's history let go, its balance kept (`wallet`): the account comes back without it.
+    WalletClear,
 }
 
 /// A route being handed to the game's GPS: the page's request, the hand-over (the route picked and the
@@ -2431,6 +2439,7 @@ mod tests {
     #[test]
     fn reads_the_pages_messages() {
         assert_eq!(parse_page_message(r#"{"type":"ready"}"#), Some(PageMessage::Ready));
+        assert_eq!(parse_page_message(r#"{"type":"walletClear"}"#), Some(PageMessage::WalletClear));
         // The PC's own music apps aren't followed (removed 2026-10-17): their controls are no message.
         assert_eq!(parse_page_message(r#"{"type":"media","source":"AppleMusic.exe","action":"playPause"}"#), None);
         assert_eq!(

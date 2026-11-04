@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { convert, distance, speed } from './prefs'
+import { convert, distance, formatMoney, speed } from './prefs'
+
+describe('formatMoney', () => {
+  it("says the game's money in the currency chosen in Nupay, or its own", () => {
+    // A job paying $12,500 in ATS.
+    expect(formatMoney(12_500, 'USD', 'auto', 'en')).toBe('$12,500')
+    expect(formatMoney(12_500, 'USD', 'BRL', 'pt')).toBe('R$\u00a067.500')
+    expect(formatMoney(12_500, 'USD', 'EUR', 'en')).toBe('€10,750')
+    // ETS2's euros, in its own and in dollars.
+    expect(formatMoney(8_600, 'EUR', 'auto', 'pt')).toBe('€\u00a08.600')
+    expect(formatMoney(8_600, 'EUR', 'USD', 'en')).toBe('$10,000')
+  })
+
+  it('signs a movement when asked', () => {
+    expect(formatMoney(-300, 'USD', 'auto', 'en', true)).toBe('−$300')
+    expect(formatMoney(300, 'USD', 'auto', 'en', true)).toBe('+$300')
+  })
+})
 
 describe('distance', () => {
   it('says a short way in feet or metres, not 0', () => {

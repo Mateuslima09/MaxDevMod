@@ -14,7 +14,7 @@ import { goFullScreen } from './fullScreen'
 import { Home } from './Home'
 import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
-import { distance, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
+import { distance, formatMoney, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
 import { NupayApp } from './NupayApp'
 import { ServicesApp } from './ServicesApp'
 import { SERVICES_WORDS } from './servicesWords'
@@ -95,7 +95,14 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               )}
               {app === 'music' && <MusicApp words={words} open={setApp} />}
               {app === 'commands' && <CommandsApp words={COMMAND_WORDS[language === 'pt' ? 'pt' : 'en']} />}
-              {app === 'freight' && <FreightApp words={words} units={prefs.units} />}
+              {app === 'freight' && (
+                <FreightApp
+                  words={words}
+                  units={prefs.units}
+                  currency={prefs.currency}
+                  language={language === 'pt' ? 'pt' : 'en'}
+                />
+              )}
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
               {app === 'settings' && <SettingsApp words={words} prefs={prefs} remote={remote} />}
               {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />}
@@ -171,9 +178,22 @@ function MusicApp({ words, open }: { words: Words; open: (app: AppId) => void })
   )
 }
 
-/** The job, as the game gives it: the cargo and its weight, from where to where, how far yet, what it pays. */
-function FreightApp({ words, units }: { words: Words; units: Prefs['units'] }) {
+/** The job, as the game gives it: the cargo and its weight, from where to where, how far yet, what it pays (in the
+ * currency chosen in Nupay, as its money: prefs.ts `formatMoney`). */
+function FreightApp({
+  words,
+  units,
+  currency,
+  language,
+}: {
+  words: Words
+  units: Prefs['units']
+  currency: Prefs['currency']
+  language: 'en' | 'pt'
+}) {
   const job = useLive((state) => state.job)
+  // The pay is in the game's money (ATS's dollars, ETS2's euros), as the account's (Nupay's, the same way).
+  const gameCurrency = useLive((state) => state.wallet?.currency ?? 'USD')
   const left = useLive((state) => state.telemetry?.navigationDistance ?? 0)
   const time = useLive((state) => state.telemetry?.navigationTime ?? 0)
   const now = useLive((state) => state.telemetry?.gameTime ?? null)
@@ -184,7 +204,7 @@ function FreightApp({ words, units }: { words: Words; units: Prefs['units'] }) {
       <article className="ios-hero">
         <div className="ios-hero-kicker">{job.cargoLoaded ? words.delivering : words.pickingUp}</div>
         <div className="ios-hero-title">{job.cargo}</div>
-        <div className="ios-hero-value">$ {job.income.toLocaleString()}</div>
+        <div className="ios-hero-value">{formatMoney(job.income, gameCurrency, currency, language)}</div>
       </article>
       <List>
         <Row

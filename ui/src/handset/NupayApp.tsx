@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from 'react'
-import type { WalletEntry } from '../shared/host'
+import { postToHost, type WalletEntry } from '../shared/host'
 import { useLive } from '../cabin/state/store'
-import { convert, type Currency, type Prefs } from './prefs'
+import { formatMoney, type Prefs, shownCurrency } from './prefs'
 
 /**
  * Nupay (owner 2026-11-03: "a finance app in the phone: the account's balance and what came in and went out"):
@@ -11,11 +11,13 @@ import { convert, type Currency, type Prefs } from './prefs'
 export function NupayApp({ language, currency }: { language: 'en' | 'pt'; currency: Prefs['currency'] }) {
   const wallet = useLive((state) => state.wallet)
   const [hidden, setHidden] = useState(false)
+  // Clearing the history asked, waiting for its yes.
+  const [confirming, setConfirming] = useState(false)
   const words = WORDS[language]
   // The game's money, in the currency chosen (its own, `auto`).
   const from = wallet?.currency ?? 'USD'
-  const shown = currency === 'auto' ? from : currency
-  const money = (amount: number, signed = false) => formatMoney(convert(amount, from, shown), language, signed, shown)
+  const shown = shownCurrency(currency, from)
+  const money = (amount: number, signed = false) => formatMoney(amount, from, currency, language, signed)
   const entries = wallet?.entries ?? []
   const income = entries.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0)
   const spent = entries.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0)
@@ -44,7 +46,38 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
           <strong>{hidden ? '••••' : money(-spent)}</strong>
         </article>
       </div>
-      <h2 className="nupay-title">{words.history}</h2>
+      <div className="nupay-history-head">
+        <h2 className="nupay-title">{words.history}</h2>
+        {entries.length > 0 && !confirming && (
+          <button type="button" className="nupay-clear" onClick={() => setConfirming(true)}>
+            {words.clear}
+          </button>
+        )}
+      </div>
+      {/* Asked once more before it goes: it can't come back (owner 2026-11-03). */}
+      {confirming && entries.length > 0 && (
+        <div className="nupay-confirm" role="alertdialog" aria-label={words.clearAsk}>
+          <p>
+            <strong>{words.clearAsk}</strong>
+            <span>{words.clearNote}</span>
+          </p>
+          <div className="nupay-confirm-buttons">
+            <button type="button" onClick={() => setConfirming(false)}>
+              {words.cancel}
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                postToHost({ type: 'walletClear' })
+                setConfirming(false)
+              }}
+            >
+              {words.clearYes}
+            </button>
+          </div>
+        </div>
+      )}
       {entries.length === 0 ? (
         <p className="nupay-empty">{words.empty}</p>
       ) : (
@@ -79,17 +112,6 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
 }
 
 type Words = (typeof WORDS)['en']
-
-/** `amount`, whole, in `currency` as the player's language writes it; `signed`: with + or −. */
-function formatMoney(amount: number, language: 'en' | 'pt', signed: boolean, currency: Currency): string {
-  const text = Math.abs(amount).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  })
-  if (!signed) return amount < 0 ? `−${text}` : text
-  return `${amount < 0 ? '−' : '+'}${text}`
-}
 
 /** The entries by the day they came (the PC's), the newest first: "Today", "Yesterday", or the date. */
 function byDay(entries: WalletEntry[], language: 'en' | 'pt'): [string, WalletEntry[]][] {
@@ -179,6 +201,11 @@ const WORDS = {
     income: 'Money in',
     spent: 'Money out',
     history: 'History',
+    clear: 'Clear',
+    clearAsk: 'Clear the whole history?',
+    clearNote: 'The balance stays as it is. This can’t be undone.',
+    clearYes: 'Clear history',
+    cancel: 'Cancel',
     empty: 'Nothing yet: deliveries, fines, tolls and ferries show here as they happen.',
     today: 'Today',
     yesterday: 'Yesterday',
@@ -222,6 +249,11 @@ const WORDS = {
     income: 'Entradas',
     spent: 'Saídas',
     history: 'Histórico',
+    clear: 'Apagar',
+    clearAsk: 'Apagar todo o histórico?',
+    clearNote: 'O saldo continua como está. Não dá pra desfazer.',
+    clearYes: 'Apagar histórico',
+    cancel: 'Cancelar',
     empty: 'Nada ainda: entregas, multas, pedágios e balsas aparecem aqui na hora.',
     today: 'Hoje',
     yesterday: 'Ontem',

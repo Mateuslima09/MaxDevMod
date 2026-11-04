@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { type Backdrop, type Look, useWordsOver, wordsClass } from '../apps/music/contrast'
 import { Crossfade } from '../apps/music/Crossfade'
 import { VideoWidget } from '../apps/youtube/VideoWidget'
@@ -25,10 +26,13 @@ import { useLive } from '../state/store'
 import { useText } from '../state/text'
 import { nearestCity } from './destination'
 import { useNowPlaying } from './useNowPlaying'
+import { formatTemperature } from './temperature'
+import { useTemperature } from './useTemperature'
 import { weatherView } from './weather'
 import { WeatherGlyph } from './WeatherGlyph'
 import { EMPTY, useDestinationView, useGuided } from './widgetState'
-import { cabClock } from '../../shared/host'
+import { cabClock, isPhonePage } from '../../shared/host'
+import { command, useYouTube } from '../apps/youtube/youtube'
 
 /**
  * Now Playing: what plays, the video YouTube plays first (VideoWidget), then the Spotify app's music, then
@@ -40,12 +44,50 @@ export function NowPlayingWidget() {
   const { showing, spotify, appleMusic, youtubeMusic } = useNowPlaying()
   return (
     <div className={`widget-slot${shown ? ' open' : ''}`}>
-      {shown && showing === 'video' && <VideoWidget />}
+      {shown && showing === 'video' && (isPhonePage() ? <PhoneVideoWidget /> : <VideoWidget />)}
       {shown && showing === 'spotify' && spotify && <SpotifyWidget spotify={spotify} />}
       {shown && showing === 'appleMusic' && appleMusic && <AppleMusicWidget appleMusic={appleMusic} />}
       {shown && showing === 'youtubeMusic' && youtubeMusic && <YouTubeMusicWidget youtubeMusic={youtubeMusic} />}
       {shown && showing === null && <MusicWidget source={null} artwork={null} onControl={() => {}} />}
     </div>
+  )
+}
+
+/**
+ * The video YouTube plays, on a phone's page (owner 2026-11-03: its picture filled the card, cut off): its picture
+ * can't show there (VideoHole.tsx), so it's a track, as the music's, its thumbnail the cover. Played or paused from
+ * here, all a phone may do to it (crates/host remote.rs).
+ */
+function PhoneVideoWidget() {
+  const current = useYouTube((store) => store.current)
+  const playing = useYouTube((store) => store.state?.state === 1 && store.state.video === store.current?.video)
+  const source = useMemo<MediaSource | null>(
+    () =>
+      current && {
+        id: 'westplay-youtube',
+        service: 'youTubeMusic',
+        title: current.title,
+        artist: current.channel,
+        album: '',
+        artwork: null,
+        status: playing ? 'playing' : 'paused',
+        positionMs: 0,
+        positionAt: 0,
+        durationMs: 0,
+        controls: { playPause: true, next: false, previous: false, shuffle: false, repeat: false },
+        shuffle: null,
+        repeat: null,
+      },
+    [current, playing],
+  )
+  return (
+    <MusicWidget
+      source={source}
+      artwork={current?.thumbnail ?? null}
+      onControl={(action) => {
+        if (action === 'playPause') command({ action: playing ? 'pause' : 'play' })
+      }}
+    />
   )
 }
 
@@ -238,12 +280,18 @@ export function WeatherWidget() {
     return t && labels ? nearestCity([t.x, t.z], labels) : null
   })
   const view = weather ? weatherView(weather, gameTime, place, text) : null
+  const temperature = useTemperature(labels)
+  const shownTemperature = temperature === null ? null : formatTemperature(temperature, 'km')
   return (
     <div className={`widget-slot${room && view ? ' open' : ''}`}>
       {view && (
-        <article className="widget glass weather" aria-label={[view.place, view.condition].filter(Boolean).join(', ')}>
+        <article
+          className="widget glass weather"
+          aria-label={[view.place, shownTemperature, view.condition].filter(Boolean).join(', ')}
+        >
           <div className="weather-text">
             {view.place && <div className="place">{view.place}</div>}
+            {shownTemperature && <div className="temperature">{shownTemperature}</div>}
             <div className="condition">{view.condition}</div>
           </div>
           <WeatherGlyph symbol={view.symbol} size={84} />

@@ -44,10 +44,10 @@ const COMMANDS: &[&str] = &[
 ];
 /// YouTube's, whose videos the phone doesn't show: what plays, paused or played on, and its volume.
 const YOUTUBE: &[&str] = &["play", "pause", "seek", "volume"];
-/// The Maps app's route requests, the volume the phone set (for the cab to show), the truck's commands, and Adjust
-/// Screen's changes.
+/// The Maps app's route requests, the volume the phone set (for the cab to show), the truck's commands, Adjust
+/// Screen's changes, and Nupay's history cleared.
 const PAGE_MESSAGES: &[&str] =
-    &["ready", "route", "routes", "follow", "detours", "volumeShown", "truckCommand", "screenFit"];
+    &["ready", "route", "routes", "follow", "detours", "volumeShown", "truckCommand", "screenFit", "walletClear"];
 /// Messages the host only passes on to the pages, the cab's and the phones' (mirrored): Adjust Screen's, a phone's
 /// change for the cab's page, and the cab's fit for the phones (owner 2026-11-02: the screen fitted from the phone
 /// when it's too small to reach Settings on).
@@ -450,6 +450,7 @@ mod tests {
         assert!(allowed(r#"{"type":"route","id":1000000001,"action":"end"}"#));
         assert!(allowed(r#"{"type":"volumeShown","volume":0.4}"#));
         assert!(allowed(r#"{"type":"youtube","command":{"action":"pause"}}"#));
+        assert!(allowed(r#"{"type":"walletClear"}"#));
         assert!(!allowed(r#"{"type":"spotify","command":{"action":"signOut"}}"#));
         assert!(!allowed(r#"{"type":"youtubeMusic","command":{"action":"show","x":0}}"#));
         assert!(!allowed(r#"{"type":"youtube","command":{"action":"load","video":"x"}}"#));

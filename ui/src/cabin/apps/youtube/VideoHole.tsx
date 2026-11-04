@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { hasVideoUnder } from '../../../shared/host'
 import { whenTransitionEnds } from '../../state/launch'
 import { useCabin } from '../../state/store'
 import { command, followArea, useYouTube } from './youtube'
@@ -34,15 +35,29 @@ export function VideoHole({ className, crop = false }: { className: string; crop
     // The screen it's on, while it comes or goes (CabinApp.tsx's `Screens`).
     const slot = element.closest('.screen-slot')
     const moving = () => !!slot && (slot.classList.contains('entering') || slot.classList.contains('leaving'))
+    // Nothing under a phone's page: its thumbnail stands, and the cab's picture is left where it is.
+    if (!hasVideoUnder()) return
     const place = () => {
-      const area = document.querySelector('.carplay')?.getBoundingClientRect()
+      const carplay = document.querySelector<HTMLElement>('.carplay')
+      const area = carplay?.getBoundingClientRect()
       const box = element.getBoundingClientRect()
-      if (!area || box.width === 0) return
+      if (!carplay || !area || box.width === 0 || carplay.offsetWidth === 0 || carplay.offsetHeight === 0) return
+      // The hole is cut in the CarPlay area's own pixels, which the player's fit stretches across the screen
+      // (Shell.tsx `useFittedRoot`: owner 2026-11-03, the small video gone in a fitted screen): the screen's
+      // pixels, measured here, taken back to them.
+      const across = area.width / carplay.offsetWidth
+      const down = area.height / carplay.offsetHeight
       // Its rounding in screen pixels (the CarPlay area's content is zoomed to the screen's scale).
       const zoom = box.width / element.offsetWidth
-      const radius = parseFloat(getComputedStyle(element).borderTopLeftRadius) * zoom
+      const radius = (parseFloat(getComputedStyle(element).borderTopLeftRadius) * zoom) / across
       useYouTube.setState({
-        hole: { x: box.left - area.left, y: box.top - area.top, width: box.width, height: box.height, radius },
+        hole: {
+          x: (box.left - area.left) / across,
+          y: (box.top - area.top) / down,
+          width: box.width / across,
+          height: box.height / down,
+          radius,
+        },
       })
       const scale = window.devicePixelRatio
       command({

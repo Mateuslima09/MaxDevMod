@@ -125,6 +125,12 @@ impl Wallet {
         true
     }
 
+    /// Lets the history go, the balance kept (owner 2026-11-03: Nupay's "clear the history", should it grow long).
+    pub fn clear_history(&mut self) {
+        self.state.entries.clear();
+        self.keep();
+    }
+
     /// `{"type":"wallet","balance":25512,"entries":[…]}`: the account for the pages, the newest entries first.
     pub fn message(&self) -> String {
         let entries: Vec<&Entry> = self.state.entries.iter().rev().take(SENT_ENTRIES).collect();
@@ -217,5 +223,23 @@ mod tests {
         wallet.take(&with(&[(MoneyKind::Toll, -5), (MoneyKind::Toll, -5)]));
         assert!(wallet.take(&with(&[(MoneyKind::Ferry, -150)])));
         assert_eq!(wallet.balance(), Some(-150));
+    }
+
+    #[test]
+    fn the_history_goes_and_the_balance_stays() {
+        let mut wallet = wallet();
+        wallet.saved(25_000);
+        wallet.take(&with(&[]));
+        wallet.take(&with(&[(MoneyKind::Delivered, 1_000), (MoneyKind::Fined, -200)]));
+        wallet.clear_history();
+        assert!(wallet.state.entries.is_empty());
+        assert_eq!(wallet.balance(), Some(25_800));
+        // What comes after is entered as before, and the next save explained by it.
+        wallet.take(&with(&[(MoneyKind::Delivered, 1_000), (MoneyKind::Fined, -200), (MoneyKind::Toll, -10)]));
+        assert_eq!(wallet.state.entries.len(), 1);
+        // Nothing unexplained: no "other" entry.
+        wallet.saved(25_790);
+        assert_eq!(wallet.state.entries.len(), 1);
+        assert!(wallet.message().contains(r#""entries":[{"#));
     }
 }

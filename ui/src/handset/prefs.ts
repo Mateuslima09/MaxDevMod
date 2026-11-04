@@ -31,6 +31,34 @@ export function convert(amount: number, from: Currency, to: Currency): number {
   return from === to ? amount : (amount / PER_DOLLAR[from]) * PER_DOLLAR[to]
 }
 
+/** The currency the phone shows the game's money in: the one chosen in Nupay, or the game's own (`auto`). */
+export function shownCurrency(chosen: Prefs['currency'], game: Currency): Currency {
+  return chosen === 'auto' ? game : chosen
+}
+
+/**
+ * The game's `amount` (in `game`, its currency) as the phone shows money (owner 2026-11-03: the job's pay in dollars
+ * whatever Nupay's currency was): converted to the currency chosen, whole, as the player's language writes it;
+ * `signed`: with + or −.
+ */
+export function formatMoney(
+  amount: number,
+  game: Currency,
+  chosen: Prefs['currency'],
+  language: 'en' | 'pt',
+  signed = false,
+): string {
+  const currency = shownCurrency(chosen, game)
+  const shown = convert(amount, game, currency)
+  const text = Math.abs(shown).toLocaleString(language === 'pt' ? 'pt-BR' : 'en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  })
+  if (!signed) return shown < 0 ? `−${text}` : text
+  return `${shown < 0 ? '−' : '+'}${text}`
+}
+
 /** The home screen's wallpapers to choose from. */
 export const WALLPAPERS = ['aurora', 'ocean', 'sunset'] as const
 export type Wallpaper = (typeof WALLPAPERS)[number]
