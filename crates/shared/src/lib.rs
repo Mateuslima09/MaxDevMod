@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 31;
+pub const BRIDGE_VERSION: u32 = 32;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -565,14 +565,19 @@ pub enum Keybind {
     PlayPause = 2,
     /// Takes the phone out, or puts it away.
     Phone = 3,
+    /// Takes the phone out on its Personagem app, to choose who walks without leaving the game (owner 2026-11-07).
+    Character = 4,
+    /// Hides the key hints bar over the game, or shows it again (the plugin's own: owner 2026-11-07, "the key
+    /// that hides the bar, on the bar").
+    Hints = 5,
 }
 
 impl Keybind {
     pub const ALL: [Keybind; KEYBIND_COUNT] =
-        [Keybind::VolumeUp, Keybind::VolumeDown, Keybind::PlayPause, Keybind::Phone];
+        [Keybind::VolumeUp, Keybind::VolumeDown, Keybind::PlayPause, Keybind::Phone, Keybind::Character, Keybind::Hints];
 }
 
-pub const KEYBIND_COUNT: usize = 4;
+pub const KEYBIND_COUNT: usize = 6;
 
 /// A keybind as the bridge carries it: its key's virtual-key code, and whether it's pressed while holding the
 /// interaction key (using the screen) rather than alone.

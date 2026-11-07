@@ -105,6 +105,10 @@ export interface CompanionWords {
     volumeDown: string
     playPause: string
     phone: string
+    /** The phone's Personagem app, and hiding the key hints bar over the game (2026-11-07: not in every language
+     * yet, English where one hasn't them). */
+    character?: string
+    hideBar?: string
     /** A keybind listening for its new key. */
     pressKey: string
     /** `{key}`: the screen's key. */

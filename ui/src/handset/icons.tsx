@@ -2,7 +2,17 @@ import type { ReactNode } from 'react'
 
 /** The phone's apps (HandsetApp.tsx). */
 export type AppId =
-  'maps' | 'music' | 'youtubeMusic' | 'spotify' | 'commands' | 'freight' | 'truck' | 'settings' | 'nupay' | 'services'
+  | 'maps'
+  | 'music'
+  | 'youtubeMusic'
+  | 'spotify'
+  | 'commands'
+  | 'freight'
+  | 'truck'
+  | 'settings'
+  | 'nupay'
+  | 'services'
+  | 'character'
 
 /**
  * The apps that are the cab's too: their real icons (owner 2026-11-03: "the apps' real logos"), the cab's light
@@ -58,6 +68,12 @@ const STROKE = {
 } as const
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  character: (
+    <>
+      <circle cx="12" cy="7.5" r="3.5" />
+      <path d="M5 20.5c.6-4.2 3.3-6.8 7-6.8s6.4 2.6 7 6.8Z" />
+    </>
+  ),
   services: <path d="M14.7 6.3a4 4 0 0 0-5.4 5l-6 6a1.4 1.4 0 0 0 2 2l6-6a4 4 0 0 0 5-5.4l-2.6 2.6-2-.6-.6-2Z" />,
   nupay: (
     <>

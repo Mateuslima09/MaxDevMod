@@ -46,8 +46,18 @@ const COMMANDS: &[&str] = &[
 const YOUTUBE: &[&str] = &["play", "pause", "seek", "volume"];
 /// The Maps app's route requests, the volume the phone set (for the cab to show), the truck's commands, Adjust
 /// Screen's changes, and Nupay's history cleared.
-const PAGE_MESSAGES: &[&str] =
-    &["ready", "route", "routes", "follow", "detours", "volumeShown", "truckCommand", "screenFit", "walletClear"];
+const PAGE_MESSAGES: &[&str] = &[
+    "ready",
+    "route",
+    "routes",
+    "follow",
+    "detours",
+    "volumeShown",
+    "truckCommand",
+    "screenFit",
+    "walletClear",
+    "characterPerson",
+];
 /// Messages the host only passes on to the pages, the cab's and the phones' (mirrored): Adjust Screen's, a phone's
 /// change for the cab's page, and the cab's fit for the phones (owner 2026-11-02: the screen fitted from the phone
 /// when it's too small to reach Settings on).

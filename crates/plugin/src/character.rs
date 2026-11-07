@@ -351,6 +351,8 @@ static WAS_SLOWER: AtomicBool = AtomicBool::new(false);
 static WAS_FASTER: AtomicBool = AtomicBool::new(false);
 static WAS_VIEW: AtomicBool = AtomicBool::new(false);
 static WAS_HINTS: AtomicBool = AtomicBool::new(false);
+/// Whether the game was paused (its menu open) at the last frame: the phone is put away as it opens.
+static WAS_PAUSED: AtomicBool = AtomicBool::new(false);
 static WAS_FLASHLIGHT: AtomicBool = AtomicBool::new(false);
 /// The key changing first and third person while walking (the plan's V; the game's diff lock, kept from it while
 /// walking), as a virtual key and a scan code.
@@ -513,6 +515,14 @@ pub fn on_frame_end() {
     let hints_down = hints_key != 0 && really_down(VIRTUAL_KEY(hints_key as u16)) && shown;
     if crate::input::newly_down(&WAS_HINTS, hints_down) {
         crate::hints::toggle();
+    }
+    // The game's menu (Esc) or pause: the phone put away as it opens (owner 2026-11-07: it stayed over the menu,
+    // stuck there). Once, as it opens: the phone taken out again over the menu stays.
+    let paused = crate::telemetry::paused();
+    if paused && !WAS_PAUSED.swap(true, Ordering::AcqRel) {
+        crate::bridge::put_phone_away("the game's menu");
+    } else if !paused {
+        WAS_PAUSED.store(false, Ordering::Release);
     }
     let mut state = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let state = &mut *state;
@@ -720,10 +730,23 @@ fn publish_hints(state: &State) {
             }
         }
     }
-    let phone = host.keybinds[westplay_shared::Keybind::Phone as usize].load(Ordering::Acquire);
-    if let Some((key, with_screen_key)) = westplay_shared::keybind_of(phone) {
-        let key = if with_screen_key { format!("{} + {}", key_name(screen_key), key_name(key)) } else { key_name(key) };
+    // The keybinds' own (the app's Controls): the phone, its Personagem app with the mode on, hiding this bar.
+    let keybind = |keybind: westplay_shared::Keybind| {
+        let value = host.keybinds[keybind as usize].load(Ordering::Acquire);
+        westplay_shared::keybind_of(value).map(|(key, with_screen_key)| {
+            if with_screen_key { format!("{} + {}", key_name(screen_key), key_name(key)) } else { key_name(key) }
+        })
+    };
+    if let Some(key) = keybind(westplay_shared::Keybind::Phone) {
         hints.push(Hint { key, action: Action::Phone });
+    }
+    if enabled()
+        && let Some(key) = keybind(westplay_shared::Keybind::Character)
+    {
+        hints.push(Hint { key, action: Action::Character });
+    }
+    if let Some(key) = keybind(westplay_shared::Keybind::Hints) {
+        hints.push(Hint { key, action: Action::HideBar });
     }
     crate::hints::set(hints);
 }
@@ -1329,11 +1352,7 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
             let turn = f64::from(walking.look_yaw);
             let left = [-turn.cos() * right, turn.sin() * right];
             let [x, y, z] = placement.world();
-            on_feet(
-                &Placement::at([x + back[0] + left[0], y, z + back[1] + left[1]], 0.0),
-                walking.body_yaw,
-                under,
-            )
+            on_feet(&Placement::at([x + back[0] + left[0], y, z + back[1] + left[1]], 0.0), walking.body_yaw, under)
         };
         if let (Some(Some(game)), Some(shown)) = (&state.game, walking.person.as_mut())
             && let Some(people) = game.people.as_ref()

@@ -76,6 +76,8 @@ let settings: Settings = {
     playPause: { key: 0x32, withInteractionKey: true },
     volumeUp: { key: 0x33, withInteractionKey: true },
     phone: { key: 0x34, withInteractionKey: true },
+    character: { key: 0x35, withInteractionKey: true },
+    hints: { key: 0x36, withInteractionKey: true },
   },
   screen: { truckStrip: 'auto', split: 'off' },
   look: { wallpaper: null, iconSet: null, iconStyle: 'auto' },

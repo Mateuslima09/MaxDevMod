@@ -100,6 +100,8 @@ export const words: CompanionWords = {
     volumeDown: 'Volume down',
     playPause: 'Play/Pause',
     phone: 'Phone',
+    character: 'Character (on the phone)',
+    hideBar: 'Hide the key hints bar',
     pressKey: 'Press a key…',
     keybindsNote:
       'Click a keybind, then press its new key. Hold {key} as you press it, and it works only while you use the screen. Esc cancels.',

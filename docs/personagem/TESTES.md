@@ -350,6 +350,24 @@ O agachar da câmera do jogo não fazia nada (owner: "a função de agachar nem 
 - [ ] Se piorar: em `%LOCALAPPDATA%\WestPlay`, `westplay.exe.antes-agachar` e `westplay.dll.antes-agachar`; nos
       jogos, `westplay.dll.antes-agachar`.
 
+## 48. Celular some no menu; Personagem no celular (Alt+5); Alt+6 esconde a barra — novo (app, plugin e ponte v32, 2026-11-07 12:35)
+
+- **Menu do jogo:** com o celular aberto, aperte **Esc**: o celular se guarda sozinho. Se você abrir ele de novo
+  no menu (Alt+4), ele fica (só guarda uma vez, quando o menu abre).
+- **Alt+5:** abre o celular direto no app **Personagem** (também está na 2ª página do celular). Toque numa foto:
+  ela fica marcada, e a página Personagem do app mostra a mesma escolha.
+- **Barra de teclas:** agora mostra **Alt + 5 Personagem** (com o Modo Personagem ligado) e **Alt + 6 Esconder a
+  barra**. Alt+6 esconde e mostra de novo. As duas teclas podem ser trocadas em **Controles**, junto com Alt+1 a Alt+4.
+
+- [ ] Esc com o celular aberto guarda o celular? Voltar do menu fica normal?
+- [ ] Alt+5 abre o celular no Personagem, mesmo com o celular em outro app?
+- [ ] **Importante:** trocar de personagem no celular com o jogo aberto e descer (F8): desce o novo? Pelo código, o
+      plugin lê a escolha na hora de descer, mas a página do app ainda diz "reinicie o jogo". Se descer o antigo,
+      me avisa que eu ajusto (e aí o celular precisa avisar também).
+- [ ] A barra mostra as duas teclas novas? Alt+6 esconde e mostra?
+- [ ] Se piorar: `westplay.exe.antes-celular-menu`, `westplay.dll.antes-celular-menu` (no app e nas pastas
+      `plugins` dos dois jogos) e `ui.antes-celular-menu`. App e plugin voltam juntos (a ponte mudou).
+
 ## 47. Música a pé abafada sempre; ao entrar na cabine ela sobe devagar — novo (app e plugin juntos, 00:05)
 
 - **A pé, o som limpo:** o app só abafava a música depois de ter visto a cabine desenhada naquele caminhão. Se o

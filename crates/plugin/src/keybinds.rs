@@ -34,6 +34,11 @@ pub fn on_frame() {
         let down = unsafe { GetAsyncKeyState(key as i32) } as u16 & 0x8000 != 0;
         // First: every frame's key state is kept, whether the press counts or not.
         if input::newly_down(&WAS_DOWN[i], down) && in_game && counts(with_interaction_key) {
+            // The key hints bar is the plugin's: hidden or shown here (the app has nothing to do with it).
+            if keybind == Keybind::Hints {
+                crate::hints::toggle();
+                continue;
+            }
             bridge.plugin.keybind_presses[i].fetch_add(1, Ordering::AcqRel);
             log!("keybind {keybind:?} pressed");
         }

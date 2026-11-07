@@ -3,11 +3,12 @@ import { formatGameTime, formatGear } from '../shared/format'
 import { cabClock } from '../shared/host'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
 import { useLook, useLookChanges } from '../cabin/state/hooks'
-import { connectHost, useLive } from '../cabin/state/store'
+import { connectHost, useCharacter, useLive } from '../cabin/state/store'
 import { languageOf } from '../cabin/state/strings'
 import { followTimeZone } from '../cabin/state/timeZone'
 import { PhoneVolume } from '../phone/PhoneVolume'
 import { useNowPlaying } from '../cabin/dashboard/useNowPlaying'
+import { CharacterApp, CHARACTER_WORDS } from './CharacterApp'
 import { CommandsApp } from './CommandsApp'
 import { COMMAND_WORDS } from './commandWords'
 import { goFullScreen } from './fullScreen'
@@ -54,6 +55,11 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   const words = WORDS[language === 'pt' ? 'pt' : 'en']
   const [app, setApp] = useState<AppId | null>(null)
   const home = () => setApp(null)
+  // Taken out on one of its apps (its Personagem's keybind): that app open, whatever was.
+  const opened = useCharacter((state) => state.opened)
+  useEffect(() => {
+    if (opened?.app === 'character') setApp('character')
+  }, [opened])
   const compact = app !== null && CAB_APPS.includes(app)
 
   return (
@@ -107,6 +113,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'settings' && <SettingsApp words={words} prefs={prefs} remote={remote} />}
               {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />}
               {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
+              {app === 'character' && <CharacterApp words={CHARACTER_WORDS[language === 'pt' ? 'pt' : 'en']} />}
             </div>
           </section>
         )}
@@ -447,6 +454,7 @@ const WORDS = {
       settings: 'Settings',
       nupay: 'Nupay',
       services: 'Services',
+      character: 'Character',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -520,6 +528,7 @@ const WORDS = {
       settings: 'Ajustes',
       nupay: 'Nupay',
       services: 'Serviços',
+      character: 'Personagem',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',

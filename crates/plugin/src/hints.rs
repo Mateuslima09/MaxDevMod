@@ -45,13 +45,17 @@ pub enum Action {
     Camera,
     /// Ctrl while walking: crouch.
     Crouch,
+    /// The phone out on its Personagem app (owner 2026-11-07).
+    Character,
+    /// Hiding this bar (owner 2026-11-07: "the key that hides the bar, on the bar").
+    HideBar,
 }
 
 impl Action {
     /// In the game's language (two letters), English if not one of these.
     fn words(self, language: &str) -> &'static str {
         let i = self as usize;
-        let words: [&str; 8] = match language {
+        let words: [&str; 10] = match language {
             "pt" => [
                 "Descer do caminhão",
                 "Entrar no caminhão",
@@ -61,6 +65,8 @@ impl Action {
                 "Apagar a lanterna",
                 "Câmera",
                 "Agachar",
+                "Personagem",
+                "Esconder a barra",
             ],
             "es" => [
                 "Bajar del camión",
@@ -71,6 +77,8 @@ impl Action {
                 "Apagar la linterna",
                 "Cámara",
                 "Agacharse",
+                "Personaje",
+                "Ocultar la barra",
             ],
             "de" => [
                 "Aussteigen",
@@ -81,6 +89,8 @@ impl Action {
                 "Taschenlampe aus",
                 "Kamera",
                 "Ducken",
+                "Figur",
+                "Leiste ausblenden",
             ],
             "fr" => [
                 "Descendre du camion",
@@ -91,6 +101,8 @@ impl Action {
                 "Éteindre la lampe",
                 "Caméra",
                 "S’accroupir",
+                "Personnage",
+                "Masquer la barre",
             ],
             "it" => [
                 "Scendi dal camion",
@@ -101,10 +113,45 @@ impl Action {
                 "Spegni la torcia",
                 "Visuale",
                 "Accovacciati",
+                "Personaggio",
+                "Nascondi la barra",
             ],
-            "pl" => ["Wysiądź", "Wsiądź", "Telefon", "Użyj ekranu", "Latarka", "Zgaś latarkę", "Kamera", "Kucnij"],
-            "ru" => ["Выйти", "Сесть", "Телефон", "Экран", "Фонарик", "Выключить фонарик", "Камера", "Присесть"],
-            "tr" => ["Tırdan in", "Tıra bin", "Telefon", "Ekranı kullan", "Fener", "Feneri kapat", "Kamera", "Çömel"],
+            "pl" => [
+                "Wysiądź",
+                "Wsiądź",
+                "Telefon",
+                "Użyj ekranu",
+                "Latarka",
+                "Zgaś latarkę",
+                "Kamera",
+                "Kucnij",
+                "Postać",
+                "Ukryj pasek",
+            ],
+            "ru" => [
+                "Выйти",
+                "Сесть",
+                "Телефон",
+                "Экран",
+                "Фонарик",
+                "Выключить фонарик",
+                "Камера",
+                "Присесть",
+                "Персонаж",
+                "Скрыть панель",
+            ],
+            "tr" => [
+                "Tırdan in",
+                "Tıra bin",
+                "Telefon",
+                "Ekranı kullan",
+                "Fener",
+                "Feneri kapat",
+                "Kamera",
+                "Çömel",
+                "Karakter",
+                "Çubuğu gizle",
+            ],
             "nl" => [
                 "Uitstappen",
                 "Instappen",
@@ -114,6 +161,8 @@ impl Action {
                 "Zaklamp uit",
                 "Camera",
                 "Bukken",
+                "Personage",
+                "Balk verbergen",
             ],
             "cs" => [
                 "Vystoupit",
@@ -124,8 +173,21 @@ impl Action {
                 "Zhasnout svítilnu",
                 "Kamera",
                 "Přikrčit se",
+                "Postava",
+                "Skrýt lištu",
             ],
-            _ => ["Get out", "Get in", "Phone", "Use the screen", "Flashlight", "Flashlight off", "Camera", "Crouch"],
+            _ => [
+                "Get out",
+                "Get in",
+                "Phone",
+                "Use the screen",
+                "Flashlight",
+                "Flashlight off",
+                "Camera",
+                "Crouch",
+                "Character",
+                "Hide the bar",
+            ],
         };
         words[i]
     }

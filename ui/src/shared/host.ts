@@ -141,6 +141,8 @@ export type HostMessage =
       /** The player's own tone curve (Settings › Equalizer), and whether it plays (Custom) or not (Recommended). */
       equalizer?: Equalizer
       equalizerCustom?: boolean
+      /** Who walks in the Modo Personagem (a place in `CHARACTER_PEOPLE`), for the phone's Personagem app. */
+      characterPerson?: number
     }
   /** The player's own wallpapers and icon sets (shared/customize.ts), their files at `CABIN_FILES`. */
   | { type: 'customize'; wallpapers: CustomWallpaper[]; iconSets: IconSet[] }
@@ -207,6 +209,8 @@ export type HostMessage =
   | { type: 'routeStops'; id: number | null; stops: number[] }
   /** The game's menu gone while it's still paused: its still picture before the truck moves on. */
   | { type: 'menuGone'; gone: boolean }
+  /** The phone in the game taken out on one of its apps (the keybind for its Personagem: crates/host). */
+  | { type: 'openApp'; app: string }
   /** A keybind of the player's (the companion's Controls), pressed in the game. */
   | { type: 'keybind'; action: KeybindAction }
   /** A volume the player's phone set (0 to 1), for the cab to show as for a keybind (crates/host remote.rs). */
@@ -341,6 +345,8 @@ export type PageMessage =
   | { type: 'detours'; id: number; nodes: string[] }
   /** Nupay's history let go, its balance kept (crates/host wallet.rs): the account comes back without it. */
   | { type: 'walletClear' }
+  /** Who walks in the Modo Personagem, chosen in the phone's Personagem app (a place in `CHARACTER_PEOPLE`). */
+  | { type: 'characterPerson'; person: number }
   /** The text field selected, a number that changes with every selection (0: none), for the player's own
    * keyboard to type into while the truck stands still. */
   | { type: 'typing'; selection: number }

@@ -397,6 +397,10 @@ pub struct Keybinds {
     pub play_pause: Binding,
     /// Takes the phone out in the game, or puts it away (owner 2026-11-01).
     pub phone: Binding,
+    /// Takes the phone out on its Personagem app (owner 2026-11-07).
+    pub character: Binding,
+    /// Hides the key hints bar over the game, or shows it again (owner 2026-11-07).
+    pub hints: Binding,
 }
 
 impl<'de> Deserialize<'de> for Keybinds {
@@ -413,13 +417,16 @@ impl<'de> Deserialize<'de> for Keybinds {
             volume_down: binding("volumeDown", defaults.volume_down),
             play_pause: binding("playPause", defaults.play_pause),
             phone: binding("phone", defaults.phone),
+            character: binding("character", defaults.character),
+            hints: binding("hints", defaults.hints),
         })
     }
 }
 
 impl Default for Keybinds {
     /// The interaction key with 1, 2 and 3 (as promised to the players who asked: Alt+1, Alt+2, Alt+3), in a
-    /// row as on a stereo (owner 2026-10-21): volume down, play/pause between, volume up; the phone next, with 4.
+    /// row as on a stereo (owner 2026-10-21): volume down, play/pause between, volume up; the phone next, with 4;
+    /// then the phone's Personagem with 5 and the key hints bar with 6 (owner 2026-11-07).
     fn default() -> Self {
         let with_key = |code| Binding { key: KeyCode(code), with_interaction_key: true };
         Self {
@@ -427,6 +434,8 @@ impl Default for Keybinds {
             play_pause: with_key(0x32),
             volume_up: with_key(0x33),
             phone: with_key(0x34),
+            character: with_key(0x35),
+            hints: with_key(0x36),
         }
     }
 }
@@ -440,6 +449,8 @@ impl Keybinds {
                 Keybind::VolumeDown => self.volume_down,
                 Keybind::PlayPause => self.play_pause,
                 Keybind::Phone => self.phone,
+                Keybind::Character => self.character,
+                Keybind::Hints => self.hints,
             };
             keybind_value(binding.key.virtual_key(), binding.with_interaction_key)
         })

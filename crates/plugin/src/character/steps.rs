@@ -148,7 +148,9 @@ fn mix(sounds: &[Vec<f32>], voices: &mut Vec<Voice>, out: &mut [i16]) {
     for (k, sample) in out.iter_mut().enumerate() {
         let sum: f32 = voices
             .iter()
-            .map(|v| usize::try_from(v.at + k as isize).ok().and_then(|i| sounds[v.sound].get(i)).copied().unwrap_or(0.0))
+            .map(|v| {
+                usize::try_from(v.at + k as isize).ok().and_then(|i| sounds[v.sound].get(i)).copied().unwrap_or(0.0)
+            })
             .sum();
         *sample = (sum.clamp(-1.0, 1.0) * f32::from(i16::MAX)) as i16;
     }

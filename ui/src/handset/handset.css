@@ -1312,3 +1312,48 @@ body,
 .ios-row-action:disabled {
   color: var(--ios-secondary) !important;
 }
+
+/* The Personagem app (CharacterApp.tsx): its icon, and each person's picture to tap, the chosen one ringed. */
+.ios-icon-character {
+  background: linear-gradient(180deg, #34c3ff, #0a7cff);
+}
+
+.handset-people {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 4px 16px 0;
+}
+
+.handset-person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 10px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--ios-group, rgba(127, 127, 127, 0.14));
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 2px transparent;
+}
+
+.handset-person[data-chosen] {
+  box-shadow: inset 0 0 0 3px #0a84ff;
+}
+
+.handset-person img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.handset-people-note {
+  margin: 14px 20px 0;
+  font-size: 14px;
+  opacity: 0.65;
+}

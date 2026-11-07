@@ -793,12 +793,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 continue;
             }
             for _ in 0..new {
-                match keybind_message(keybind) {
-                    Some(message) => {
+                match (keybind, keybind_message(keybind)) {
+                    (_, Some(message)) => {
                         let _ = webview.post_json(&message);
                     }
                     // The phone's is the host's own: out, or put away.
-                    None => {
+                    (Keybind::Phone, None) => {
                         if let Some(handset) = &handset {
                             handset_shown = !handset_shown;
                             let _ = handset.show(handset_shown);
@@ -806,6 +806,21 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             log!("[handset] {}", if handset_shown { "out" } else { "put away" });
                         }
                     }
+                    // The phone out on its Personagem app (owner 2026-11-07: "WestPlay in front, to change the
+                    // person, without leaving the game"). The phone's own key puts it away.
+                    (Keybind::Character, None) => {
+                        if let Some(handset) = &handset {
+                            if !handset_shown {
+                                handset_shown = true;
+                                let _ = handset.show(true);
+                                host.phone_shown.store(1, Ordering::Release);
+                            }
+                            let _ = handset.post_json(r#"{"type":"openApp","app":"character"}"#);
+                            log!("[handset] out on Personagem");
+                        }
+                    }
+                    // The key hints bar's: the plugin's own (it hides the bar itself).
+                    _ => {}
                 }
             }
         }
@@ -966,6 +981,16 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         settings.screen.truck_strip = strip;
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
+                    }
+                }
+                Some(PageMessage::CharacterPerson { person }) => {
+                    let mut settings = config.settings.get();
+                    let person = settings::CharacterPerson::new(person);
+                    if settings.character.person != person {
+                        settings.character.person = person;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the person who walks chosen in the phone: {}", person.get());
                     }
                 }
                 Some(PageMessage::Spectrum { on }) => spectrum = on,
@@ -2000,7 +2025,7 @@ fn keybind_message(keybind: Keybind) -> Option<String> {
         Keybind::VolumeUp => "volumeUp",
         Keybind::VolumeDown => "volumeDown",
         Keybind::PlayPause => "playPause",
-        Keybind::Phone => return None,
+        Keybind::Phone | Keybind::Character | Keybind::Hints => return None,
     };
     Some(serde_json::json!({ "type": "keybind", "action": action }).to_string())
 }
@@ -2193,6 +2218,7 @@ fn settings_message(settings: &settings::Settings) -> String {
         "iconStyle": settings.look.icon_style,
         "equalizer": settings.sound.equalizer.clamped(),
         "equalizerCustom": settings.sound.custom,
+        "characterPerson": settings.character.person.get(),
     })
     .to_string()
 }
@@ -2261,6 +2287,9 @@ enum PageMessage {
     Detours { id: u32, nodes: Vec<String> },
     /// Nupay's history let go, its balance kept (`wallet`): the account comes back without it.
     WalletClear,
+    /// Who walks in the Modo Personagem, chosen in the phone's Personagem app (a place in
+    /// `westplay_shared::CHARACTER_PEOPLE`): kept with the settings, for the next time out of the truck.
+    CharacterPerson { person: f64 },
 }
 
 /// A route being handed to the game's GPS: the page's request, the hand-over (the route picked and the
@@ -2672,6 +2701,7 @@ mod tests {
                 "iconStyle": "auto",
                 "equalizer": { "bass": 0, "mid": 0, "treble": 0 },
                 "equalizerCustom": false,
+                "characterPerson": 0,
             })
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;

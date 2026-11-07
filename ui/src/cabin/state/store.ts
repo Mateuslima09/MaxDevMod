@@ -318,6 +318,12 @@ export interface Nearby {
   at: number
 }
 
+/** The Modo Personagem, for the phone in the game: who walks (the settings', `null` until they come), and the
+ * phone's last ask to open one of its apps (its keybind: `count` changes with every ask). Not kept. */
+export const useCharacter = create<{ person: number | null; opened: { app: string; count: number } | null }>()(
+  () => ({ person: null, opened: null }),
+)
+
 export const useLive = create<LiveState>()(() => ({
   telemetry: null,
   truck: previewTruck(),
@@ -510,8 +516,12 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           iconSet: message.iconSet ?? null,
           iconStyle: isIconStyle(message.iconStyle) ? message.iconStyle : 'auto',
         })
+        if (typeof message.characterPerson === 'number') useCharacter.setState({ person: message.characterPerson })
         break
       }
+      case 'openApp':
+        useCharacter.setState((state) => ({ opened: { app: message.app, count: (state.opened?.count ?? 0) + 1 } }))
+        break
       case 'spectrum':
         useLive.setState({ spectrum: message.bars })
         break

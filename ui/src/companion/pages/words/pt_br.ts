@@ -100,6 +100,8 @@ export const words: CompanionWords = {
     volumeDown: 'Diminuir volume',
     playPause: 'Reproduzir/Pausar',
     phone: 'Celular',
+    character: 'Personagem (no celular)',
+    hideBar: 'Esconder a barra de teclas',
     pressKey: 'Pressione uma tecla…',
     keybindsNote:
       'Clique em um atalho e pressione a nova tecla. Se segurar {key} ao pressioná-la, ele só funciona enquanto você usa a tela. Esc cancela.',

@@ -90,10 +90,11 @@ export type InteractionMode = 'hold' | 'toggle'
 
 /** Mirrors `westplay_host::settings::Keybinds`: the playing music's volume up and down, play/pause, and the phone in
  * the game out or away. */
-export type KeybindId = 'volumeUp' | 'volumeDown' | 'playPause' | 'phone'
+export type KeybindId = 'volumeUp' | 'volumeDown' | 'playPause' | 'phone' | 'character' | 'hints'| 'volumeDown' | 'playPause' | 'phone'
 
-/** In a row as their default keys are (1, 2, 3), as on a stereo: volume down, play/pause, volume up; the phone, 4. */
-export const KEYBIND_IDS: KeybindId[] = ['volumeDown', 'playPause', 'volumeUp', 'phone']
+/** In a row as their default keys are (1, 2, 3), as on a stereo: volume down, play/pause, volume up; the phone, 4;
+ * the phone's Personagem, 5; the key hints bar over the game, 6. */
+export const KEYBIND_IDS: KeybindId[] = ['volumeDown', 'playPause', 'volumeUp', 'phone', 'character', 'hints']
 
 /** Mirrors `westplay_host::settings::Binding`: a key, pressed alone or while using the screen (holding its
  * key, or toggled on). */

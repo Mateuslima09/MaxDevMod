@@ -82,6 +82,8 @@ function Keybinds({
     volumeDown: w.volumeDown,
     playPause: w.playPause,
     phone: w.phone,
+    character: w.character ?? 'Character (on the phone)',
+    hints: w.hideBar ?? 'Hide the key hints bar',
   }
   const listen = useCallback(
     (which: KeybindId | 'screen') => (on: boolean) => {
