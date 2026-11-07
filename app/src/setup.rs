@@ -406,8 +406,16 @@ fn installed_mod_files(game: &Game) -> Vec<PathBuf> {
 const MODS_LOOK: Duration = Duration::from_secs(30);
 
 /// What WestPlay's mod was last worked out from: the game (its folder, version and DLCs) and each installed mod's
-/// files (their path, size and when they last changed).
-type ModsStamp = (PathBuf, Option<String>, usize, Vec<(PathBuf, u64, Option<SystemTime>)>, game_mod::Split);
+/// files (their path, size and when they last changed), and WestPlay's own people's files the same way
+/// (`own_character::stamp`).
+type ModsStamp = (
+    PathBuf,
+    Option<String>,
+    usize,
+    Vec<(PathBuf, u64, Option<SystemTime>)>,
+    game_mod::Split,
+    Vec<(PathBuf, u64, Option<SystemTime>)>,
+);
 
 /// Keeps WestPlay's mod as the installed mods want it: the tablet in every truck with its slots, the game's and its
 /// installed mods' (owner 2026-10-24: "any truck, of any mod"), the screens of the mod vehicles WestPlay draws
@@ -447,8 +455,14 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
         })
         .collect();
     stamps.sort();
-    let stamp =
-        (game.dir.clone(), game.version.map(|version| version.to_string()), game.dlcs.len(), stamps, game_mod::split());
+    let stamp = (
+        game.dir.clone(),
+        game.version.map(|version| version.to_string()),
+        game.dlcs.len(),
+        stamps,
+        game_mod::split(),
+        westplay_setup::own_character::stamp(),
+    );
     if looked.as_ref() == Some(&stamp) {
         return;
     }

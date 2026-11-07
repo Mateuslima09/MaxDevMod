@@ -12,7 +12,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
-use westplay_shared::{KEYBIND_COUNT, Keybind, keybind_value};
+use westplay_shared::{
+    CHARACTER_KEY, CHARACTER_PEOPLE, CHARACTER_PERSON, CHARACTER_SENSITIVITY, KEYBIND_COUNT, Keybind, keybind_value,
+};
 
 /// Version of the settings file format. Bump it, and teach [`migrate`] the step, when a setting's meaning
 /// or shape changes (adding a setting needs neither: it takes its default).
@@ -33,6 +35,197 @@ pub struct Settings {
     pub graphics: GraphicsSettings,
     #[serde(deserialize_with = "lenient")]
     pub sound: SoundSettings,
+    #[serde(deserialize_with = "lenient")]
+    pub character: CharacterSettings,
+}
+
+/// The Modo Personagem (the companion's Personagem page): walking about on foot by the truck (F8 with it stopped),
+/// on by default (owner 2026-11-07: a fresh install "all ready, just get in the game and play"); the mouse's speed
+/// while walking, in percent of the game's; the key getting out and back in; and who walks.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CharacterSettings {
+    #[serde(deserialize_with = "lenient")]
+    pub enabled: bool,
+    #[serde(deserialize_with = "lenient")]
+    pub sensitivity: CharacterSensitivity,
+    #[serde(deserialize_with = "lenient")]
+    pub key: CharacterKey,
+    #[serde(deserialize_with = "lenient")]
+    pub person: CharacterPerson,
+    /// The key hints bar over the game (shown at first), and the key showing and hiding it there (none at first).
+    #[serde(deserialize_with = "lenient")]
+    pub hints: Shown,
+    #[serde(deserialize_with = "lenient")]
+    pub hints_key: HintsKey,
+}
+
+impl Default for CharacterSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            sensitivity: CharacterSensitivity::default(),
+            key: CharacterKey::default(),
+            person: CharacterPerson::default(),
+            hints: Shown::default(),
+            hints_key: HintsKey::default(),
+        }
+    }
+}
+
+/// Something shown unless the player hid it: shown by default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "bool", into = "bool")]
+pub struct Shown(pub bool);
+
+impl Default for Shown {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
+impl From<bool> for Shown {
+    fn from(value: bool) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Shown> for bool {
+    fn from(shown: Shown) -> Self {
+        shown.0
+    }
+}
+
+/// The key showing and hiding the key hints bar: a Windows virtual-key code (1 to 254), or 0 for none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "f64", into = "u32")]
+pub struct HintsKey(u32);
+
+impl HintsKey {
+    pub fn new(code: f64) -> Self {
+        if code.is_finite() && (1.0..=254.0).contains(&code) { Self(code as u32) } else { Self(0) }
+    }
+
+    pub fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<f64> for HintsKey {
+    fn from(value: f64) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<HintsKey> for u32 {
+    fn from(key: HintsKey) -> Self {
+        key.0
+    }
+}
+
+/// The key getting out of the truck and back in: a Windows virtual-key code (1 to 254), F8 if none or another.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "f64", into = "u32")]
+pub struct CharacterKey(u32);
+
+impl CharacterKey {
+    pub fn new(code: f64) -> Self {
+        if code.is_finite() && (1.0..=254.0).contains(&code) { Self(code as u32) } else { Self::default() }
+    }
+
+    pub fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<f64> for CharacterKey {
+    fn from(value: f64) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<CharacterKey> for u32 {
+    fn from(key: CharacterKey) -> Self {
+        key.0
+    }
+}
+
+impl Default for CharacterKey {
+    fn default() -> Self {
+        Self(CHARACTER_KEY)
+    }
+}
+
+/// Who walks: a place in the bridge's [`CHARACTER_PEOPLE`] (the default one if none or out of it).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "f64", into = "u32")]
+pub struct CharacterPerson(u32);
+
+impl CharacterPerson {
+    pub fn new(place: f64) -> Self {
+        if place.is_finite() && place >= 0.0 && (place as usize) < CHARACTER_PEOPLE.len() {
+            Self(place as u32)
+        } else {
+            Self::default()
+        }
+    }
+
+    pub fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<f64> for CharacterPerson {
+    fn from(value: f64) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<CharacterPerson> for u32 {
+    fn from(person: CharacterPerson) -> Self {
+        person.0
+    }
+}
+
+impl Default for CharacterPerson {
+    fn default() -> Self {
+        Self(CHARACTER_PERSON as u32)
+    }
+}
+
+/// The mouse's speed while walking, in percent: always within the bridge's [`CHARACTER_SENSITIVITY`] (corrected
+/// on the way in).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "f64", into = "u32")]
+pub struct CharacterSensitivity(u32);
+
+impl CharacterSensitivity {
+    pub fn new(percent: f64) -> Self {
+        let (least, most, _) = CHARACTER_SENSITIVITY;
+        if percent.is_finite() { Self((percent.round() as u32).clamp(least, most)) } else { Self::default() }
+    }
+
+    pub fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<f64> for CharacterSensitivity {
+    fn from(value: f64) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<CharacterSensitivity> for u32 {
+    fn from(sensitivity: CharacterSensitivity) -> Self {
+        sensitivity.0
+    }
+}
+
+impl Default for CharacterSensitivity {
+    fn default() -> Self {
+        Self(CHARACTER_SENSITIVITY.2)
+    }
 }
 
 /// The sound the players play: its tone (the cab's Settings › Equalizer), the same in every truck. As iOS's
@@ -434,6 +627,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_modo_personagem_is_on_at_first_and_its_mouse_kept_in_range() {
+        let settings = parse(r#"{"version": 2}"#).unwrap();
+        assert!(settings.character.enabled);
+        let off = parse(r#"{"version": 2, "character": {"enabled": false}}"#).unwrap();
+        assert!(!off.character.enabled);
+        assert_eq!(settings.character.sensitivity.get(), 50);
+        assert_eq!((settings.character.key.get(), settings.character.person.get()), (0x77, 0));
+        let chosen = parse(r#"{"version": 2, "character": {"key": 117, "person": 1}}"#).unwrap();
+        assert_eq!((chosen.character.key.get(), chosen.character.person.get()), (117, 1));
+        let wrong = parse(r#"{"version": 2, "character": {"key": 999, "person": 3}}"#).unwrap();
+        assert_eq!((wrong.character.key.get(), wrong.character.person.get()), (0x77, 0));
+        let set = parse(r#"{"version": 2, "character": {"enabled": true, "sensitivity": 999}}"#).unwrap();
+        assert!(set.character.enabled);
+        assert_eq!(set.character.sensitivity.get(), 200);
+        assert_eq!(
+            parse(r#"{"version": 2, "character": {"sensitivity": "x"}}"#).unwrap().character.sensitivity.get(),
+            50
+        );
+        let back = parse(&to_json(&set)).unwrap();
+        assert_eq!(back.character, set.character);
+    }
+
+    #[test]
     fn keys_have_windows_names_and_mouse_buttons_none() {
         // The names are the keyboard layout's, so only that there's one.
         assert!(KeyCode::name(0x31).is_some_and(|name| !name.is_empty()));
@@ -464,6 +680,14 @@ mod tests {
                 equalizer: crate::speakers::Equalizer { bass: -3, mid: 1, treble: 2 },
                 custom: true,
             },
+            character: CharacterSettings {
+                enabled: true,
+                sensitivity: CharacterSensitivity::new(70.0),
+                key: CharacterKey::new(0x75 as f64),
+                person: CharacterPerson::new(9.0),
+                hints: Shown(false),
+                hints_key: HintsKey::new(0x79 as f64),
+            },
         };
         let json = to_json(&settings);
         assert!(json.contains("\"version\": 2"), "{json}");
@@ -476,6 +700,10 @@ mod tests {
     #[test]
     fn missing_settings_take_their_defaults() {
         assert_eq!(parse(r#"{"version": 1}"#).unwrap(), Settings::default());
+        // The key hints bar: shown, with no key, unless chosen.
+        assert_eq!(Settings::default().character.hints, Shown(true));
+        assert_eq!(Settings::default().character.hints_key.get(), 0);
+        assert_eq!(HintsKey::new(300.0).get(), 0);
         let partial = parse(r#"{"version": 1, "interaction": {"sensitivity": 2.0}}"#).unwrap();
         assert_eq!(partial.interaction.key, KeyCode::LEFT_ALT);
         assert_eq!(partial.interaction.mode, InteractionMode::Hold);

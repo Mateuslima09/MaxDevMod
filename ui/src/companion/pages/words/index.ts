@@ -112,6 +112,33 @@ export interface CompanionWords {
     /** `{action}`: what the key is taken for. */
     inUse: string
   }
+  /** The Modo Personagem (walking about on foot by the truck): on or off, and the mouse's speed while walking. */
+  character: {
+    title: string
+    sub: string
+    enable: string
+    /** `{key}`: the key getting out and back in. */
+    enableDetail: string
+    speed: string
+    speedDetail: string
+    note: string
+    /** The key getting out and back in, and what that key is taken for when another wants it (`inUse`). */
+    walkKey: string
+    walking: string
+    /** Who walks: the games' passers-by, men then women, numbered (`{n}`). */
+    person: string
+    man: string
+    woman: string
+    personNote: string
+    /** The person changed with the game open: it applies once the game is restarted (owner 2026-11-06). */
+    restartNote: string
+    /** The key hints bar over the game: on or off, and the key showing and hiding it there (none: `noKey`). */
+    hints: string
+    hintsDetail: string
+    hintsKey: string
+    hintsKeyDetail: string
+    noKey: string
+  }
   accounts: {
     title: string
     sub: string
@@ -268,7 +295,8 @@ export interface TutorialWords {
   finish: string
 }
 
-export type SectionId = 'screen' | 'controls' | 'customize' | 'accounts' | 'map' | 'setup' | 'about' | 'support'
+export type SectionId =
+  'screen' | 'controls' | 'character' | 'customize' | 'accounts' | 'map' | 'setup' | 'about' | 'support'
 
 const WORDS: Record<string, CompanionWords> = Object.fromEntries(
   Object.entries(import.meta.glob<CompanionWords>('./[a-z][a-z]_[a-z][a-z].ts', { eager: true, import: 'words' })).map(

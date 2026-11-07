@@ -153,6 +153,11 @@ unsafe impl Send for Session {}
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
+/// Whether TruckersMP's client has started the plugin (a multiplayer session).
+pub fn loaded() -> bool {
+    session().is_some()
+}
+
 fn session() -> std::sync::MutexGuard<'static, Option<Session>> {
     SESSION.lock().unwrap_or_else(|e| e.into_inner())
 }

@@ -20,6 +20,34 @@
 /// or two may pass without it in the cab as well).
 pub const OUTSIDE_AFTER_FRAMES: u64 = 4;
 
+/// How long the cab's screen goes undrawn, the game running, before WestPlay's screen counts as out of view
+/// ([`Unseen`]).
+pub const UNSEEN_AFTER: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Whether WestPlay's screen is out of view: the game running and the cab not drawn for [`UNSEEN_AFTER`] (the
+/// camera outside the cab, the player on foot, the game's menu). Its page then holds its map and animations still
+/// and nothing is sent to the game: the game's own frames go short on a laptop's GPU (owner 2026-11-06, an
+/// RTX 2050 at 100%, 45 W and 87 °C, the game from 60 to 40 fps; the screen sent 30 frames a second, unseen).
+/// In view again at once, as soon as it's drawn. In the cab it's always in view: the game draws the screen every
+/// frame there, wherever the player looks.
+#[derive(Default)]
+pub struct Unseen {
+    undrawn_since: Option<std::time::Instant>,
+}
+
+impl Unseen {
+    /// Whether the screen is out of view now: `running`, the game connected; `drawn`, the cab drawn in its
+    /// last frames ([`drawn`]).
+    pub fn update(&mut self, running: bool, drawn: bool, now: std::time::Instant) -> bool {
+        if !running || drawn {
+            self.undrawn_since = None;
+            return false;
+        }
+        let since = *self.undrawn_since.get_or_insert(now);
+        now.duration_since(since) >= UNSEEN_AFTER
+    }
+}
+
 #[derive(Default)]
 pub struct Camera {
     truck: String,
@@ -159,6 +187,27 @@ impl Pose {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_screen_is_out_of_view_a_second_after_the_cab_stops_being_drawn() {
+        let start = std::time::Instant::now();
+        let at = |ms: u64| start + std::time::Duration::from_millis(ms);
+        let mut unseen = Unseen::default();
+        // In the cab: in view.
+        assert!(!unseen.update(true, true, at(0)));
+        // Out of the cab: still in view for a second (a cut between cameras, a frame or two without it).
+        assert!(!unseen.update(true, false, at(10)));
+        assert!(!unseen.update(true, false, at(900)));
+        assert!(unseen.update(true, false, at(1010)));
+        assert!(unseen.update(true, false, at(5000)));
+        // Back in the cab: in view at once, and the second counted again from the next time.
+        assert!(!unseen.update(true, true, at(5010)));
+        assert!(!unseen.update(true, false, at(5020)));
+        assert!(!unseen.update(true, false, at(5900)));
+        // No game: always in view (the page as it is, nothing held).
+        assert!(!unseen.update(false, false, at(9000)));
+        assert!(!unseen.update(false, false, at(20000)));
+    }
 
     #[test]
     fn the_menu_has_gone_once_the_cab_shows_again_in_its_pause() {

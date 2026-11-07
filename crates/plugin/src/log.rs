@@ -153,6 +153,11 @@ pub fn game_dir() -> PathBuf {
     }
 }
 
+/// The game's own folder in Documents (its `config.cfg`), once the SDK said which game.
+pub fn game_documents() -> Option<PathBuf> {
+    Some(documents_dir().join(crate::mod_mount::game_folder(GAME_ID.get()?)?))
+}
+
 /// The player's Documents folder (Windows' own, wherever it's moved).
 pub fn documents_dir() -> PathBuf {
     // SAFETY: Windows hands back a CoTaskMem string, read before it's freed here.

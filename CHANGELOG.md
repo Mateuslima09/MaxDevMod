@@ -3,6 +3,16 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.3.0 (beta, 2026-11-07)
+- Modo Personagem (complete in ETS2; ATS doesn't have all of it yet): get out of the truck (F8, stopped) and walk
+  about in first or third person, as one of WestPlay's own people (the tattooed man, the woman or the cowboy, chosen
+  by photo on the Personagem page). Walk, run (Shift), jump (Space), crouch (Ctrl), stop smoothly; footsteps and the
+  driver's door; the phone in the hand on foot, put away as you run or get in; the music muffled on foot; a key
+  hints bar over the game; the camera remembers first or third person.
+- A fresh install has it all ready: the people come inside WestPlay and are put in place on its first start, the
+  Modo Personagem is on, and the games' developer mode and console are set on (with the games closed).
+- Private build: the people's animations are Mixamo's, so this build isn't for handing out.
+
 ## 2.2.0 (2026-11-02)
 - Euro Truck Simulator 2, as American Truck Simulator: its trucks' screens and the tablet, its map, mods, the phone
   and Nupay. Set up in both, WestPlay works with the one you play and switches to it as it starts (Setup, Other

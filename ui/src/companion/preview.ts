@@ -80,6 +80,7 @@ let settings: Settings = {
   screen: { truckStrip: 'auto', split: 'off' },
   look: { wallpaper: null, iconSet: null, iconStyle: 'auto' },
   graphics: { gpu: null },
+  character: { enabled: true, sensitivity: 50, key: 0x77, person: 0, hints: true, hintsKey: 0 },
 }
 
 // The player's own, made up from WestPlay's files (the preview's address: `FILES_BASE` is `/` here).
@@ -114,7 +115,7 @@ function startingMap(): MapStatus {
     case 'memory':
       return { state: 'waitingForMemory', needed: 3_500_000_000, free: 2_140_000_000 }
     case 'failed':
-      return { state: 'failed', error: 'The map couldn’t be read: def/world/road_look.sii is missing.' }
+      return { state: 'failed', error: 'The map couldnâ€™t be read: def/world/road_look.sii is missing.' }
     case 'protected':
       return { state: 'failed', error: 'the map eldorado has no roads', protectedMap: 'eldorado' }
     default:
@@ -248,7 +249,7 @@ const CHECK: GameCheck = {
     { id: 'renault-t-2024', name: 'Renault T (2024)', fit: 'ready', fromMod: false },
     { id: 'volvo-fh-2021', name: 'Volvo FH (2021)', fit: 'ready', fromMod: false },
     { id: 'volvo-fh-2024', name: 'Volvo FH (2024)', fit: 'ready', fromMod: false },
-    { id: 'any-truck-tablet', name: 'Any truck – with the WestPlay tablet', fit: 'ready', fromMod: false },
+    { id: 'any-truck-tablet', name: 'Any truck â€“ with the WestPlay tablet', fit: 'ready', fromMod: false },
   ],
   modProblem: null,
   plugin: 'current',

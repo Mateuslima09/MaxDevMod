@@ -8,6 +8,7 @@ import { useHeldKey } from './pages/heldKey'
 import { Lesson, TouchLayer } from './pages/Lesson'
 import { Launch, TourCard } from './pages/Tour'
 import { Accounts } from './pages/Accounts'
+import { Character } from './pages/Character'
 import { Controls } from './pages/Controls'
 import { Customize } from './pages/Customize'
 import { type MapProgress, useMapProgress } from './mapProgress'
@@ -78,7 +79,7 @@ export function Companion() {
 }
 
 const SECTIONS: SectionId[][] = [
-  ['screen', 'controls', 'customize'],
+  ['screen', 'controls', 'character', 'customize'],
   ['accounts', 'map'],
   ['setup', 'about'],
   ['support'],
@@ -97,6 +98,7 @@ const POSE: Record<Phase, Pose> = { lesson: 'full', tour: 'aside', launch: 'fina
 const SECTION_GLOW: Record<SectionId, string> = {
   screen: GLOW.home,
   controls: GLOW.home,
+  character: GLOW.home,
   customize: GLOW.home,
   accounts: GLOW.youtube,
   map: GLOW.maps,
@@ -329,6 +331,7 @@ function Room({
             )}
             {roomShown && section === 'screen' && <ScreenPage {...page} />}
             {roomShown && section === 'controls' && <Controls {...page} />}
+            {roomShown && section === 'character' && <Character {...page} />}
             {roomShown && section === 'customize' && <Customize {...page} />}
             {roomShown && section === 'accounts' && <Accounts {...page} />}
             {roomShown && section === 'map' && <MapPage {...page} />}
@@ -403,6 +406,7 @@ function SectionList({
               ? cw.screen.screenUnsupported
               : '',
     controls: keyName,
+    character: settings.settings?.character?.enabled ? cw.values.on : cw.values.off,
     customize: '',
     accounts:
       signedIn.youtube === null && signedIn.spotify === null && signedIn.appleMusic === null

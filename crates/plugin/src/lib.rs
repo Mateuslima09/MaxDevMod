@@ -6,10 +6,12 @@
 
 mod bridge;
 mod camera;
+mod character;
 mod commands;
 mod d3d;
 mod frame;
 mod handset;
+mod hints;
 mod hooks;
 mod input;
 mod keybinds;
@@ -134,6 +136,7 @@ pub unsafe extern "system" fn scs_telemetry_shutdown() {
 /// # Safety
 /// As [`scs_telemetry_shutdown`].
 unsafe fn shutdown() {
+    crate::character::shutdown();
     // SAFETY: on the game's main thread, after a successful init; a detour still running on the render
     // thread is given time to return below, before the plugin can be unloaded.
     unsafe {
@@ -146,6 +149,7 @@ unsafe fn shutdown() {
         bridge.plugin.pid.store(0, std::sync::atomic::Ordering::Release);
         bridge.plugin.screen_frame.store(0, std::sync::atomic::Ordering::Release);
         bridge.plugin.cab_frame.store(0, std::sync::atomic::Ordering::Release);
+        bridge.plugin.on_foot.store(0, std::sync::atomic::Ordering::Release);
         bridge.plugin.truck_supported.store(0, std::sync::atomic::Ordering::Release);
         bridge.plugin.screen_layout.store(0, std::sync::atomic::Ordering::Release);
         bridge.plugin.pointer.active.store(0, std::sync::atomic::Ordering::Release);

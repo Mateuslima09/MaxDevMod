@@ -31,6 +31,19 @@ pub unsafe fn hook(target: usize, detour: *mut c_void, original: &AtomicUsize, n
     Ok(())
 }
 
+/// Hooks the function at `target` and switches the hook on at once (for a hook made after [`enable_all`]: the
+/// game's own code, found when first needed). MinHook holds the process's other threads while it patches.
+///
+/// # Safety
+/// As [`hook`]; and `detour` ready to run (on any thread) as soon as this returns.
+pub unsafe fn hook_now(target: usize, detour: *mut c_void, original: &AtomicUsize, name: &str) -> Result<(), String> {
+    // SAFETY: as `hook` (the caller's contract); then that hook alone switched on.
+    unsafe {
+        hook(target, detour, original, name)?;
+        MinHook::enable_hook(target as *mut c_void).map_err(|e| format!("enable_hook {name}: {e:?}"))
+    }
+}
+
 /// Switches every hook on.
 ///
 /// # Safety

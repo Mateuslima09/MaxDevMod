@@ -27,6 +27,33 @@ pub fn paused() -> bool {
     PAUSED.load(Ordering::Acquire)
 }
 
+/// What the walking test (`character`) needs of the truck: where it is and how it's turned (metres; heading
+/// in turns), its speed, its parking brake, whether this is a multiplayer session (the SDK's time offset),
+/// and where the driver's head is in it (the cab's position plus the head's, in the truck's own space).
+pub struct Truck {
+    pub position: [f64; 3],
+    pub heading: f32,
+    pub speed: f32,
+    pub parking_brake: bool,
+    pub multiplayer: bool,
+    pub head: [f32; 3],
+}
+
+/// The truck as the SDK last said (any thread).
+pub fn truck() -> Truck {
+    let s = SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner());
+    let [hx, hy, hz] = *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
+    let [cx, cy, cz] = *CABIN.lock().unwrap_or_else(|e| e.into_inner());
+    Truck {
+        position: [s.x, s.y, s.z],
+        heading: s.heading,
+        speed: s.speed,
+        parking_brake: s.parking_brake,
+        multiplayer: s.multiplayer_time_offset != 0,
+        head: [cx + hx + s.head_x, cy + hy + s.head_y, cz + hz + s.head_z],
+    }
+}
+
 static SNAPSHOT: Mutex<Telemetry> = Mutex::new(Telemetry {
     x: 0.0,
     y: 0.0,
@@ -251,6 +278,8 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                 crate::typing::update(speed, paused);
                 // The end of a frame is on the game's main thread, where its navigator may be changed.
                 crate::navigation::serve();
+                // The walking test: on the game's main thread too (it calls the game's camera).
+                crate::character::on_frame_end();
             }
             _ => {}
         }

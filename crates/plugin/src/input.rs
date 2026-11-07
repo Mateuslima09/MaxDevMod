@@ -348,6 +348,27 @@ unsafe fn on_device_state(device: *mut c_void, size: u32, state: *mut u8) {
                 *state.add(scancode as usize) = 0;
             }
         }
+        // While walking (`character`), its keys are kept from the game.
+        if kind == DeviceKind::Keyboard && size == KEYBOARD_STATE_SIZE {
+            for scancode in (0..KEYBOARD_STATE_SIZE).filter(|&code| crate::character::takes_scancode(code)) {
+                *state.add(scancode as usize) = 0;
+            }
+        }
+        // While walking (`character`), the mouse turns the plugin's view, none of it the game's.
+        if let DeviceKind::Mouse(layout) = kind
+            && crate::character::takes_mouse()
+            && !interaction_active()
+        {
+            for (index, offset) in [layout.x, layout.y].into_iter().enumerate() {
+                if let Some(offset) = offset
+                    && offset + 4 <= size
+                {
+                    let at = state.add(offset as usize) as *mut i32;
+                    crate::character::look(index, at.read_unaligned());
+                    at.write_unaligned(0);
+                }
+            }
+        }
         if !interaction_active() {
             return;
         }
@@ -440,11 +461,31 @@ unsafe fn on_device_data(
             DeviceKind::Keyboard => {
                 let typing = typing::typing();
                 retain_events(events, object_size as usize, |offset, _| {
-                    !typing || typing::stays_the_games_scancode(offset)
+                    (!typing || typing::stays_the_games_scancode(offset)) && !crate::character::takes_scancode(offset)
                 })
             }
             DeviceKind::Other => return,
         };
+        // While walking (`character`), the mouse turns the plugin's view, none of it the game's (a peek counted
+        // only at the real read).
+        if let DeviceKind::Mouse(layout) = kind
+            && crate::character::takes_mouse()
+            && !interacting
+        {
+            let size = object_size as usize;
+            for at in (0..kept).map(|index| index * size) {
+                let word = |from: usize| u32::from_le_bytes(events[from..from + 4].try_into().unwrap());
+                let axis = match layout.object(word(at)) {
+                    Some(MouseObject::X) => 0,
+                    Some(MouseObject::Y) => 1,
+                    _ => continue,
+                };
+                if !peek {
+                    crate::character::look(axis, word(at + 4) as i32);
+                }
+                events[at + 4..at + 8].copy_from_slice(&0i32.to_le_bytes());
+            }
+        }
         *count = kept as u32;
     }
 }

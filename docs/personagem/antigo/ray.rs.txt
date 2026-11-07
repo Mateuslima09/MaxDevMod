@@ -1,0 +1,274 @@
+// REMOVIDO do plugin em 2026-11-05 (decisão do dono): a câmera em 3ª pessoa parando nas paredes fechou o jogo
+// duas vezes no ETS2 1.61 (access violation dentro do raycast do PhysX do jogo, no 1º raio ao descer e no 2º,
+// mesmo esperando 1 s). Guardado só como pesquisa (achar PxScene::raycast, o filtro das camadas, a origem).
+
+//! A ray through the game's physics (PhysX 3.4, under the game's own layer): how far the third-person camera
+//! can be behind the player before a wall, a tree or the truck, so it comes closer instead of going through
+//! (owner 2026-11-05).
+//!
+//! Found in the game's code, the same in ETS2 1.61 and ATS 1.62:
+//! - `PxScene::raycast` by its first bytes (ETS2 `0x1b06a10`, ATS `0x1b39bb0`), slot `0x2f0` of the scene's vtable
+//!   (`NpScene`'s, ETS2 `0x2502350`, loaded by its constructor);
+//! - the scene found at walk start among the pointers of the game's physics world and system, by that slot;
+//! - the game's shapes' query filter: `word0 = 1 << layer` (the shape layer setter, ETS2 `0x1641980`);
+//! - PhysX's coordinates: the game's position less its physics origin, a placement at `+0x110` of the physics
+//!   world (the game's shapes add it reading their position back, ETS2 `0x163b510`).
+//!
+//! Checked at walk start by a ray straight down from the eyes: it must meet the ground about where the feet are;
+//! if not (anything not as known), no ray: the camera stays as before.
+
+use std::ffi::c_void;
+
+use super::{Placement, pattern, read};
+use crate::log;
+use crate::navigation::Image;
+
+/// `PxScene::raycast`'s first bytes (two functions start so: both are tried).
+const RAYCAST: &str = "F3 0F 11 5C 24 20 4C 8B DC 53 48 83 EC 70 0F AE 9C 24 88 00 00 00 8B 9C 24 88 00 00 00 4C 8B D1 \
+                       C7 84 24 88 00 00 00 C0 9F 00 00 0F AE 94 24 88 00 00 00 0F 18 02 41 0F 18 00";
+const RAYCAST_SLOT: usize = 0x2f0;
+/// How far into an object the scene is looked for (bytes), and how deep (an object of the object's).
+const LOOK_IN: usize = 0x800;
+/// The physics origin in the physics world.
+const ORIGIN: usize = 0x110;
+
+/// The layers the camera stops at: the fixed world (1, 2: roads, buildings, the ground), traffic (4), the
+/// player's truck (6, 7) and trailer (8). Not the player's own capsule (9) nor its bumping shape (3).
+const STOPS_AT: u32 = 1 << 1 | 1 << 2 | 1 << 4 | 1 << 6 | 1 << 7 | 1 << 8;
+/// PhysX's query flags: static and dynamic objects; hit flags: position, normal, distance.
+const STATIC_AND_DYNAMIC: u16 = 1 | 2;
+const HIT_FLAGS: u16 = 1 | 2 | 4;
+
+/// `PxRaycastHit` (PhysX 3.4, 64-bit): actor, shape, face, flags, position, normal, distance, u, v.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct Hit {
+    actor: usize,
+    shape: usize,
+    face: u32,
+    flags: u16,
+    position: [f32; 3],
+    normal: [f32; 3],
+    distance: f32,
+    uv: [f32; 2],
+}
+
+/// `PxRaycastBuffer` with no room for touches: only the nearest blocking hit.
+#[repr(C)]
+struct Buffer {
+    vtable: *const BufferVtable,
+    block: Hit,
+    has_block: bool,
+    touches: *mut Hit,
+    most_touches: u32,
+    touches_found: u32,
+    /// Room past the end, in case.
+    _spare: [u8; 64],
+}
+
+/// `PxQueryFilterData`: the filter's four words, and the query's flags.
+#[repr(C)]
+struct Filter {
+    words: [u32; 4],
+    flags: u16,
+}
+
+unsafe extern "system" fn process_touches(_: *mut Buffer, _: *const Hit, _: u32) -> bool {
+    false
+}
+unsafe extern "system" fn finalize_query(_: *mut Buffer) {}
+unsafe extern "system" fn drop_buffer(_: *mut Buffer, _: u32) -> *mut c_void {
+    std::ptr::null_mut()
+}
+
+/// The buffer's virtuals (`processTouches`, `finalizeQuery`, the destructor), never given touches.
+#[repr(C)]
+struct BufferVtable {
+    process_touches: unsafe extern "system" fn(*mut Buffer, *const Hit, u32) -> bool,
+    finalize_query: unsafe extern "system" fn(*mut Buffer),
+    drop: unsafe extern "system" fn(*mut Buffer, u32) -> *mut c_void,
+}
+static BUFFER_VTABLE: BufferVtable = BufferVtable { process_touches, finalize_query, drop: drop_buffer };
+
+type Raycast = unsafe extern "system" fn(
+    *mut u8,
+    *const [f32; 3],
+    *const [f32; 3],
+    f32,
+    *mut Buffer,
+    *const u16,
+    *const Filter,
+    *mut c_void,
+    *mut c_void,
+) -> bool;
+
+/// The raycast functions found in the game's code.
+pub struct Code {
+    raycasts: Vec<usize>,
+}
+
+/// Finds `PxScene::raycast` in the game's code.
+pub fn locate(image: &Image) -> Option<Code> {
+    let raycasts = image.all_masked(&pattern(RAYCAST));
+    if raycasts.is_empty() || raycasts.len() > 4 {
+        log!("character: not found: the physics ray (the camera goes through walls)");
+        return None;
+    }
+    Some(Code { raycasts })
+}
+
+/// A scene to cast rays in, and the physics origin, as found and checked at walk start.
+pub struct Ray {
+    scene: *mut u8,
+    raycast: Raycast,
+    origin: Placement,
+}
+
+// SAFETY: the game's objects, used only on its main thread.
+unsafe impl Send for Ray {}
+
+impl Code {
+    /// The scene among `roots`' pointers (and theirs), with its origin, checked by a ray down from `eyes` meeting
+    /// the ground `feet_under` the eyes.
+    ///
+    /// # Safety
+    /// On the game's main thread; `roots` the game's objects (read guarded).
+    pub unsafe fn ray(&self, roots: &[usize], origin_at: &[usize], eyes: [f64; 3], feet_under: f64) -> Option<Ray> {
+        // SAFETY: reads guarded; the function called only on an object whose vtable holds it.
+        unsafe {
+            let Some((scene, raycast)) = self.scene_in(roots) else {
+                log!("character: no physics scene found (the camera goes through walls)");
+                return None;
+            };
+            // The physics origin: where the game keeps it, or none (PhysX's coordinates the game's own).
+            let mut origins: Vec<Placement> =
+                origin_at.iter().filter_map(|&at| read::<Placement>(at + ORIGIN)).filter(plausible).collect();
+            origins.push(Placement::default());
+            for origin in origins {
+                let ray = Ray { scene: scene as *mut u8, raycast, origin };
+                let down = ray.cast(eyes, [0.0, -1.0, 0.0], 5.0);
+                log!("character: the ray down from the eyes (origin {:?}): {down:?}", origin.world());
+                if down.is_some_and(|d| (d - feet_under).abs() < 0.35) {
+                    log!("character: the camera stops at walls (scene {scene:#x})");
+                    return Some(ray);
+                }
+            }
+            log!("character: the ray down didn't meet the ground at the feet (the camera goes through walls)");
+            None
+        }
+    }
+
+    /// The first pointer of `roots`, or of theirs, to an object whose vtable has a raycast found at its slot.
+    unsafe fn scene_in(&self, roots: &[usize]) -> Option<(usize, Raycast)> {
+        // SAFETY: reads guarded.
+        unsafe {
+            let is_scene = |object: usize| -> Option<Raycast> {
+                let vtable = read::<usize>(object)?;
+                let function = read::<usize>(vtable + RAYCAST_SLOT)?;
+                self.raycasts.contains(&function).then(|| std::mem::transmute::<usize, Raycast>(function))
+            };
+            let pointers = |object: usize| {
+                (0..LOOK_IN).step_by(8).filter_map(move |off| read::<usize>(object + off)).filter(|&p| p > 0x10000)
+            };
+            for &root in roots {
+                if let Some(raycast) = is_scene(root) {
+                    return Some((root, raycast));
+                }
+                for p in pointers(root) {
+                    if let Some(raycast) = is_scene(p) {
+                        log!(
+                            "character: the physics scene at {root:#x} +{:#x}",
+                            (0..LOOK_IN).step_by(8).find(|&o| read::<usize>(root + o) == Some(p)).unwrap_or(0)
+                        );
+                        return Some((p, raycast));
+                    }
+                }
+            }
+            for &root in roots {
+                for p in pointers(root) {
+                    for q in pointers(p) {
+                        if let Some(raycast) = is_scene(q) {
+                            log!("character: the physics scene two pointers from {root:#x}");
+                            return Some((q, raycast));
+                        }
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+/// A physics origin as the game keeps one: a place in the world (sectors within a few thousand).
+fn plausible(origin: &Placement) -> bool {
+    origin.local.iter().all(|v| v.is_finite() && v.abs() < 1e6) && origin.sector.iter().all(|s| s.abs() < 4096)
+}
+
+impl Ray {
+    /// How far from `from` (world metres) along `direction` (a unit vector) the first thing the camera stops at
+    /// is, within `distance`.
+    ///
+    /// # Safety
+    /// On the game's main thread, with the scene as found.
+    pub unsafe fn cast(&self, from: [f64; 3], direction: [f64; 3], distance: f64) -> Option<f64> {
+        let origin = self.origin.world();
+        let at = [0, 1, 2].map(|i| (from[i] - origin[i]) as f32);
+        let direction = direction.map(|d| d as f32);
+        let mut buffer = Buffer {
+            vtable: &BUFFER_VTABLE,
+            block: Hit::default(),
+            has_block: false,
+            touches: std::ptr::null_mut(),
+            most_touches: 0,
+            touches_found: 0,
+            _spare: [0; 64],
+        };
+        let filter = Filter { words: [STOPS_AT, 0, 0, 0], flags: STATIC_AND_DYNAMIC };
+        let mut hit = false;
+        crate::hooks::guarded(|| {
+            // SAFETY: the game's raycast on its scene, with PhysX's arguments (`Raycast`), on its main thread.
+            hit = unsafe {
+                (self.raycast)(
+                    self.scene,
+                    &at,
+                    &direction,
+                    distance as f32,
+                    &mut buffer,
+                    &HIT_FLAGS,
+                    &filter,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            }
+        });
+        let d = f64::from(buffer.block.distance);
+        (hit && buffer.has_block && d.is_finite() && (0.0..=distance + 0.01).contains(&d)).then_some(d)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_buffer_is_laid_out_as_physx_has_it() {
+        assert_eq!(std::mem::size_of::<Hit>(), 64);
+        assert_eq!(std::mem::offset_of!(Hit, distance), 48);
+        assert_eq!(std::mem::offset_of!(Buffer, block), 8);
+        assert_eq!(std::mem::offset_of!(Buffer, has_block), 72);
+        assert_eq!(std::mem::offset_of!(Buffer, touches), 80);
+        assert_eq!(std::mem::offset_of!(Buffer, touches_found), 92);
+        assert_eq!(std::mem::offset_of!(Filter, flags), 16);
+        assert_eq!(pattern(RAYCAST).len(), 58);
+    }
+
+    #[test]
+    fn the_camera_stops_at_the_world_and_the_truck_not_the_player() {
+        for layer in [1, 2, 4, 6, 7, 8] {
+            assert_ne!(STOPS_AT & 1 << layer, 0);
+        }
+        for layer in [3, 9, 16, 18] {
+            assert_eq!(STOPS_AT & 1 << layer, 0);
+        }
+    }
+}

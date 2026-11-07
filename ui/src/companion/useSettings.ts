@@ -33,6 +33,34 @@ export interface Settings {
   graphics: {
     gpu: string | null
   }
+  /** The Modo Personagem: walking about on foot by the truck (F8 with it stopped), off at first; the mouse's speed
+   * while walking, in percent of the game's (`CHARACTER_SENSITIVITY`). */
+  character: {
+    enabled: boolean
+    sensitivity: number
+    /** The key getting out and back in (a Windows virtual-key code: `CHARACTER_KEY` at first). */
+    key: KeyCode
+    /** Who walks: a place in the bridge's `CHARACTER_PEOPLE` (`CHARACTER_PEOPLE` here: their pictures). */
+    person: number
+    /** The key hints bar over the game (shown at first), and the key showing and hiding it there (0: none). */
+    hints: boolean
+    hintsKey: KeyCode
+  }
+}
+
+/** Mirrors the bridge's `CHARACTER_SENSITIVITY` (the app corrects anything outside it). */
+export const CHARACTER_SENSITIVITY = { min: 10, max: 200, step: 10 }
+/** Mirrors the bridge's `CHARACTER_KEY` (F8) and `CHARACTER_PEOPLE`: WestPlay's own people, in its order, each with
+ * their picture (`/characters/<prefix>.png`, rendered in Blender) and whether a man or a woman (their name); the
+ * default the first. */
+export const CHARACTER_KEY: KeyCode = 0x77
+export const CHARACTER_PEOPLE = {
+  people: [
+    { picture: '/characters/wt.png', kind: 'man' },
+    { picture: '/characters/wm.png', kind: 'woman' },
+    { picture: '/characters/wc.png', kind: 'man' },
+  ] as const,
+  default: 0,
 }
 
 /** Mirrors `westplay_host::settings::TruckStrip`: the truck's own strip beside WestPlay, kept or not. */

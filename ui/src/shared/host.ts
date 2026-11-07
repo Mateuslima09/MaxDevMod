@@ -200,6 +200,8 @@ export type HostMessage =
   /** Whether the game's window shows (`false`: minimised, or on another desktop; in front or not: Lossless
    * Scaling's window is in front of it). */
   | { type: 'gameShown'; shown: boolean }
+  /** Whether WestPlay's screen is in the game's view (not with the camera outside the cab, nor in its menu). */
+  | { type: 'screenSeen'; seen: boolean }
   /** The player's stops along the route `id`: their map nodes' indices in it, ascending (not WestPlay's own
    * waypoints, nor the destination). */
   | { type: 'routeStops'; id: number | null; stops: number[] }

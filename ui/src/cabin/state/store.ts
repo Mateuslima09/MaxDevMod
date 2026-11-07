@@ -13,6 +13,7 @@ import {
   IS_DEMO,
   type KeybindAction,
   isInHost,
+  isPhonePage,
   postToHost,
   subscribeHostMessages,
   type Telemetry,
@@ -291,6 +292,9 @@ export interface LiveState {
   weather: GameWeather | null
   /** Whether the game's window shows, in front or not (no game: as if it did). */
   gameShown: boolean
+  /** Whether WestPlay's screen is in the game's view (crates/host camera.rs `Unseen`: not with the camera outside
+   * the cab, nor in the game's menu; no game: as if it were). Out of view, the map and the animations hold still. */
+  screenSeen: boolean
   /** The game's menu gone while it's still paused (the music comes back then, not 1.5 s later). */
   menuGone: boolean
   /** The keybind last pressed in the game, and how many so far (each press a new one). */
@@ -331,6 +335,7 @@ export const useLive = create<LiveState>()(() => ({
   routeStops: [],
   weather: null,
   gameShown: true,
+  screenSeen: true,
   menuGone: false,
   keybind: null,
   truckersmp: false,
@@ -527,6 +532,15 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'menuGone':
         useLive.setState({ menuGone: message.gone })
+        break
+      case 'screenSeen':
+        // The cab's screen only: the message comes to the phones too (the host mirrors the cab page's), and the
+        // phone in the hand is seen on foot (owner 2026-11-06: out of the truck an app opened black, its opening
+        // animation held still).
+        if (isPhonePage()) break
+        useLive.setState({ screenSeen: message.seen })
+        // Every CSS animation held where it is (shell.css), drawn again as it shows.
+        document.documentElement.toggleAttribute('data-unseen', !message.seen)
         break
       case 'volumeShown':
         showVolume(message.volume)

@@ -1,4 +1,5 @@
-//! Dev tool: prints one game file. `cargo run -p westplay-mapdata --example cat -- <game folder> <path>`
+//! Dev tool: prints one game file, or writes it as it is to `[out]`. `cargo run -p westplay-mapdata --example cat --
+//! <game folder> <path> [out]`
 
 use std::path::Path;
 
@@ -8,5 +9,8 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let files = GameFiles::install(Path::new(&args[1])).expect("the game");
     let bytes = files.read(&args[2]).expect("readable").expect("in the game");
-    print!("{}", String::from_utf8_lossy(&bytes));
+    match args.get(3) {
+        Some(out) => std::fs::write(out, &bytes).expect("written"),
+        None => print!("{}", String::from_utf8_lossy(&bytes)),
+    }
 }

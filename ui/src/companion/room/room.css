@@ -677,6 +677,65 @@
   background: var(--fill);
 }
 
+/* The Personagem page's people: a picture card each, the chosen one outlined (owner 2026-11-05: "pick the
+   character by its picture"). */
+.ob-people {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 12px;
+}
+
+.ob-person {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at 50% 35%, rgb(255 255 255 / 0.13), var(--fill) 70%);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease);
+}
+
+.ob-person:hover {
+  background: radial-gradient(ellipse at 50% 35%, rgb(255 255 255 / 0.18), var(--fill-strong) 70%);
+}
+
+.ob-person[data-chosen] {
+  border-color: var(--blue);
+}
+
+.ob-person img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  user-select: none;
+}
+
+.ob-person-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 10px 8px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.ob-person-name .ob-tick {
+  width: 18px;
+  height: 18px;
+  color: var(--blue);
+}
+
 .ob-group-title {
   margin: 4px 0 -6px 14px;
   font-size: 12px;

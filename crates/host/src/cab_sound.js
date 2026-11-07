@@ -32,6 +32,9 @@ window.westplayCabSound = (media, say) => {
     [16, -24, 125],
   ]
   const SILENT = 20
+  // Coming back in: how fast the sound rises to full (seconds: the time constant, about 95% in three of them):
+  // 1 s, about 3 s in all (owner 2026-11-07: 0.5, 1.5 s, was still too quick).
+  const COMING_IN = 1
   const muffled = () => {
     const last = MUFFLE.at(-1)
     const d = Math.min(Math.max(MUFFLE[0][0], distance), last[0])
@@ -47,9 +50,16 @@ window.westplayCabSound = (media, say) => {
     if (!audio?.muffle) return
     const { currentTime } = audio.context
     const { frequency, gain } = outside ? muffled() : { frequency: 20000, gain: 1 }
-    // In or out at once, as the game cuts from one camera to the other; further or nearer as the camera moves.
+    // Out at once, as the game cuts from one camera to the other; in, rising over a second and a half from the
+    // muffled sound (owner 2026-11-06: back in the cab from outside, the music "hit at once", too loud: it
+    // should come in low and grow); further or nearer as the camera moves.
+    const comingIn = cut && !outside
     for (const [param, value] of [[audio.muffle.filter.frequency, frequency], [audio.muffle.gain.gain, gain]]) {
-      if (cut) param.setValueAtTime(value, currentTime)
+      if (comingIn) {
+        param.cancelScheduledValues(currentTime)
+        param.setValueAtTime(param.value, currentTime)
+        param.setTargetAtTime(value, currentTime, COMING_IN)
+      } else if (cut) param.setValueAtTime(value, currentTime)
       else param.setTargetAtTime(value, currentTime, 0.05)
     }
   }

@@ -435,6 +435,7 @@ unsafe fn on_present(swapchain: *mut c_void) {
         crate::input::on_frame();
         crate::keybinds::on_frame();
         crate::handset::on_present(swapchain);
+        crate::hints::on_present(swapchain);
         if let Some(bridge) = bridge::get() {
             bridge.plugin.heartbeat.store(frame, Ordering::Release);
         }
@@ -494,6 +495,12 @@ pub fn game_shown() -> bool {
     let window = HWND(GAME_WINDOW.load(Ordering::Relaxed) as *mut c_void);
     // SAFETY: plain queries about a window handle (one gone answers no).
     !window.is_invalid() && unsafe { IsWindowVisible(window).as_bool() && !IsIconic(window).as_bool() }
+}
+
+/// The game's window (its swap chain's), once looked at.
+pub fn game_window() -> Option<HWND> {
+    let window = HWND(GAME_WINDOW.load(Ordering::Relaxed) as *mut c_void);
+    (!window.is_invalid()).then_some(window)
 }
 
 /// The window's mode as one number (never 0): exclusive 1, borderless 2, a window 3; 4 added in the background.

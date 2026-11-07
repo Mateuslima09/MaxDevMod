@@ -52,9 +52,9 @@ SamplerState smooth : register(s0);
 float4 ps(Vertex v) : SV_Target { return phone.Sample(smooth, v.uv); }
 ";
 
-struct Drawing {
-    device: ID3D11Device,
-    frames: FrameSource,
+/// What a picture is drawn over the game's with: a context state of its own, the shaders, a place, a blend of
+/// premultiplied pixels (also the key hints bar's, `hints`).
+pub(crate) struct Quad {
     state: ID3DDeviceContextState,
     vertex: ID3D11VertexShader,
     pixel: ID3D11PixelShader,
@@ -62,6 +62,12 @@ struct Drawing {
     blend: ID3D11BlendState,
     rasterizer: ID3D11RasterizerState,
     sampler: ID3D11SamplerState,
+}
+
+struct Drawing {
+    device: ID3D11Device,
+    frames: FrameSource,
+    quad: Quad,
     /// The view of the phone's frame, for the frame texture and format it was made for.
     view: Option<(ID3D11Texture2D, DXGI_FORMAT, ID3D11ShaderResourceView)>,
 }
@@ -105,6 +111,17 @@ impl Drawing {
     /// # Safety
     /// The game's live device, on its render thread.
     unsafe fn new(device: &ID3D11Device) -> windows::core::Result<Self> {
+        // SAFETY: as the caller says.
+        let quad = unsafe { Quad::new(device) }?;
+        log!("phone: ready to be drawn");
+        Ok(Self { device: device.clone(), frames: FrameSource::of(FrameKind::Phone), quad, view: None })
+    }
+}
+
+impl Quad {
+    /// # Safety
+    /// The game's live device, on its render thread.
+    pub(crate) unsafe fn new(device: &ID3D11Device) -> windows::core::Result<Self> {
         // SAFETY: the game's live device (the caller's contract); every description is a local, the shaders' code
         // our own.
         unsafe {
@@ -173,10 +190,7 @@ impl Drawing {
                 Some(&mut sampler),
             )?;
             let none = || windows::core::Error::empty();
-            log!("phone: ready to be drawn");
             Ok(Self {
-                device: device.clone(),
-                frames: FrameSource::of(FrameKind::Phone),
                 state: state.ok_or_else(none)?,
                 vertex: vertex.ok_or_else(none)?,
                 pixel: pixel.ok_or_else(none)?,
@@ -184,11 +198,44 @@ impl Drawing {
                 blend: blend.ok_or_else(none)?,
                 rasterizer: rasterizer.ok_or_else(none)?,
                 sampler: sampler.ok_or_else(none)?,
-                view: None,
             })
         }
     }
 
+    /// Draws `view` at `rect` (clip space: left, top, right, bottom) over the swap chain's back buffer, in the
+    /// quad's own context state (the game's swapped back after).
+    ///
+    /// # Safety
+    /// The game's live device, context and swap chain, on its render thread.
+    pub(crate) unsafe fn draw(
+        &self,
+        device: &ID3D11Device,
+        context: &ID3D11DeviceContext,
+        swapchain: &IDXGISwapChain,
+        view: &ID3D11ShaderResourceView,
+        rect: [f32; 4],
+    ) -> windows::core::Result<()> {
+        // SAFETY: as the caller says; the game's context state is swapped back as it was before this returns.
+        unsafe {
+            let back: ID3D11Texture2D = swapchain.GetBuffer(0)?;
+            let mut back_desc = D3D11_TEXTURE2D_DESC::default();
+            back.GetDesc(&mut back_desc);
+            let mut target = None;
+            device.CreateRenderTargetView(&back, None, Some(&mut target))?;
+            context.UpdateSubresource(&self.place, 0, None, rect.as_ptr().cast(), 0, 0);
+            let context1: ID3D11DeviceContext1 = context.cast()?;
+            let mut game = None;
+            context1.SwapDeviceContextState(&self.state, Some(&mut game));
+            draw_quad(context, self, target.as_ref(), view, back_desc.Width as f32, back_desc.Height as f32);
+            if let Some(game) = &game {
+                context1.SwapDeviceContextState(game, None);
+            }
+            Ok(())
+        }
+    }
+}
+
+impl Drawing {
     /// # Safety
     /// As [`on_present`]: the game's swap chain, of this drawing's device.
     unsafe fn draw(&mut self, swapchain: &IDXGISwapChain) -> windows::core::Result<()> {
@@ -201,8 +248,6 @@ impl Drawing {
             let back: ID3D11Texture2D = swapchain.GetBuffer(0)?;
             let mut back_desc = D3D11_TEXTURE2D_DESC::default();
             back.GetDesc(&mut back_desc);
-            let mut target = None;
-            self.device.CreateRenderTargetView(&back, None, Some(&mut target))?;
             let format = view_format(back_desc.Format);
             if !matches!(&self.view, Some((texture, made, _)) if *texture == frame && *made == format) {
                 let mut view = None;
@@ -220,19 +265,8 @@ impl Drawing {
                 self.view = Some((frame.clone(), format, view.ok_or_else(windows::core::Error::empty)?));
             }
             let Some((_, _, view)) = &self.view else { return Ok(()) };
-
-            let (width, height) = (back_desc.Width as f32, back_desc.Height as f32);
-            let rect = place_on(width, height);
-            context.UpdateSubresource(&self.place, 0, None, rect.as_ptr().cast(), 0, 0);
-
-            let context1: ID3D11DeviceContext1 = context.cast()?;
-            let mut game = None;
-            context1.SwapDeviceContextState(&self.state, Some(&mut game));
-            draw_quad(&context, self, target.as_ref(), view, width, height);
-            if let Some(game) = &game {
-                context1.SwapDeviceContextState(game, None);
-            }
-            Ok(())
+            let rect = place_on(back_desc.Width as f32, back_desc.Height as f32);
+            self.quad.draw(&self.device, &context, swapchain, view, rect)
         }
     }
 }
@@ -241,7 +275,7 @@ impl Drawing {
 /// The drawing's live context, in its own context state.
 unsafe fn draw_quad(
     context: &ID3D11DeviceContext,
-    drawing: &Drawing,
+    drawing: &Quad,
     target: Option<&windows::Win32::Graphics::Direct3D11::ID3D11RenderTargetView>,
     view: &ID3D11ShaderResourceView,
     width: f32,
@@ -287,7 +321,7 @@ fn place_on(width: f32, height: f32) -> [f32; 4] {
 
 /// How the phone's frame is read for a back buffer of `format`: its pixels are sRGB-encoded, so decoded for a
 /// buffer that encodes again as it's written (an sRGB one) or holds light as it is (a floating-point one).
-fn view_format(format: DXGI_FORMAT) -> DXGI_FORMAT {
+pub(crate) fn view_format(format: DXGI_FORMAT) -> DXGI_FORMAT {
     match format {
         DXGI_FORMAT_R8G8B8A8_UNORM_SRGB | DXGI_FORMAT_B8G8R8A8_UNORM_SRGB | DXGI_FORMAT_R16G16B16A16_FLOAT => {
             DXGI_FORMAT_B8G8R8A8_UNORM_SRGB

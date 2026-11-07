@@ -444,6 +444,43 @@ impl Image {
         found.next().is_none().then_some(self.text.0 + at)
     }
 
+    /// Where `pattern` starts in the code between the addresses `from` and `to`, if exactly once there.
+    pub(crate) fn unique_masked_in(&self, pattern: &[Option<u8>], from: usize, to: usize) -> Option<usize> {
+        let fits = |window: &[u8]| window.iter().zip(pattern).all(|(byte, wanted)| wanted.is_none_or(|w| *byte == w));
+        let start = from.checked_sub(self.text.0)?;
+        let end = to.checked_sub(self.text.0)?.min(self.code().len());
+        let code = self.code().get(start..end)?;
+        let mut found = code.windows(pattern.len()).enumerate().filter(|(_, w)| fits(w));
+        let (at, _) = found.next()?;
+        found.next().is_none().then_some(self.text.0 + start + at)
+    }
+
+    /// Every place `pattern` starts in the code.
+    pub(crate) fn all_masked(&self, pattern: &[Option<u8>]) -> Vec<usize> {
+        let fits = |window: &[u8]| window.iter().zip(pattern).all(|(byte, wanted)| wanted.is_none_or(|w| *byte == w));
+        self.code()
+            .windows(pattern.len())
+            .enumerate()
+            .filter(|(_, w)| fits(w))
+            .map(|(at, _)| self.text.0 + at)
+            .collect()
+    }
+
+    /// Whether `at` lies in the image's constants (`.rdata`).
+    pub(crate) fn in_constants(&self, at: usize) -> bool {
+        (self.rdata.0..self.rdata.0 + self.rdata.1).contains(&at)
+    }
+
+    /// Whether `at` lies in the image's code.
+    pub(crate) fn in_code(&self, at: usize) -> bool {
+        (self.text.0..self.text.0 + self.text.1).contains(&at)
+    }
+
+    /// Whether `at` lies in the mapped image.
+    pub(crate) fn contains(&self, at: usize) -> bool {
+        (self.base..self.base + self.size).contains(&at)
+    }
+
     /// Where a RIP-relative lea at `at` (an address in the code) points.
     fn lea_target(&self, at: usize) -> Option<usize> {
         let offset = at.checked_sub(self.text.0)?;

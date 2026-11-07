@@ -469,17 +469,42 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut browser_gone = false;
     let mut gpu_changed = false;
     let mut game_liveness = Liveness::default();
+    // WestPlay's screen out of view (`camera::Unseen`), and as last told to the page.
+    let mut unseen = camera::Unseen::default();
+    let mut unseen_told: Option<bool> = None;
     while !stop.load(Ordering::Relaxed) {
         pump_messages();
         host.heartbeat.fetch_add(1, Ordering::Release);
         // Set for this turn when the game has just closed: every web player closes, as its WebView failing
         // closes it (below), the page told so.
         let mut players_closing = false;
+        // WestPlay's screen out of view (the camera outside the cab, the game's menu): nothing sent to the game,
+        // the page told to hold its map and animations still (`camera::Unseen`). The newest frame waits in the
+        // capture's mailbox, sent as the screen is drawn again.
+        let out_of_view = {
+            let plugin = &bridge.bridge().plugin;
+            let cab = camera::drawn_frame(
+                plugin.screen_frame.load(Ordering::Relaxed),
+                plugin.cab_frame.load(Ordering::Relaxed),
+            );
+            let drawn = camera::drawn(cab, plugin.heartbeat.load(Ordering::Relaxed));
+            unseen.update(status.game_connected, drawn, Instant::now())
+        };
+        if unseen_told != Some(out_of_view) && webview.post_json(&screen_seen_message(!out_of_view)).is_ok() {
+            if unseen_told.is_some() {
+                log!("screen: {}", if out_of_view { "out of view, held" } else { "in view" });
+            }
+            unseen_told = Some(out_of_view);
+        }
         // A captured frame that came before its turn goes out now that it's due.
         // The cursor drawn over it where the mouse is now, the page squeezed into the frame as it's laid out.
-        if let Some(pipeline) = &pipeline {
-            let squeeze = config.height as f32 / page_height.max(1) as f32;
-            pipeline.capture.flush(cursor.look(Instant::now()), squeeze);
+        if let Some(pipeline) = pipeline.as_ref() {
+            if !out_of_view {
+                let squeeze = config.height as f32 / page_height.max(1) as f32;
+                pipeline.capture.flush(cursor.look(Instant::now()), squeeze);
+            }
+            // The phone in the hand is seen wherever the cab's screen is (on foot too: owner 2026-11-06, out of
+            // the truck its cursor didn't show with Alt, the phone's frames held with the cab's screen).
             if let Some(phone) = &pipeline.phone
                 && handset_shown
             {
@@ -719,6 +744,13 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             for (slot, value) in host.keybinds.iter().zip(config.settings.get().keybinds.bridge_values()) {
                 slot.store(value, Ordering::Release);
             }
+            let character = config.settings.get().character;
+            host.character_sensitivity.store(character.sensitivity.get(), Ordering::Release);
+            host.character_enabled.store(u32::from(character.enabled), Ordering::Release);
+            host.character_key.store(character.key.get(), Ordering::Release);
+            host.character_person.store(character.person.get() + 1, Ordering::Release);
+            host.character_hints.store(if character.hints.0 { 1 } else { 2 }, Ordering::Release);
+            host.character_hints_key.store(character.hints_key.get(), Ordering::Release);
             let _ = webview.post_json(&settings_message(&config.settings.get()));
         }
         // The mouse in the phone while it's out (its own pointer and cursor, at its size), else in the cab's screen.
@@ -728,6 +760,14 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         } else {
             let mouse = pointer.update(&bridge.bridge().plugin.pointer, &webview);
             cursor.follow(mouse, Instant::now());
+        }
+        // The mouse's speed while walking, as the player set it in the game (`-`, `=`): into the settings (the app
+        // keeps them).
+        let walked = bridge.bridge().plugin.character_sensitivity.swap(0, Ordering::AcqRel);
+        if walked != 0 {
+            let mut changed = config.settings.get();
+            changed.character.sensitivity = settings::CharacterSensitivity::new(f64::from(walked));
+            config.settings.set(changed);
         }
         // The truck's commands the phones hold, as the plugin gives them to the game.
         host.truck_commands.store(truck_commands.held(Instant::now()), Ordering::Release);
@@ -1538,7 +1578,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             );
             let game_frame = plugin.heartbeat.load(Ordering::Acquire);
             let (electrics, paused) = (telemetry.electric_enabled, telemetry.paused);
-            let outside = camera.outside(truck.id.as_str(), cab_drawn, game_frame, electrics, paused);
+            // On foot (the plugin's Modo Personagem) the camera is outside the cab, whatever was drawn.
+            let on_foot = plugin.on_foot.load(Ordering::Acquire) == 1;
+            let outside = camera.outside(truck.id.as_str(), cab_drawn, game_frame, electrics, paused) || on_foot;
             if outside != was_outside {
                 was_outside = outside;
                 log!("camera: {} the cab", if outside { "outside" } else { "in" });
@@ -1991,6 +2033,11 @@ fn page_height_on(index: usize) -> u32 {
 fn handset_messages(handset: Option<&OffscreenWebView>) -> Vec<String> {
     let Some(handset) = handset else { return Vec::new() };
     handset.take_page_messages().into_iter().filter(|message| remote::allowed(message)).collect()
+}
+
+/// `{"type":"screenSeen","seen":…}`: whether WestPlay's screen is in the game's view (`camera::Unseen`).
+fn screen_seen_message(seen: bool) -> String {
+    serde_json::json!({ "type": "screenSeen", "seen": seen }).to_string()
 }
 
 /// `{"type":"gameShown","shown":…}`: whether the game's window shows (`is_shown`).

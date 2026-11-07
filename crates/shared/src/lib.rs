@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 27;
+pub const BRIDGE_VERSION: u32 = 31;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -289,6 +289,13 @@ pub struct PluginBlock {
     pub keybind_presses: [AtomicU32; KEYBIND_COUNT],
     /// The money the game moved as the player played (the SDK's gameplay events), for the phone's Nupay.
     pub money: SeqLock<MoneyEvents>,
+    /// The mouse's speed while walking (Modo Personagem), in percent, as the player set it in the game (`-` and
+    /// `=` while walking): the app takes it into its settings (and sets it back to 0). 0: nothing new.
+    pub character_sensitivity: AtomicU32,
+    /// 1 while the player is on foot (Modo Personagem: walking, getting out, climbing in), 0 in the cab: the truck's
+    /// music then comes muffled, the camera outside the cab, whether or not its cab was seen drawn first (owner
+    /// 2026-11-06: on foot, skipping a song, it came clear; the app had started with the player already out).
+    pub on_foot: AtomicU32,
 }
 
 /// How many of the latest money events the bridge keeps: more than a player makes between two looks of the app.
@@ -482,7 +489,37 @@ pub struct HostBlock {
     /// The truck's commands held from the phone now ([`TRUCK_COMMANDS`], bit by bit): the plugin's input device
     /// gives each to the game as held.
     pub truck_commands: AtomicU64,
+    /// 1 while the Modo Personagem is on (the app's settings): F8 walks with the truck stopped. Off by default.
+    pub character_enabled: AtomicU32,
+    /// The mouse's speed while walking, in percent ([`CHARACTER_SENSITIVITY`]); 0 until the app has set it.
+    pub character_sensitivity: AtomicU32,
+    /// The key getting out of the truck and back in (a Windows virtual-key code); 0 until the app has set it
+    /// (F8 then).
+    pub character_key: AtomicU32,
+    /// The person walking: one more than its place in [`CHARACTER_PEOPLE`]; 0 until the app has set it.
+    pub character_person: AtomicU32,
+    /// The key hints bar over the game (what can be done now: get out, back in, the phone, the screen): 2 hidden
+    /// in the app's settings, else shown (0 until the app has set it).
+    pub character_hints: AtomicU32,
+    /// The key showing and hiding the key hints bar in the game (a Windows virtual-key code); 0: none.
+    pub character_hints_key: AtomicU32,
 }
+
+/// The Modo Personagem's mouse speeds while walking, in percent: the least, the most, and where it starts.
+pub const CHARACTER_SENSITIVITY: (u32, u32, u32) = (10, 200, 50);
+
+/// The Modo Personagem's key getting out and back in, if the player chose none: F8.
+pub const CHARACTER_KEY: u32 = 0x77;
+
+/// The people the player can walk as: WestPlay's own (owner 2026-11-05: "the game's old ones can go"), each by the
+/// mover walking as them (`westplay_setup::own_character::PEOPLE`: the tattooed man, `wt_`, the woman, `wm_`, and the cowboy, `wc_`), in the
+/// order the companion shows their pictures, the first the default. In WestPlay's mod only when their files are on
+/// the PC: without them, [`CHARACTER_GAME_PERSON`] walks instead.
+pub const CHARACTER_PEOPLE: [&str; 3] = ["wt_walk", "wm_walk", "wc_walk"];
+pub const CHARACTER_PERSON: usize = 0;
+/// A person of the game's own (the man `m_vanilla_ice_01`, in ETS2 and ATS), walking when the chosen one's files
+/// aren't on the PC.
+pub const CHARACTER_GAME_PERSON: &str = "m_walk_06";
 
 /// The truck's commands the phone gives (owner 2026-11-02: "open the window, lower the truck, the suspension"):
 /// the game's own controls ("mixes") by name, which its semantical inputs drive with no binding (SDK

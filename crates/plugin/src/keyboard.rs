@@ -116,9 +116,9 @@ unsafe extern "system" fn get_key_state(key: i32) -> i16 {
 }
 
 /// Whether the game's polling sees `key` up whatever it is: any key but its own while the player types, and a
-/// key bound to WestPlay while its binding counts (`keybinds`).
+/// key bound to WestPlay while its binding counts (`keybinds`), and the walking keys while walking (`character`).
 fn hidden(key: u32) -> bool {
-    (typing::typing() && !typing::stays_the_games(key)) || keybinds::taken(key)
+    (typing::typing() && !typing::stays_the_games(key)) || keybinds::taken(key) || crate::character::takes(key)
 }
 
 /// While the player types, takes every key's messages (but the game's own) away from the game, turning them
@@ -141,7 +141,11 @@ fn filter(msg: &mut MSG) {
     let bound = !typed
         && matches!(msg.message, WM_KEYDOWN | WM_SYSKEYDOWN)
         && keybinds::taken(keybinds::sided(key, msg.lParam.0));
-    if typed || bound {
+    // The walking keys while walking (`character`): the truck neither steers, speeds up nor brakes with them.
+    let walking = !typed
+        && matches!(msg.message, WM_KEYDOWN | WM_SYSKEYDOWN)
+        && crate::character::takes(keybinds::sided(key, msg.lParam.0));
+    if typed || bound || walking {
         msg.message = WM_NULL;
         msg.wParam = WPARAM(0);
         msg.lParam = LPARAM(0);

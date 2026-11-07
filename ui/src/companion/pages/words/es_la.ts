@@ -5,6 +5,25 @@ import { words as spain } from './es_es'
  * for what just happened, "computadora", "mouse", "presionar", "videos"). */
 export const words: CompanionWords = {
   ...spain,
+  character: {
+    ...spain.character,
+    enableDetail:
+      'Con el camión detenido y el freno de mano puesto, presiona {key} para bajar. Para volver a subir, acércate a la puerta del conductor y presiona {key}; mantén {key} 2 segundos para regresar desde cualquier lugar. Camina con W, A, S, D; Shift corre, Espacio salta, Ctrl se agacha.',
+    speed: 'Sensibilidad del mouse',
+    speedDetail: 'Qué tan rápido gira la vista mientras caminas. En el juego, - y = también la cambian.',
+    walkKey: 'Tecla para bajar y subir',
+    walking: 'caminar a pie',
+    person: 'Quién camina',
+    man: 'Hombre {n}',
+    woman: 'Mujer {n}',
+    personNote: 'Se aplica la próxima vez que bajes.',
+    restartNote: 'El juego está abierto: reinícialo para que se aplique el cambio de personaje.',
+    hints: 'Barra de teclas en el juego',
+    hintsDetail: 'Muestra abajo en la pantalla las teclas de lo que puedes hacer ahora: bajar, subir, el celular y la pantalla.',
+    hintsKey: 'Tecla para mostrar y ocultar',
+    hintsKeyDetail: 'Retroceso quita la tecla.',
+    noKey: 'Ninguna',
+  },
   screen: {
     ...spain.screen,
     titles: { ...spain.screen.titles, stopped: 'Algo falló' },

@@ -400,6 +400,10 @@ pub fn layouts_current(built: &Path) -> bool {
         && screen_layouts()
             .iter()
             .all(|layout| ours.read(&format!("{SCREEN_DIR}/{}.mat", texture_name(layout))).ok().flatten().is_some())
+        // And the flashlight as this version makes it (added in one: owner 2026-11-05).
+        && crate::flashlight::files().iter().all(|(path, bytes)| ours.read(path).ok().flatten().as_ref() == Some(bytes))
+        // And WestPlay's own person as its files are now (put there or changed: owner 2026-11-05).
+        && crate::own_character::files().iter().all(|(path, bytes)| ours.read(path).ok().flatten().as_ref() == Some(bytes))
 }
 
 /// The screen layouts a mod was made with, in it (`screen_layouts.txt`'s copy).
@@ -618,6 +622,10 @@ pub fn build_with(
         ("manifest.sii".into(), manifest().into_bytes()),
         ("description.txt".into(), b"WestPlay screens. Requires the WestPlay app and plugin.\n".to_vec()),
     ];
+    // The Modo Personagem's flashlight: a light of the game's on a speck of WestPlay's (`flashlight`).
+    files.extend(crate::flashlight::files());
+    // WestPlay's own person, if its converted files are on this PC (`own_character`).
+    files.extend(crate::own_character::files());
     let mut built = Built::default();
     for (index, layout) in screen_layouts().iter().enumerate() {
         let texture = texture_name(layout);

@@ -105,7 +105,7 @@ type PoolFn = unsafe extern "system" fn(i32) -> *mut c_void;
 type IndexFn = unsafe extern "system" fn(*mut c_void);
 
 /// The game's folder in Documents, by the game's id (as the SDK gives it).
-fn game_folder(game_id: &str) -> Option<&'static str> {
+pub(crate) fn game_folder(game_id: &str) -> Option<&'static str> {
     match game_id {
         "eut2" => Some("Euro Truck Simulator 2"),
         "ats" => Some("American Truck Simulator"),

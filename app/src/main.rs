@@ -5,6 +5,7 @@
 
 mod customize;
 mod maps;
+mod people;
 mod setup;
 mod update;
 
@@ -150,8 +151,49 @@ fn update_settings(settings: Settings, store: State<SettingsStore>, app: AppHand
     store.file.save(&settings).map_err(|e| format!("Couldn't save the settings: {e}"))?;
     store.shared.set(settings.clone());
     westplay_setup::game_mod::set_split(settings.screen.split);
+    if settings.character.enabled {
+        developer_mode();
+    }
     let _ = app.emit("settings-changed", &settings);
     Ok(settings)
+}
+
+/// The game's developer mode on (the Modo Personagem's camera needs it), the games closed: logged when set.
+fn developer_mode() {
+    for file in westplay_setup::developer::turn_on() {
+        westplay_host::log!("character: g_developer set on in {}", file.display());
+    }
+}
+
+/// How often the Modo Personagem's settings are looked at: a change the player made in the game (its mouse speed,
+/// `-` and `=` while walking) kept, and the game's developer mode set once the game is closed.
+const CHARACTER_EVERY: Duration = Duration::from_secs(2);
+
+/// Keeps what the host changed in the settings (the mouse speed set in the game) in the settings file, telling
+/// the windows; and, with the Modo Personagem on, the game's developer mode on whenever the games are closed.
+fn keep_character_settings(file: SettingsFile, shared: Arc<SharedSettings>, app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut saved = shared.get();
+        let mut seen = shared.generation();
+        let mut looked = 0u32;
+        loop {
+            std::thread::sleep(CHARACTER_EVERY);
+            if shared.generation() != seen {
+                seen = shared.generation();
+                let now = shared.get();
+                if now != saved {
+                    if file.save(&now).is_ok() {
+                        let _ = app.emit("settings-changed", &now);
+                    }
+                    saved = now;
+                }
+            }
+            looked = looked.wrapping_add(1);
+            if looked % 5 == 0 && saved.character.enabled {
+                developer_mode();
+            }
+        }
+    });
 }
 
 fn main() {
@@ -231,6 +273,11 @@ fn main() {
             // The split screen WestPlay's mod is made with (from the next look at it, the game closed).
             westplay_setup::game_mod::set_split(loaded.screen.split);
             let shared = Arc::new(SharedSettings::new(loaded));
+            // The packed people where the mod is made from, before it's made (a fresh PC: none there yet).
+            let people = people::install();
+            if people > 0 {
+                westplay_host::log!("character: {people} packed files of the people put in place");
+            }
             let setup = SetupStore::load(&config_dir, app.handle());
             setup::watch_installed_mods(&setup);
             setup::follow_the_game_played(&setup);
@@ -247,6 +294,7 @@ fn main() {
                 Looks { config_dir: config_dir.clone(), customize_changed: customize.changed.clone() },
             )?;
             app.manage(customize);
+            keep_character_settings(SettingsFile::in_dir(&config_dir), shared.clone(), app.handle().clone());
             app.manage(SettingsStore { file, shared });
             app.manage(setup);
             app.manage(std::sync::Mutex::new(host));

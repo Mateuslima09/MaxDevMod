@@ -532,3 +532,11 @@ body,
     height: 50px;
   }
 }
+
+/* WestPlay's screen out of the game's view (store.ts `screenSeen`: the camera outside the cab, the game's menu):
+   every animation holds still where it is, nothing drawn for it, until the screen shows again. */
+html[data-unseen] *,
+html[data-unseen] *::before,
+html[data-unseen] *::after {
+  animation-play-state: paused !important;
+}

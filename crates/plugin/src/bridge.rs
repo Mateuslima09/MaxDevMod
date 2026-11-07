@@ -75,3 +75,22 @@ pub fn phone_out() -> bool {
 pub fn usable() -> bool {
     screen_on() || phone_out()
 }
+
+/// When the phone was last asked away (`put_phone_away`, milliseconds since the plugin's start), so it isn't
+/// asked twice before the app has put it away (each ask toggles it).
+static PHONE_ASKED_AWAY: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+
+/// Puts the phone away if it's out (owner 2026-11-06: running, getting out of the truck or back in, the person has
+/// no animation holding it): as a press of the phone's keybind, which the app answers by putting it away.
+pub fn put_phone_away(why: &str) {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let now = START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64;
+    let asked = PHONE_ASKED_AWAY.load(Ordering::Acquire);
+    if !phone_out() || (asked != u64::MAX && now.saturating_sub(asked) < 600) {
+        return;
+    }
+    let Some(bridge) = get() else { return };
+    PHONE_ASKED_AWAY.store(now, Ordering::Release);
+    bridge.plugin.keybind_presses[westplay_shared::Keybind::Phone as usize].fetch_add(1, Ordering::AcqRel);
+    crate::log!("phone put away: {why}");
+}
