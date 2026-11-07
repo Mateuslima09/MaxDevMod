@@ -6,7 +6,7 @@ export const words: Words = {
   continue: 'Continuar',
   welcome: {
     title: 'CarPlay na sua cabine',
-    sub: 'O WestPlay leva o CarPlay para a tela do seu caminhão no American Truck Simulator. A configuração leva só alguns minutos.',
+    sub: 'O WestPlay leva o CarPlay para a tela do seu caminhão no American Truck Simulator e no Euro Truck Simulator 2. A configuração leva só alguns minutos.',
     start: 'Começar',
   },
   summary: {
@@ -20,19 +20,19 @@ export const words: Words = {
   game: {
     title: 'Seu jogo',
     titleMissing: 'Onde está seu jogo?',
-    found: 'O WestPlay encontrou o American Truck Simulator neste PC.',
-    foundMany: 'O American Truck Simulator está instalado em mais de um lugar. Escolha o que você joga.',
+    found: 'O WestPlay encontrou seu jogo neste PC. Você pode configurar o outro depois, em Configuração → Outros jogos.',
+    foundMany: 'O WestPlay encontrou mais de um jogo neste PC. Escolha o que você joga: o outro dá pra configurar depois, em Configuração → Outros jogos.',
     missing:
-      'O WestPlay não encontrou o American Truck Simulator. Escolha a pasta onde você o instalou, a que contém o base.scs.',
+      'O WestPlay não encontrou o American Truck Simulator nem o Euro Truck Simulator 2. Escolha a pasta onde você o instalou, a que contém o base.scs.',
     chooseAnother: 'Usar outra pasta…',
     chooseFolder: 'Escolher pasta…',
-    picker: 'Escolha sua pasta do American Truck Simulator',
+    picker: 'Escolha a pasta do seu jogo',
     bannerMissing: 'Escolha a pasta dele para continuar',
-    notTheGame: 'Esta pasta não contém o American Truck Simulator. Escolha a que contém o base.scs.',
+    notTheGame: 'Esta pasta não contém o American Truck Simulator nem o Euro Truck Simulator 2. Escolha a que contém o base.scs.',
     gameGone: 'O jogo não está mais nesta pasta.',
     closeToGoOn: {
       title: 'Feche o jogo.',
-      text: 'O WestPlay só consegue se configurar enquanto o American Truck Simulator não está aberto.',
+      text: 'O WestPlay só consegue se configurar enquanto o jogo não está aberto.',
     },
   },
   check: {
@@ -50,7 +50,7 @@ export const words: Words = {
     mapDlcs: 'DLCs de mapa',
     noMapDlcs: 'Nenhum',
     untested:
-      'O WestPlay foi feito para a versão 1.61. A sua ainda não foi testada, mas muito provavelmente vai funcionar.',
+      'O WestPlay ainda não foi testado nesta versão do jogo, mas muito provavelmente vai funcionar.',
     otherCarPlay: {
       title: 'Remova o YMN One',
       text: 'Outro mod de CarPlay, o YMN One, está instalado no seu jogo (YamanDriveBridge.dll, na pasta plugins). Ele toma a tela do GPS do seu caminhão: o WestPlay não aparece ali, e a tela fica rosa quando o YMN One não está rodando. Feche o jogo e apague esse arquivo.',
@@ -95,7 +95,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'Feche o jogo.',
-      text: 'O WestPlay não pode ser instalado enquanto o American Truck Simulator está aberto.',
+      text: 'O WestPlay não pode ser instalado enquanto o jogo está aberto.',
     },
     inUse: {
       title: 'Feche o jogo.',

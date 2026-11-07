@@ -350,7 +350,7 @@ function ChooseGame({
     'dashboard',
     GLOW.dashboard,
     game
-      ? { title: 'American Truck Simulator', detail: gameSummary(words, game) }
+      ? { title: game.name, detail: gameSummary(words, game) }
       : { title: w.titleMissing, detail: w.bannerMissing },
   )
 
@@ -382,7 +382,13 @@ function ChooseGame({
         {games.map((known) => (
           <Row
             key={known.dir}
-            title={known.dir.replace(/[\\/]steamapps[\\/]common[\\/][^\\/]+[\\/]?$/i, '')}
+            // The game's name (ATS and ETS2 are often in the same Steam folder), the folder under it; the folder
+            // as title only when the same game is in two places.
+            title={
+              games.filter((other) => other.name === known.name).length > 1
+                ? `${known.name} – ${known.dir.replace(/[\\/]steamapps[\\/]common[\\/][^\\/]+[\\/]?$/i, '')}`
+                : known.name
+            }
             detail={gameSummary(words, known)}
             accessory={known.dir === game?.dir ? <Tick key={known.dir} /> : undefined}
             onClick={() => choose(known)}

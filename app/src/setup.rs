@@ -350,6 +350,11 @@ pub async fn check_game(dir: PathBuf, store: State<'_, SetupStore>) -> Result<Ga
         };
         let trucks = trucks::fit(&files, &patched, &all_profiles, &installed)
             .into_iter()
+            // A game's own truck not in it is the other game's (a DAF in ATS): not listed. A mod's truck not
+            // installed still is (the player may add the mod).
+            .filter(|(truck, fit)| {
+                !(*fit == Fit::NotInGame && matches!(truck.source, trucks::Source::Game(_) | trucks::Source::Car(_)))
+            })
             .map(|(truck, fit)| TruckCheck {
                 id: truck.id,
                 name: truck.name,
