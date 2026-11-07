@@ -244,8 +244,11 @@ WestPlay é aberto. Por isso os arquivos convertidos ficam **fora do repositóri
    e `cowboy_celular.blend`. **Falta o personagem 2** (o caminhoneiro, prefixo sugerido `wk`): só o rig do Mixamo.
 3. **Licença do Mixamo**: para uma release com personagem, as animações precisam ser nossas ou CC0 (veja
    "Licença"). Hoje o personagem só existe no PC de quem tem os arquivos.
-4. **Os originais estão em Downloads** (`Pesonagem novos`, `personagem_otimizado`): os FBX do Mixamo e as cenas
-   `_animada`/`_celular` são a fonte de tudo. Vale guardar uma cópia em `personagem_scs\fonte\`.
+4. **Backup no repo privado `Mateuslima09/WestPlay-personagem`** (2026-11-07): a própria pasta `personagem_scs` é
+   esse repo (cenas, `base\`, `convertido\`, `scripts\`), e os originais de Downloads (`Pesonagem novos`,
+   `personagem_otimizado`: os FBX do Mixamo e as cenas `_animada`/`_celular`, a fonte de tudo) estão em
+   `personagem_scs\fonte\`. Num PC novo, clone ele em `Documents\ATS-CarPlay\personagem_scs`. Depois de mexer num
+   personagem, faça commit e push lá também (os `.blend1` ficam de fora).
 5. Detalhes pequenos: do fim do "parar" para o "parado" o quadril sobe 2 cm (uma troca seca, quase invisível), e
    o andar do Mixamo repete o primeiro quadro no fim: pode dar um tranquinho a cada volta (não visto no jogo).
 6. A lanterna está guardada (`FLASHLIGHT_ON = false`): luz num mover criado pelo plugin não acendeu
