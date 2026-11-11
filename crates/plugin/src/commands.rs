@@ -64,6 +64,23 @@ const _: () = assert!(size_of::<Device>() == 56);
 const _: () = assert!(size_of::<InputEvent>() == 28);
 const _: () = assert!(size_of::<InputInitParamsV100>() == 40);
 
+/// The plugin's own commands, after the phone's on the device: the game's `attach` (coupling the trailer), given
+/// by `character::freight` as the player couples it by hand at the fifth wheel. Never the phone's to give.
+const OWN_COMMANDS: &[&str] = &["attach"];
+pub const ATTACH: u64 = 1;
+
+/// Which of the plugin's own commands are held now (`ATTACH`).
+static OWN_HELD: AtomicU64 = AtomicU64::new(0);
+
+/// Holds or lets go one of the plugin's own commands.
+pub fn hold(command: u64, held: bool) {
+    if held {
+        OWN_HELD.fetch_or(command, Ordering::AcqRel);
+    } else {
+        OWN_HELD.fetch_and(!command, Ordering::AcqRel);
+    }
+}
+
 /// Which commands the game was last told are held.
 static REPORTED: AtomicU64 = AtomicU64::new(0);
 
@@ -83,6 +100,7 @@ pub unsafe fn init(version: u32, params: *const InputInitParamsV100) -> ScsResul
         };
         let names: Vec<&'static std::ffi::CStr> = TRUCK_COMMANDS
             .iter()
+            .chain(OWN_COMMANDS)
             .map(|name| &*Box::leak(std::ffi::CString::new(*name).unwrap_or_default().into_boxed_c_str()))
             .collect();
         let inputs: &'static [DeviceInput] = Box::leak(
@@ -124,10 +142,12 @@ unsafe extern "system" fn next_event(event: *mut InputEvent, flags: u32, _contex
             REPORTED.store(0, Ordering::Relaxed);
         }
         let all = (1u64 << TRUCK_COMMANDS.len()) - 1;
-        let wanted = bridge::get()
+        let phones = bridge::get()
             .filter(|_| bridge::host_alive())
             .map_or(0, |bridge| bridge.host.truck_commands.load(Ordering::Acquire))
             & all;
+        let own = OWN_HELD.load(Ordering::Acquire) & ((1u64 << OWN_COMMANDS.len()) - 1);
+        let wanted = phones | (own << TRUCK_COMMANDS.len());
         let reported = REPORTED.load(Ordering::Relaxed);
         let changed = wanted ^ reported;
         if changed == 0 {
@@ -141,7 +161,8 @@ unsafe extern "system" fn next_event(event: *mut InputEvent, flags: u32, _contex
         event.value = [0; 24];
         event.value[0] = u8::from(held);
         REPORTED.store(reported ^ (1 << index), Ordering::Relaxed);
-        log!("commands: {} {}", TRUCK_COMMANDS[index as usize], if held { "held" } else { "let go" });
+        let name = TRUCK_COMMANDS.iter().chain(OWN_COMMANDS).nth(index as usize).copied().unwrap_or_default();
+        log!("commands: {name} {}", if held { "held" } else { "let go" });
         SCS_RESULT_OK
     })
 }

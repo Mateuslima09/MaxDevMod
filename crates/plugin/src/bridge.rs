@@ -71,9 +71,16 @@ pub fn phone_out() -> bool {
     host_alive() && get().is_some_and(|bridge| bridge.host.phone_shown.load(Ordering::Acquire) == 1)
 }
 
-/// Whether there's WestPlay to use: on the truck's screen, or the phone out.
+/// Whether a paper to sign is on the screen in the phone's frame (the cargo's nota fiscal): used with the mouse
+/// as the phone is, without the screen's key.
+pub fn paper_out() -> bool {
+    host_alive()
+        && get().is_some_and(|bridge| bridge.host.phone_shown.load(Ordering::Acquire) == westplay_shared::PHONE_PAPER)
+}
+
+/// Whether there's WestPlay to use: on the truck's screen, the phone out, or a paper to sign.
 pub fn usable() -> bool {
-    screen_on() || phone_out()
+    screen_on() || phone_out() || paper_out()
 }
 
 /// When the phone was last asked away (`put_phone_away`, milliseconds since the plugin's start), so it isn't

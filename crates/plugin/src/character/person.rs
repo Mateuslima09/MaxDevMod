@@ -94,6 +94,8 @@ static TWINS_MADE: AtomicBool = AtomicBool::new(false);
 static DRAWN_TOO: AtomicUsize = AtomicUsize::new(0);
 /// The person shown before a switch, drawn too for a few frames after it (`place`), 0: none; and how many.
 static DRAWN_BEFORE: AtomicUsize = AtomicUsize::new(0);
+/// Someone else drawn too, the player on foot or not (the clerk by the trailer: `freight`), 0: none.
+static DRAWN_OTHER: AtomicUsize = AtomicUsize::new(0);
 const OVERLAP: u8 = 2;
 static DRAW: AtomicUsize = AtomicUsize::new(0);
 static GATHER_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
@@ -116,7 +118,8 @@ unsafe extern "system" fn gather(this: *mut u8, context: *mut u8) -> usize {
         unsafe { std::mem::transmute::<usize, Gather>(GATHER_ORIGINAL.load(Ordering::Acquire))(this, context) };
     let instance = DRAWN.load(Ordering::Acquire);
     let too = DRAWN_TOO.load(Ordering::Acquire);
-    if instance == 0 && too == 0 {
+    let other = DRAWN_OTHER.load(Ordering::Acquire);
+    if instance == 0 && too == 0 && other == 0 {
         return result;
     }
     // SAFETY: a plain query.
@@ -134,7 +137,7 @@ unsafe extern "system" fn gather(this: *mut u8, context: *mut u8) -> usize {
             if read::<u32>(context as usize + 0x18).is_some_and(|passes| passes & 0xf != 0) {
                 let draw = std::mem::transmute::<usize, Draw>(DRAW.load(Ordering::Acquire));
                 let before = DRAWN_BEFORE.load(Ordering::Acquire);
-                for drawn in [before, instance, too].into_iter().filter(|&i| i != 0) {
+                for drawn in [before, instance, too, other].into_iter().filter(|&i| i != 0) {
                     draw(drawn as *mut u8, context);
                 }
             }
@@ -1341,6 +1344,45 @@ pub(super) unsafe fn hide_thing(game: &Game, thing: Person) {
     DRAWN_TOO.store(0, Ordering::Release);
     // SAFETY: as `hide_one` (the caller's contract).
     unsafe { hide_one(game, thing) };
+}
+
+/// Makes someone else at `placement` (the clerk by the trailer), the first of `names` the game has (movers'
+/// names: `wc_idle`, `m_idle01`), drawn whether the player is on foot or not.
+///
+/// # Safety
+/// As `show`.
+pub(super) unsafe fn show_other(game: &Game, placement: &Placement, names: &[&str]) -> Result<Person, &'static str> {
+    let models: Vec<Vec<u8>> = names.iter().map(|name| unit_name(name)).collect();
+    // SAFETY: as `show_one` (the caller's contract).
+    unsafe {
+        let mut other = show_one(game, placement, &models)?;
+        // Nothing of theirs is measured (`probe` is the player's standing and running).
+        other.probe = None;
+        DRAWN_OTHER.store(other.instance(game), Ordering::Release);
+        Ok(other)
+    }
+}
+
+/// Puts them at `placement`, their animation `seconds` on.
+///
+/// # Safety
+/// As `place`, `other` as `show_other` made them.
+pub(super) unsafe fn place_other(game: &Game, other: &mut Person, placement: &Placement, seconds: f32) {
+    // SAFETY: as `place_one` (the caller's contract).
+    unsafe {
+        place_one(game, other, placement, seconds);
+        DRAWN_OTHER.store(other.instance(game), Ordering::Release);
+    }
+}
+
+/// Lets them go.
+///
+/// # Safety
+/// As `hide`, `other` as `show_other` made them.
+pub(super) unsafe fn hide_other(game: &Game, other: Person) {
+    DRAWN_OTHER.store(0, Ordering::Release);
+    // SAFETY: as `hide_one` (the caller's contract).
+    unsafe { hide_one(game, other) };
 }
 
 /// Lets the person go.

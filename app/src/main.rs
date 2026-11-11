@@ -97,6 +97,24 @@ fn spotify_check(accounts: State<Accounts>) {
     accounts.0.spotify.request(AccountAction::Check);
 }
 
+/// Opens TikTok's sign-in (the phone's TikTok app) in a window on the desktop (the status then says when it's done).
+#[tauri::command]
+fn tiktok_sign_in(accounts: State<Accounts>) {
+    accounts.0.tiktok.request(AccountAction::SignIn);
+}
+
+/// Signs TikTok out.
+#[tauri::command]
+fn tiktok_sign_out(accounts: State<Accounts>) {
+    accounts.0.tiktok.request(AccountAction::SignOut);
+}
+
+/// Runs TikTok (hidden), so the status says whether it's signed in.
+#[tauri::command]
+fn tiktok_check(accounts: State<Accounts>) {
+    accounts.0.tiktok.request(AccountAction::Check);
+}
+
 /// Opens Apple's sign-in for Apple Music in a window on the desktop (the status then says when it's done).
 #[tauri::command]
 fn apple_music_sign_in(accounts: State<Accounts>) {
@@ -231,6 +249,9 @@ fn main() {
             apple_music_sign_in,
             apple_music_sign_out,
             apple_music_check,
+            tiktok_sign_in,
+            tiktok_sign_out,
+            tiktok_check,
             open_support_page,
             app_log_place,
             customize::customize_list,

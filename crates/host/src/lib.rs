@@ -30,6 +30,7 @@ pub mod settings;
 mod signin;
 pub mod speakers;
 mod spotify;
+mod tiktok;
 pub mod startup;
 mod truck_commands;
 mod typing;
@@ -44,6 +45,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
+use webview2_com::Microsoft::Web::WebView2::Win32::{
+    COREWEBVIEW2_MOUSE_EVENT_KIND_LEAVE, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_NONE,
+};
 use westplay_shared::{BridgeMapping, JobInfo, Keybind, Telemetry, TruckInfo, screen_layouts};
 use windows::Win32::Foundation::LUID;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
@@ -123,6 +127,10 @@ pub struct Status {
     /// window open.
     pub apple_music_signed_in: Option<bool>,
     pub apple_music_signing_in: bool,
+    /// The same of TikTok (the phone's): signed in or not (`None`: not known, TikTok not run yet), its sign-in
+    /// window open.
+    pub tiktok_signed_in: Option<bool>,
+    pub tiktok_signing_in: bool,
     /// The map of the profile played: ready, being built, waiting for the game to close...
     pub map: maps::MapStatus,
     /// The map the cab shows: its folder in WestPlay's maps, and when it was built (the companion's
@@ -141,6 +149,7 @@ pub struct AccountRequests {
     pub youtube: AccountRequest,
     pub spotify: AccountRequest,
     pub apple_music: AccountRequest,
+    pub tiktok: AccountRequest,
 }
 
 /// One service's request, the latest not carried out yet.
@@ -309,7 +318,27 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
         None => None,
     };
+    // The phone's picture: its page, and TikTok's under it where its TikTok app cuts it open (tiktok.rs).
+    let phone_layers = handset.as_deref().and_then(|handset| {
+        let layers = stage.layers(westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT).ok()?;
+        layers.add(handset, true).ok()?;
+        Some(layers)
+    });
     let mut handset_shown = false;
+    // The phone's top showing for a notification while it's put away (owner 2026-11-11: as GTA RP's phones),
+    // until then.
+    let mut handset_peek: Option<Instant> = None;
+    // TikTok in the phone, while its app (or the companion's Accounts) uses it, and what it last said.
+    let mut tiktok: Option<tiktok::TikTok> = None;
+    let mut tiktok_state: Option<tiktok::State> = None;
+    let (mut tiktok_window_open, mut tiktok_confirming) = (false, false);
+    // Whether the phone's own page was last told the mouse left it (it's over TikTok).
+    let mut handset_left = false;
+    // Whether TikTok's page has the keyboard, as the plugin was last told.
+    let mut tiktok_typing = false;
+    // The cargo's paper the player asked for at the clerk (the plugin's `note_wanted`), shown in the phone's frame
+    // to sign until it's collected or put down.
+    let mut handset_paper: Option<u32> = None;
     // The truck's commands the phones hold, for the plugin's input device.
     let mut truck_commands = truck_commands::TruckCommands::default();
     // The player's account, for the phone's Nupay (wallet.rs).
@@ -506,7 +535,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             // The phone in the hand is seen wherever the cab's screen is (on foot too: owner 2026-11-06, out of
             // the truck its cursor didn't show with Alt, the phone's frames held with the cab's screen).
             if let Some(phone) = &pipeline.phone
-                && handset_shown
+                && (handset_shown || handset_peek.is_some() || handset_paper.is_some())
             {
                 phone.flush(handset_cursor.look(Instant::now()), 1.0);
             }
@@ -578,6 +607,42 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 AccountAction::Check => apple_music::Command::Start,
             });
         }
+        if let Some(action) = config.accounts.tiktok.take()
+            && let Some(app) = start_tiktok(&mut tiktok, &stage, phone_layers.as_ref(), &config)
+        {
+            let _ = app.command(&match action {
+                AccountAction::SignIn => tiktok::Command::SignIn,
+                AccountAction::SignOut => tiktok::Command::SignOut,
+                AccountAction::Check => tiktok::Command::Start,
+            });
+        }
+        // The cargo's paper asked for at the clerk (the plugin's), or taken back (collected, put down, the player
+        // gone): in the phone's frame, large in the middle of the screen, with the mouse; then the phone as it was.
+        let paper = Some(bridge.bridge().plugin.note_wanted.load(Ordering::Acquire)).filter(|&kind| kind != 0);
+        if paper != handset_paper
+            && let Some(handset) = &handset
+        {
+            handset_paper = paper;
+            handset_peek = None;
+            let _ = handset.post_json(&paper_message(paper));
+            let _ = handset.show(paper.is_some() || handset_shown);
+            let shown = if paper.is_some() { westplay_shared::PHONE_PAPER } else { u32::from(handset_shown) };
+            host.phone_shown.store(shown, Ordering::Release);
+            if let Some(app) = &tiktok {
+                let _ = app.out(handset_shown && paper.is_none());
+            }
+            log!("[handset] {}", if paper.is_some() { "a paper to sign" } else { "the paper put away" });
+        }
+        // A notification's time on a phone put away is up: away again.
+        if handset_peek.is_some_and(|until| Instant::now() >= until) {
+            handset_peek = None;
+            if !handset_shown && handset_paper.is_none() {
+                if let Some(handset) = &handset {
+                    let _ = handset.show(false);
+                }
+                host.phone_shown.store(0, Ordering::Release);
+            }
+        }
 
         // Checked often so the game is picked up right away when it starts or switches GPU.
         if last_check.elapsed() >= Duration::from_millis(200) {
@@ -642,7 +707,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 pipeline = None;
                 generation_counter = generation_counter.wrapping_add(1);
                 let generation = ((std::process::id() & 0x00ff_ffff) << 8) | (generation_counter & 0xff);
-                match build_pipeline(&config, &stage, handset.as_deref(), &bridge, wanted, generation) {
+                match build_pipeline(&config, &stage, phone_layers.as_ref(), &bridge, wanted, generation) {
                     Ok(built) => {
                         startup::mark(if wanted.is_some() {
                             "host: capturing for the game's GPU"
@@ -754,8 +819,21 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let _ = webview.post_json(&settings_message(&config.settings.get()));
         }
         // The mouse in the phone while it's out (its own pointer and cursor, at its size), else in the cab's screen.
-        if let Some(handset) = handset.as_deref().filter(|_| handset_shown) {
-            let mouse = handset_pointer.update(&bridge.bridge().plugin.pointer, handset);
+        if let Some(handset) = handset.as_deref().filter(|_| handset_shown || handset_paper.is_some()) {
+            // Over TikTok (under the phone's page, where its app cuts it open), the mouse is TikTok's page's; the
+            // phone's own page is told it left.
+            let mouse = handset_pointer.update_with(&bridge.bridge().plugin.pointer, |kind, keys, data, point| {
+                if tiktok.as_ref().is_some_and(|app| app.mouse(kind, keys, data, point)) {
+                    if !handset_left {
+                        handset_left = true;
+                        let none = COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS_NONE;
+                        let _ = handset.send_mouse(COREWEBVIEW2_MOUSE_EVENT_KIND_LEAVE, none, 0, point);
+                    }
+                } else {
+                    handset_left = false;
+                    let _ = handset.send_mouse(kind, keys, data, point);
+                }
+            });
             handset_cursor.follow(mouse, Instant::now());
         } else {
             let mouse = pointer.update(&bridge.bridge().plugin.pointer, &webview);
@@ -798,11 +876,18 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         let _ = webview.post_json(&message);
                     }
                     // The phone's is the host's own: out, or put away.
+                    // (Not while a paper to sign is in its frame.)
+                    (Keybind::Phone | Keybind::Character, None) if handset_paper.is_some() => {}
                     (Keybind::Phone, None) => {
                         if let Some(handset) = &handset {
+                            // Its key while only its top shows (a notification): out, whole.
                             handset_shown = !handset_shown;
+                            handset_peek = None;
                             let _ = handset.show(handset_shown);
                             host.phone_shown.store(u32::from(handset_shown), Ordering::Release);
+                            if let Some(app) = &tiktok {
+                                let _ = app.out(handset_shown);
+                            }
                             log!("[handset] {}", if handset_shown { "out" } else { "put away" });
                         }
                     }
@@ -812,8 +897,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         if let Some(handset) = &handset {
                             if !handset_shown {
                                 handset_shown = true;
+                                handset_peek = None;
                                 let _ = handset.show(true);
                                 host.phone_shown.store(1, Ordering::Release);
+                                if let Some(app) = &tiktok {
+                                    let _ = app.out(true);
+                                }
                             }
                             let _ = handset.post_json(r#"{"type":"openApp","app":"character"}"#);
                             log!("[handset] out on Personagem");
@@ -899,9 +988,53 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             part_speakers = Some(found);
         }
 
-        for message in
-            webview.take_page_messages().into_iter().chain(remote.take()).chain(handset_messages(handset.as_deref()))
-        {
+        // What the phone in the game's page asks of the host alone (never a player's own phone's to ask): TikTok
+        // under it, and a notification still on it.
+        let (handset_own, handset_rest) = handset_messages(handset.as_deref());
+        for message in handset_own {
+            match serde_json::from_str::<HandsetMessage>(&message) {
+                Ok(HandsetMessage::Tiktok { command }) => {
+                    let idle = matches!(command, tiktok::Command::Hide | tiktok::Command::Notifications { .. });
+                    if tiktok.is_none() && idle {
+                        // Nothing to hide: TikTok isn't running (the phone says it again when it is).
+                    } else if let Some(app) = start_tiktok(&mut tiktok, &stage, phone_layers.as_ref(), &config) {
+                        let _ = app.command(&command);
+                        let _ = app.out(handset_shown);
+                    }
+                }
+                Ok(HandsetMessage::PhoneBanner { showing }) => {
+                    if handset_peek.is_some() {
+                        let left = if showing { PEEK_FOR } else { PEEK_AFTER };
+                        handset_peek = Some(Instant::now() + left);
+                    }
+                }
+                // The paper collected, signed, or put down: the plugin takes it from there.
+                Ok(HandsetMessage::PaperDone { collected }) => {
+                    if let Some(kind) = handset_paper {
+                        let done = if collected { kind } else { westplay_shared::NOTE_LEFT };
+                        host.note_done.store(done, Ordering::Release);
+                    }
+                }
+                Ok(HandsetMessage::FreightPapers { on }) => {
+                    if host.freight_papers.swap(if on { 1 } else { 2 }, Ordering::AcqRel) != if on { 1 } else { 2 } {
+                        log!("[handset] the cargo's papers and coupling by hand: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // The phone's page loaded (anew): the paper again, and TikTok's account.
+                Ok(HandsetMessage::Ready) => {
+                    if let (Some(handset), Some(_)) = (&handset, handset_paper) {
+                        let _ = handset.post_json(&paper_message(handset_paper));
+                    }
+                    if let (Some(handset), Some(app)) = (&handset, &tiktok) {
+                        let signing_in = tiktok_window_open || tiktok_confirming;
+                        let message = tiktok::state_message(tiktok_state.as_ref(), signing_in, app.live());
+                        let _ = handset.post_json(&message);
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        for message in webview.take_page_messages().into_iter().chain(remote.take()).chain(handset_rest) {
             // Adjust Screen's: passed on, the cab's page and the phones each taking what's theirs.
             if remote::Remote::relayed(&message) {
                 let _ = webview.post_json(&message);
@@ -1578,12 +1711,97 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
         }
 
+        // What TikTok's page says, its sign-in window, and the player's LIVE, for the phone and the companion; its
+        // WebView failing closes it.
+        if let Some(app) = &tiktok {
+            if app.failed() || players_closing {
+                if players_closing {
+                    log!("[tiktok] closed with the game");
+                } else {
+                    log!("[tiktok] its browser failed: closed, the phone opens it again");
+                }
+                if let (Some(failed), Some(layers)) = (tiktok.take(), &phone_layers) {
+                    failed.close(layers);
+                }
+                tiktok_state = None;
+                (tiktok_window_open, tiktok_confirming) = (false, false);
+                status.tiktok_signed_in = None;
+                status.tiktok_signing_in = false;
+                (config.on_status)(&status);
+                if let Some(handset) = &handset {
+                    let _ = handset.post_json(&tiktok::state_message(None, false, false));
+                }
+            } else {
+                let mut state_changed = false;
+                for report in app.take_reports(&stage) {
+                    match report {
+                        tiktok::Report::State(state) => {
+                            if status.tiktok_signed_in != Some(state.signed_in) {
+                                status.tiktok_signed_in = Some(state.signed_in);
+                                (config.on_status)(&status);
+                                log!("[tiktok] signed {}", if state.signed_in { "in" } else { "out" });
+                            }
+                            tiktok_state = Some(state);
+                            state_changed = true;
+                        }
+                        tiktok::Report::SignInWindow(open) => {
+                            tiktok_window_open = open;
+                            state_changed = true;
+                        }
+                        tiktok::Report::Confirming(confirming) => {
+                            tiktok_confirming = confirming;
+                            state_changed = true;
+                        }
+                        tiktok::Report::Live(_) => state_changed = true,
+                        tiktok::Report::Typing(_) => {}
+                        // A follow, a gift: on the phone, its top showing for it while it's put away. Never
+                        // logged (who did what on the player's LIVE is theirs).
+                        tiktok::Report::Event(event) => {
+                            let message = tiktok::notification_message(&event);
+                            remote.broadcast(&message);
+                            if let Some(handset) = &handset {
+                                let _ = handset.post_json(&message);
+                                if !handset_shown && handset_paper.is_none() {
+                                    if handset_peek.is_none() {
+                                        let _ = handset.show(true);
+                                        host.phone_shown.store(westplay_shared::PHONE_PEEKS, Ordering::Release);
+                                    }
+                                    handset_peek = Some(Instant::now() + PEEK_FOR);
+                                }
+                            }
+                        }
+                    }
+                }
+                if state_changed {
+                    let signing_in = tiktok_window_open || tiktok_confirming;
+                    if status.tiktok_signing_in != signing_in {
+                        status.tiktok_signing_in = signing_in;
+                        (config.on_status)(&status);
+                    }
+                    if let Some(handset) = &handset {
+                        let message = tiktok::state_message(tiktok_state.as_ref(), signing_in, app.live());
+                        let _ = handset.post_json(&message);
+                    }
+                }
+            }
+        }
+
         // What the player typed on their own keyboard, and whether it types (the plugin decides: the truck
         // standing still, a field selected then).
         let typing_block = &bridge.bridge().typing;
         let typed: Vec<u32> = std::iter::from_fn(|| typing_block.keys.pop()).collect();
         if let Some(message) = typing::typed_message(&typed, typing::clipboard_text) {
-            let _ = webview.post_json(&message);
+            // Into TikTok's field while it has the keyboard, else the cab's page's (and the phone's).
+            match tiktok.as_ref().filter(|app| app.typing()) {
+                Some(app) => drop(app.typed(&message)),
+                None => drop(webview.post_json(&message)),
+            }
+        }
+        // A field of TikTok's page selected: the plugin's keys type (a number of its own, no page's selection).
+        let types = tiktok.as_ref().is_some_and(tiktok::TikTok::typing);
+        if types != tiktok_typing {
+            tiktok_typing = types;
+            typing_block.selection.store(if types { TIKTOK_SELECTION } else { 0 }, Ordering::Release);
         }
         let state = westplay_shared::TypingState::from_code(typing_block.state.load(Ordering::Acquire));
         if typing_state != Some(state) {
@@ -1711,6 +1929,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     host.frame_generation.store(0, Ordering::Release);
     host.phone_generation.store(0, Ordering::Release);
     host.phone_shown.store(0, Ordering::Release);
+    host.note_done.store(0, Ordering::Release);
     host.truck_commands.store(0, Ordering::Release);
     host.screen_enabled.store(0, Ordering::Release);
     host.pid.store(0, Ordering::Release);
@@ -2015,6 +2234,58 @@ fn stops_message(id: Option<u32>, route: Option<&[u64]>, waypoints: &[u64], hidd
 /// The phone in the game's pointer speed, of the screen's.
 const HANDSET_SENSITIVITY: f32 = 0.45;
 
+/// How long the phone's top shows for a notification while it's put away, each notification anew (its page says
+/// when none is left on it), and how long after the last left it (its way out).
+const PEEK_FOR: Duration = Duration::from_secs(6);
+const PEEK_AFTER: Duration = Duration::from_millis(400);
+
+/// The plugin's number for a field of TikTok's page selected (`TypingBlock::selection`): none of a page's own.
+const TIKTOK_SELECTION: u32 = 0x7157_0001;
+
+/// What the phone in the game's page asks of the host alone (ui/src/shared/host.ts `PageMessage`).
+#[derive(Debug, PartialEq, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum HandsetMessage {
+    /// The page (re)loaded (the cab's `PageMessage::Ready` too: it's passed on as well).
+    Ready,
+    /// A command for TikTok under the phone's page (`tiktok`).
+    Tiktok { command: tiktok::Command },
+    /// Whether a notification is on the phone's screen: its top stays in view meanwhile.
+    PhoneBanner { showing: bool },
+    /// The cargo's paper collected (signed), or put down (`collected` false).
+    PaperDone { collected: bool },
+    /// The cargo's papers and coupling by hand, on or off (the phone's Settings).
+    FreightPapers { on: bool },
+}
+
+/// `{"type":"paper","stage":"pickup"}`: the cargo's paper for the phone's page to show in place of the phone
+/// (`pickup`: the nota fiscal to sign; `delivery`: the recipient's signature), `null` for none.
+fn paper_message(paper: Option<u32>) -> String {
+    let stage = paper.map(|kind| if kind == westplay_shared::NOTE_DELIVERY { "delivery" } else { "pickup" });
+    serde_json::json!({ "type": "paper", "stage": stage }).to_string()
+}
+
+/// TikTok, started as the phone's app first shows it (on a WebView2 profile of its own: signing out of TikTok
+/// forgets nothing else), under the phone's page; `None` if it couldn't start, or there's no phone.
+fn start_tiktok<'a>(
+    tiktok: &'a mut Option<tiktok::TikTok>,
+    stage: &Stage,
+    layers: Option<&webview::Layers>,
+    config: &Config,
+) -> Option<&'a tiktok::TikTok> {
+    if tiktok.is_none() {
+        let user_data = config.data_dir.join("webview2-tiktok");
+        match tiktok::TikTok::start(stage, layers?, &user_data) {
+            Ok(started) => {
+                log!("[tiktok] opened");
+                *tiktok = Some(started)
+            }
+            Err(e) => startup::mark(&format!("host: TikTok couldn't start: {e}")),
+        }
+    }
+    tiktok.as_ref()
+}
+
 /// The most presses of a keybind the page is told of at once.
 const MOST_KEYBIND_PRESSES: u32 = 10;
 
@@ -2055,9 +2326,20 @@ fn page_height_on(index: usize) -> u32 {
 }
 
 /// What the phone in the game's page posted since last taken: what a player's phone may send (remote.rs).
-fn handset_messages(handset: Option<&OffscreenWebView>) -> Vec<String> {
-    let Some(handset) = handset else { return Vec::new() };
-    handset.take_page_messages().into_iter().filter(|message| remote::allowed(message)).collect()
+///
+/// Apart (first), what it asks of the host alone ([`HandsetMessage`]): its `ready` is both.
+fn handset_messages(handset: Option<&OffscreenWebView>) -> (Vec<String>, Vec<String>) {
+    let Some(handset) = handset else { return (Vec::new(), Vec::new()) };
+    let (mut own, mut rest) = (Vec::new(), Vec::new());
+    for message in handset.take_page_messages() {
+        if serde_json::from_str::<HandsetMessage>(&message).is_ok() {
+            own.push(message.clone());
+        }
+        if remote::allowed(&message) {
+            rest.push(message);
+        }
+    }
+    (own, rest)
 }
 
 /// `{"type":"screenSeen","seen":…}`: whether WestPlay's screen is in the game's view (`camera::Unseen`).
@@ -2164,7 +2446,7 @@ fn start_spotify<'a>(
 fn build_pipeline(
     config: &Config,
     stage: &Stage,
-    handset: Option<&OffscreenWebView>,
+    phone: Option<&webview::Layers>,
     bridge: &Arc<BridgeMapping>,
     luid: Option<LUID>,
     generation: u32,
@@ -2174,12 +2456,12 @@ fn build_pipeline(
     let shared = Arc::new(SharedFrame::new(&gpu, config.width, config.height, &name)?);
     let capture = Capture::start(&gpu, &stage.visual()?, shared, bridge.clone(), Published::Screen)?;
     // The phone's frame, the cab's without it if it can't be had.
-    let phone = handset.and_then(|handset| {
+    let phone = phone.and_then(|layers| {
         let started = (|| -> Result<Capture, Error> {
             let (width, height) = (westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT);
             let name = westplay_shared::phone_texture_name(generation);
             let shared = Arc::new(SharedFrame::new(&gpu, width, height, &name)?);
-            Ok(Capture::start(&gpu, &handset.visual()?, shared, bridge.clone(), Published::Phone)?)
+            Ok(Capture::start(&gpu, &layers.visual()?, shared, bridge.clone(), Published::Phone)?)
         })();
         started.map_err(|e| log!("[handset] no frame: {e}")).ok()
     });

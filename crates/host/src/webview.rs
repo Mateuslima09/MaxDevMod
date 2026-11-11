@@ -173,6 +173,14 @@ impl Stage {
         self.page_size.clone()
     }
 
+    /// A picture of its own, `width` x `height`, made of several WebViews' visuals (the phone's: TikTok's page
+    /// under the phone's own).
+    pub fn layers(&self, width: u32, height: u32) -> windows::core::Result<Layers> {
+        let root = self.compositor.CreateContainerVisual()?;
+        root.SetSize(Vector2 { X: width as f32, Y: height as f32 })?;
+        Ok(Layers { root })
+    }
+
     /// Lays what's on the frame out `height` tall (the frame's width), squeezed into the frame's height when
     /// it's taller: a screen the game shows the frame on in another shape stretches it back
     /// (`westplay_shared::page_height`). The WebViews on it are sized by their owners.
@@ -183,6 +191,30 @@ impl Stage {
         self.page.SetScale(windows_numerics::Vector3 { X: 1.0, Y: squeeze, Z: 1.0 })?;
         self.page_size.set((width, height));
         Ok(())
+    }
+}
+
+/// WebViews' visuals captured as one picture, apart from the stage's frame ([`Stage::layers`]): each where its
+/// owner places it, over or under the rest.
+pub struct Layers {
+    root: ContainerVisual,
+}
+
+impl Layers {
+    /// The whole picture, for capture.
+    pub fn visual(&self) -> windows::core::Result<Visual> {
+        self.root.cast()
+    }
+
+    /// Puts a WebView's visual in the picture: over the rest, or under it.
+    pub fn add(&self, view: &OffscreenWebView, on_top: bool) -> windows::core::Result<()> {
+        let children = self.root.Children()?;
+        if on_top { children.InsertAtTop(&view.root) } else { children.InsertAtBottom(&view.root) }
+    }
+
+    /// Takes a WebView's visual out of the picture (before it's dropped).
+    pub fn remove(&self, view: &OffscreenWebView) -> windows::core::Result<()> {
+        self.root.Children()?.Remove(&view.root)
     }
 }
 
@@ -214,11 +246,6 @@ impl OffscreenWebView {
     /// [`Self::new`]: the phone in the game's, beside the cab's.
     pub fn beside(&self, stage: &Stage, width: u32, height: u32) -> Result<Self, Error> {
         Self::in_environment(stage, width, height, self.environment.clone())
-    }
-
-    /// This WebView's own visual, to capture it apart from the frame (the phone's: it's on no frame).
-    pub fn visual(&self) -> windows::core::Result<Visual> {
-        self.root.cast()
     }
 
     fn in_environment(
@@ -528,9 +555,16 @@ impl OffscreenWebView {
         self.root.SetIsVisible(shown)
     }
 
+    /// What shows where the page draws nothing, in place of nothing at all (the game's picture through it): a
+    /// page of someone else's, black until it has loaded.
+    pub fn set_background(&self, red: u8, green: u8, blue: u8) -> windows::core::Result<()> {
+        let color = COREWEBVIEW2_COLOR { A: 255, R: red, G: green, B: blue };
+        // SAFETY: the controller is alive as long as `self`; a plain value.
+        unsafe { self.controller.cast::<ICoreWebView2Controller2>()?.SetDefaultBackgroundColor(color) }
+    }
+
     /// Mutes the WebView's sound where it leaves for the PC's speakers (its page still makes it: what the
     /// page measures of it is as it was).
-    #[cfg(test)]
     pub fn set_muted(&self, muted: bool) -> windows::core::Result<()> {
         use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_8;
         // SAFETY: the WebView is alive as long as `self`; a plain value.

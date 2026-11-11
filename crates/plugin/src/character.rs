@@ -48,6 +48,7 @@ use crate::log;
 use crate::navigation::Image;
 
 mod climb;
+mod freight;
 mod meter;
 mod notice;
 mod person;
@@ -342,10 +343,19 @@ struct State {
     release: Option<CameraKey>,
     /// Since when F8 is held, while walking.
     held_since: Option<Instant>,
+    /// The cargo's papers and coupling by hand (`freight`), once the game has run a frame with them on.
+    freight: Option<freight::Freight>,
 }
 
+// SAFETY: game objects (the clerk's person), used only on its main thread.
+unsafe impl Send for freight::Freight {}
+
 static STATE: Mutex<State> =
-    Mutex::new(State { game: None, walking: None, switching: None, release: None, held_since: None });
+    Mutex::new(State { game: None, walking: None, switching: None, release: None, held_since: None, freight: None });
+/// On foot, held where they stand (signing the cargo's papers, coupling the trailer): the walking keys as let go.
+static HELD_STILL: AtomicBool = AtomicBool::new(false);
+/// On foot, down on a knee whatever the crouch key (coupling the trailer at the fifth wheel).
+static KNEELING: AtomicBool = AtomicBool::new(false);
 static WAS_DOWN: AtomicBool = AtomicBool::new(false);
 static WAS_SLOWER: AtomicBool = AtomicBool::new(false);
 static WAS_FASTER: AtomicBool = AtomicBool::new(false);
@@ -445,6 +455,10 @@ fn enabled() -> bool {
 /// Whether the game is kept from `key` (a virtual key; the generic Shift and Ctrl stand for both sides): the
 /// walking keys, while walking.
 pub fn takes(key: u32) -> bool {
+    // The cargo's papers' keys, in the cab too (`freight`).
+    if freight::takes(key) {
+        return true;
+    }
     if !WALKING.load(Ordering::Acquire) {
         return false;
     }
@@ -478,7 +492,8 @@ fn virtual_key((vk, scancode): (u16, u32)) -> u16 {
 
 /// The same for DirectInput's keyboard (a scan code).
 pub fn takes_scancode(scancode: u32) -> bool {
-    WALKING.load(Ordering::Acquire)
+    freight::takes_scancode(scancode)
+        || WALKING.load(Ordering::Acquire)
         && (CAMERA_SCANCODES.contains(&scancode)
             || CONTROL_KEYS
                 .iter()
@@ -526,6 +541,9 @@ pub fn on_frame_end() {
     }
     let mut state = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let state = &mut *state;
+    // The cargo's papers and coupling by hand: in the cab and on foot.
+    // SAFETY: on the game's main thread, at the end of a frame.
+    unsafe { freight::frame(state) };
     publish_hints(state);
     if let Some(bridge) = crate::bridge::get() {
         bridge.plugin.on_foot.store(u32::from(state.walking.is_some()), Ordering::Release);
@@ -704,6 +722,10 @@ fn publish_hints(state: &State) {
             if from_door(walking, &truck).is_some_and(|d| d <= DOOR_REACH) {
                 hints.push(Hint { key: walk, action: Action::GetIn });
             }
+            // By the clerk, or at the fifth wheel (`freight`): E signs, couples.
+            if let Some(action) = freight::offer(state) {
+                hints.push(Hint { key: key_name(u32::from(virtual_key((b'E' as u16, 0x12)))), action });
+            }
             if FLASHLIGHT_ON {
                 let action = if walking.flashlight.is_some() { Action::FlashlightOff } else { Action::Flashlight };
                 hints.push(Hint { key: key_name(u32::from(virtual_key(FLASHLIGHT_KEY))), action });
@@ -754,6 +776,7 @@ fn publish_hints(state: &State) {
 /// When the plugin is unloaded (on the game's main thread): walking stops.
 pub fn shutdown() {
     let mut state = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    freight::shutdown(&mut state);
     if state.walking.is_some() {
         stop(&mut state, "the plugin is unloaded", false);
     }
@@ -1099,7 +1122,9 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
                 continue;
             };
             if read::<u32>(control + CONTROL_STATE).is_some() {
-                let value = if really_down(VIRTUAL_KEY(virtual_key(key))) { DOWN } else { 0 };
+                // Held still (signing, coupling: `freight`): every walking key as let go.
+                let held = !HELD_STILL.load(Ordering::Acquire) && really_down(VIRTUAL_KEY(virtual_key(key)));
+                let value = if held { DOWN } else { 0 };
                 ((control + CONTROL_STATE) as *mut u32).write(value);
             }
         }
@@ -1112,7 +1137,8 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
         }
         // Crouching (Ctrl) is the plugin's: the walking camera's own crouch did nothing (owner 2026-11-05, "the
         // crouch doesn't work"): the eyes down (`crouch_depth`), slower, the person's crouch if it has one.
-        let crouch_held = really_down(VIRTUAL_KEY(virtual_key(CONTROL_KEYS[CROUCH_CONTROL])));
+        let crouch_held = really_down(VIRTUAL_KEY(virtual_key(CONTROL_KEYS[CROUCH_CONTROL])))
+            || KNEELING.load(Ordering::Acquire);
         // As far down as the person's head goes: on the knee, or walking crouched (higher), a part of their eyes'
         // height (measured in Blender on the woman's: 1.42 m standing, 0.71 on the knee, 1.11 walking crouched).
         let eyes = person::eye_height(CHARACTER_PEOPLE.get(chosen_person()).copied().unwrap_or_default()) as f32;

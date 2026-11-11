@@ -34,6 +34,10 @@ export interface HostStatus {
   /** The same of Apple Music: signed in or not (`null`: not known yet), and Apple's sign-in window open. */
   appleMusicSignedIn: boolean | null
   appleMusicSigningIn: boolean
+  /** The same of TikTok (the phone's TikTok app): signed in or not (`null`: not known yet), its sign-in window
+   * open. */
+  tiktokSignedIn: boolean | null
+  tiktokSigningIn: boolean
   /** The map of the profile played (mirrors `westplay_host::maps::MapStatus`). */
   map: MapStatus
   /** The map the cab shows: its folder in WestPlay's maps, and when it was built (seconds since 1970;
@@ -142,6 +146,21 @@ export function appleMusicSignIn(): Promise<void> {
 /** Signs Apple Music out. */
 export function appleMusicSignOut(): Promise<void> {
   return call('apple_music_sign_out')
+}
+
+/** Opens TikTok's sign-in (the phone's TikTok app) in a window on the desktop. */
+export function tiktokSignIn(): Promise<void> {
+  return call('tiktok_sign_in')
+}
+
+/** Signs TikTok out. */
+export function tiktokSignOut(): Promise<void> {
+  return call('tiktok_sign_out')
+}
+
+/** Runs TikTok (hidden), so the status says whether it's signed in. */
+export function tiktokCheck(): Promise<void> {
+  return call('tiktok_check')
 }
 
 /** Opens the support page (Kreosus) in the player's browser. */

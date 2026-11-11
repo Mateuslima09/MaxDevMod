@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 32;
+pub const BRIDGE_VERSION: u32 = 33;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -242,6 +242,22 @@ pub fn frame_texture_name(generation: u32) -> String {
 pub const PHONE_WIDTH: u32 = 340;
 pub const PHONE_HEIGHT: u32 = 720;
 
+/// `HostBlock::phone_shown` while the phone is put away but its top shows for a notification (owner 2026-11-11:
+/// as GTA RP's phones). A plugin from before it draws the phone whole meanwhile.
+pub const PHONE_PEEKS: u32 = 2;
+
+/// `HostBlock::phone_shown` while the phone's frame holds a paper to sign instead of the phone (owner 2026-11-11:
+/// the cargo's nota fiscal): drawn large in the middle of the screen, and it has the mouse without the screen's key
+/// being held.
+pub const PHONE_PAPER: u32 = 3;
+
+/// The cargo's papers (`PluginBlock::note_wanted`, `HostBlock::note_done`): the nota fiscal signed and collected
+/// before the trailer is coupled (or the cargo loaded), and the recipient's signature before it's delivered.
+pub const NOTE_PICKUP: u32 = 1;
+pub const NOTE_DELIVERY: u32 = 2;
+/// `HostBlock::note_done`: the paper was put down without being collected.
+pub const NOTE_LEFT: u32 = 0xff;
+
 /// Name of the phone's shared frame texture ([`PHONE_WIDTH`] x [`PHONE_HEIGHT`]), as [`frame_texture_name`].
 pub fn phone_texture_name(generation: u32) -> String {
     format!("Local\\WestPlay.Phone.v1.{generation}")
@@ -296,6 +312,9 @@ pub struct PluginBlock {
     /// music then comes muffled, the camera outside the cab, whether or not its cab was seen drawn first (owner
     /// 2026-11-06: on foot, skipping a song, it came clear; the app had started with the player already out).
     pub on_foot: AtomicU32,
+    /// The paper the player asked for at the clerk by the trailer ([`NOTE_PICKUP`], [`NOTE_DELIVERY`]; 0: none):
+    /// the app shows it to sign ([`PHONE_PAPER`]) until the plugin takes it back.
+    pub note_wanted: AtomicU32,
 }
 
 /// How many of the latest money events the bridge keeps: more than a player makes between two looks of the app.
@@ -484,7 +503,8 @@ pub struct HostBlock {
     /// The phone's shared frame ([`phone_texture_name`]), as `frame_generation` and `frame_seq` the screen's.
     pub phone_generation: AtomicU32,
     pub phone_seq: AtomicU64,
-    /// 1 while the phone is out: the plugin draws it over the game.
+    /// 1 while the phone is out: the plugin draws it over the game. [`PHONE_PEEKS`] while it's put away with a
+    /// notification on it: only its top is drawn, at the bottom of the screen, and it takes no mouse or keys.
     pub phone_shown: AtomicU32,
     /// The truck's commands held from the phone now ([`TRUCK_COMMANDS`], bit by bit): the plugin's input device
     /// gives each to the game as held.
@@ -503,6 +523,12 @@ pub struct HostBlock {
     pub character_hints: AtomicU32,
     /// The key showing and hiding the key hints bar in the game (a Windows virtual-key code); 0: none.
     pub character_hints_key: AtomicU32,
+    /// The paper the player collected, signed ([`NOTE_PICKUP`], [`NOTE_DELIVERY`]) or put down ([`NOTE_LEFT`]):
+    /// the plugin takes it (and sets it back to 0).
+    pub note_done: AtomicU32,
+    /// The cargo's papers and coupling by hand (owner 2026-11-11): 1 on, 2 off (the phone's Settings); 0 until the
+    /// app has said, taken as off.
+    pub freight_papers: AtomicU32,
 }
 
 /// The Modo Personagem's mouse speeds while walking, in percent: the least, the most, and where it starts.

@@ -100,6 +100,17 @@ impl Pointer {
     /// Takes the pointer input the plugin collected since the last call and sends it to the page. Returns the
     /// mouse as it is now, for the cursor drawn.
     pub fn update(&mut self, block: &PointerBlock, webview: &OffscreenWebView) -> Mouse {
+        self.update_with(block, |kind, keys, data, point| {
+            let _ = webview.send_mouse(kind, keys, data, point);
+        })
+    }
+
+    /// As [`Self::update`], each mouse event given to `send` (the phone's: its page's, or TikTok's under it).
+    pub fn update_with(
+        &mut self,
+        block: &PointerBlock,
+        mut send: impl FnMut(COREWEBVIEW2_MOUSE_EVENT_KIND, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS, u32, POINT),
+    ) -> Mouse {
         let active = block.active.load(Ordering::Acquire) == 1;
         let input = Input {
             active,
@@ -111,7 +122,7 @@ impl Pointer {
         let buttons = self.buttons;
         for (kind, data) in self.step(input, Instant::now()) {
             let point = POINT { x: self.x as i32, y: self.y as i32 };
-            let _ = webview.send_mouse(kind, self.virtual_keys(), data, point);
+            send(kind, self.virtual_keys(), data, point);
         }
         Mouse {
             active: self.active,

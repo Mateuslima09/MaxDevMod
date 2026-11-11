@@ -3,7 +3,8 @@ import { formatGameTime, formatGear } from '../shared/format'
 import { cabClock } from '../shared/host'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
 import { useLook, useLookChanges } from '../cabin/state/hooks'
-import { connectHost, useCharacter, useLive } from '../cabin/state/store'
+import { connectHost, useCharacter, useLive, usePaper, useTikTok } from '../cabin/state/store'
+import { postToHost } from '../shared/host'
 import { languageOf } from '../cabin/state/strings'
 import { followTimeZone } from '../cabin/state/timeZone'
 import { PhoneVolume } from '../phone/PhoneVolume'
@@ -17,8 +18,11 @@ import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
 import { distance, formatMoney, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
 import { NupayApp } from './NupayApp'
+import { Paper } from './Paper'
 import { ServicesApp } from './ServicesApp'
 import { SERVICES_WORDS } from './servicesWords'
+import { Notifications } from './notifications'
+import { TikTokApp } from './TikTokApp'
 import { Scaled } from './Scaled'
 import { ScreenFitList } from './ScreenFitList'
 import { Keyboard, MapView, SpotifyApp, YouTubeMusicApp } from './lazy'
@@ -61,27 +65,52 @@ export function HandsetApp({ remote }: { remote: boolean }) {
     if (opened?.app === 'character') setApp('character')
   }, [opened])
   const compact = app !== null && CAB_APPS.includes(app)
+  // TikTok's own site shows under the page, through its app (the phone in the game's alone).
+  const onTikTok = app === 'tiktok' && !remote
+  useTikTokNotifications(prefs, remote)
+  // The cargo's papers and coupling by hand, on or off: said to the host as the page loads and as it changes.
+  const freightPapers = prefs.freightPapers
+  useEffect(() => {
+    if (!remote) postToHost({ type: 'freightPapers', on: freightPapers })
+  }, [remote, freightPapers])
+  // The cargo's paper to sign, in place of the phone (the phone in the game's alone: the host shows it large).
+  const paper = usePaper((state) => state.stage)
+  if (paper && !remote) {
+    return (
+      <main className="handset shell is-paper">
+        <Paper key={paper} stage={paper} language={language === 'pt' ? 'pt' : 'en'} prefs={prefs} />
+      </main>
+    )
+  }
 
   return (
-    <main className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : ''}`}>
-      <div className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}`}>
+    <main
+      className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : ''}${onTikTok ? ' on-tiktok' : ''}`}
+    >
+      <div
+        className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}${onTikTok ? ' on-tiktok' : ''}`}
+      >
         <StatusBar />
+        <Notifications language={language === 'pt' ? 'pt' : 'en'} />
         {app === null ? (
           <Home words={words} open={setApp} units={prefs.units} remote={remote} />
         ) : (
-          <section className={`ios-app-screen${compact ? ' compact' : ''}`} key={app}>
-            <header className="ios-nav">
-              <button type="button" className="ios-back" onClick={home}>
-                <svg viewBox="0 0 12 20" aria-hidden>
-                  <path d="M10 2 2 10l8 8" />
-                </svg>
-                {words.home}
-              </button>
-              {compact && <span className="ios-nav-title">{words.apps[app]}</span>}
-            </header>
+          <section className={`ios-app-screen${compact ? ' compact' : ''}${app === 'tiktok' ? ' is-tiktok' : ''}`} key={app}>
+            {/* TikTok's is all TikTok's: home is the indicator under it. */}
+            {!onTikTok && (
+              <header className="ios-nav">
+                <button type="button" className="ios-back" onClick={home}>
+                  <svg viewBox="0 0 12 20" aria-hidden>
+                    <path d="M10 2 2 10l8 8" />
+                  </svg>
+                  {words.home}
+                </button>
+                {compact && <span className="ios-nav-title">{words.apps[app]}</span>}
+              </header>
+            )}
             <div className={`ios-content ios-content-${app}`}>
-              {/* Nupay has its own head, the bank's colour. */}
-              {!compact && app !== 'nupay' && <h1 className="ios-large-title">{words.apps[app]}</h1>}
+              {/* Nupay has its own head; TikTok in the game is all TikTok's. */}
+              {!compact && app !== 'nupay' && !onTikTok && <h1 className="ios-large-title">{words.apps[app]}</h1>}
               {app === 'maps' && (
                 <CabScreen scale={MAP_SCALE}>
                   <section className="app-panel maps-app">
@@ -114,6 +143,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />}
               {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'character' && <CharacterApp words={CHARACTER_WORDS[language === 'pt' ? 'pt' : 'en']} />}
+              {app === 'tiktok' && <TikTokApp language={language === 'pt' ? 'pt' : 'en'} remote={remote} />}
             </div>
           </section>
         )}
@@ -121,6 +151,28 @@ export function HandsetApp({ remote }: { remote: boolean }) {
       </div>
     </main>
   )
+}
+
+/**
+ * The account's TikTok LIVE watched for notifications or not, as the phone's Settings have it: said to the host as
+ * the phone in the game's page loads and as it changes. TikTok is run then (hidden), without its app being opened,
+ * if it was signed in when last known: a streamer's notifications come from the start.
+ */
+function useTikTokNotifications(prefs: Prefs, remote: boolean) {
+  const signedIn = useTikTok((state) => state.signedIn)
+  useEffect(() => {
+    if (signedIn !== null && signedIn !== prefs.tiktokSignedIn) setPrefs({ tiktokSignedIn: signedIn })
+  }, [signedIn, prefs.tiktokSignedIn])
+  const wanted = prefs.tiktokNotifications
+  const known = prefs.tiktokSignedIn
+  // Only while the game runs (its telemetry comes): the host closes TikTok with the game, as its players.
+  const playing = useLive((state) => state.telemetry !== null)
+  useEffect(() => {
+    if (remote) return
+    if (wanted && known && playing) postToHost({ type: 'tiktok', command: { action: 'start' } })
+    postToHost({ type: 'tiktok', command: { action: 'notifications', on: wanted } })
+    // Said again as TikTok starts (`signedIn` known): one started since heard nothing of it.
+  }, [remote, wanted, known, playing, signedIn])
 }
 
 /** One of the cab's own screens, smaller (Scaled.tsx), in an app window as the cab has it, with the cab's
@@ -380,6 +432,49 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
         </div>
       </List>
       <Volume words={words} />
+      {/* The account's TikTok LIVE as notifications: the phone in the game's (it's the PC that watches it). */}
+      {!remote && (
+        <List header={words.tiktokNotifications} footer={words.tiktokNotificationsHint}>
+          <Row
+            icon={<AppIcon id="tiktok" small />}
+            label={
+              <Segmented
+                options={[
+                  ['on', words.on],
+                  ['off', words.off],
+                ]}
+                chosen={prefs.tiktokNotifications ? 'on' : 'off'}
+                choose={(chosen) => setPrefs({ tiktokNotifications: chosen === 'on' })}
+              />
+            }
+          />
+          <button
+            type="button"
+            className="ios-row ios-row-action"
+            onClick={() => postToHost({ type: 'tiktok', command: { action: 'testNotification' } })}
+          >
+            {words.testNotification}
+          </button>
+        </List>
+      )}
+      {/* The cargo's papers and coupling by hand: the phone in the game's (they're played in the game). */}
+      {!remote && (
+        <List header={words.freightPapers} footer={words.freightPapersHint}>
+          <Row
+            icon={<RowIcon tone="#1f8f4a">{GLYPH_PAPER}</RowIcon>}
+            label={
+              <Segmented
+                options={[
+                  ['on', words.on],
+                  ['off', words.off],
+                ]}
+                chosen={prefs.freightPapers ? 'on' : 'off'}
+                choose={(chosen) => setPrefs({ freightPapers: chosen === 'on' })}
+              />
+            }
+          />
+        </List>
+      )}
       <ScreenFitList words={words} />
       {/* A new version installed: the page again, without scanning the QR code again (owner 2026-11-02). */}
       <List footer={words.reloadHint}>
@@ -438,6 +533,7 @@ const GLYPH_BRAKE = (
   />
 )
 const GLYPH_LIGHT = <path d="M10 6a6 6 0 0 0 0 12h2V6ZM14 8h7M14 12h7M14 16h7" />
+const GLYPH_PAPER = <path d="M6 2h9l4 4v16H6Zm8 1.5V7h3.5ZM9 11h7v1.6H9Zm0 3.4h7V16H9Zm0 3.4h4.5v1.6H9Z" fillRule="evenodd" />
 const GLYPH_LOOK = <path d="M12 3a9 9 0 1 0 0 18Zm0 2v14a7 7 0 0 1 0-14Z" fillRule="evenodd" />
 
 const WORDS = {
@@ -455,6 +551,7 @@ const WORDS = {
       nupay: 'Nupay',
       services: 'Services',
       character: 'Character',
+      tiktok: 'TikTok',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -495,6 +592,13 @@ const WORDS = {
     currencyGame: 'Game',
     fullScreen: 'Full screen',
     wallpaper: 'Wallpaper',
+    tiktokNotifications: 'TikTok LIVE notifications',
+    tiktokNotificationsHint:
+      'While you’re live on TikTok, who follows, sends a gift, shares or subscribes shows on the phone, with a sound. Put away, the top of the phone comes up for it. Sign in to TikTok under Accounts, in WestPlay.',
+    testNotification: 'Test a notification',
+    freightPapers: 'Cargo papers and coupling by hand',
+    freightPapersHint:
+      'On a job with your own truck: get out, sign the cargo’s bill with the clerk by the trailer, then couple the trailer at the fifth wheel (E). At the other end, the recipient signs before you can deliver. Needs the Modo Personagem.',
     wallpapers: { aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
     miles: 'Miles',
     kilometres: 'Km',
@@ -529,6 +633,7 @@ const WORDS = {
       nupay: 'Nupay',
       services: 'Serviços',
       character: 'Personagem',
+      tiktok: 'TikTok',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',
@@ -569,6 +674,13 @@ const WORDS = {
     currencyGame: 'Do jogo',
     fullScreen: 'Tela cheia',
     wallpaper: 'Papel de parede',
+    tiktokNotifications: 'Notificações da LIVE do TikTok',
+    tiktokNotificationsHint:
+      'Enquanto você faz live no TikTok, quem segue, manda presente, compartilha ou se inscreve aparece no celular, com som. Guardado, o topo do celular sobe para mostrar. Entre no TikTok em Contas, no WestPlay.',
+    testNotification: 'Testar notificação',
+    freightPapers: 'Nota fiscal e engate manual',
+    freightPapersHint:
+      'Nos fretes com o seu caminhão: desça, assine a nota fiscal com o conferente ao lado da carreta e engate a carreta na quinta roda (E). Na entrega, o destinatário assina antes de você poder entregar. Precisa do Modo Personagem.',
     wallpapers: { aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
     miles: 'Milhas',
     kilometres: 'Km',

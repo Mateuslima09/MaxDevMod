@@ -643,6 +643,10 @@ pub fn interaction_active() -> bool {
 /// Whether the interaction key says the screen is used, whether or not WestPlay is on it: held, or (the
 /// player's choice) toggled on.
 fn interaction_key_held() -> bool {
+    // A paper to sign has the mouse while it's up, no key held.
+    if bridge::paper_out() {
+        return true;
+    }
     if toggle_mode() { TOGGLED.load(Ordering::Acquire) } else { interaction_key_down() }
 }
 

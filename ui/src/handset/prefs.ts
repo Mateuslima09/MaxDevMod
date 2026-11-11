@@ -13,10 +13,27 @@ export interface Prefs {
   wallpaper: Wallpaper
   /** What Nupay shows the money in (owner 2026-11-02: "dollars, reais and euros"): `auto`, the game's own. */
   currency: 'auto' | Currency
+  /** Whether the account's TikTok LIVE is watched for notifications (owner 2026-11-11: who followed, who sent a
+   * gift). */
+  tiktokNotifications: boolean
+  /** Whether TikTok was signed in when the host last said: it's then run as the phone loads, for the notifications,
+   * without its app being opened first. Only whether, nothing of the account. */
+  tiktokSignedIn: boolean
+  /** The cargo's papers and coupling the trailer by hand (owner 2026-11-11: the nota fiscal signed with the clerk
+   * before coupling, the recipient's signature before delivering): on unless the player turns it off. */
+  freightPapers: boolean
 }
 
 const KEY = 'westplay-handset-prefs'
-const DEFAULTS: Prefs = { look: 'auto', units: 'mi', wallpaper: 'aurora', currency: 'auto' }
+const DEFAULTS: Prefs = {
+  look: 'auto',
+  units: 'mi',
+  wallpaper: 'aurora',
+  currency: 'auto',
+  tiktokNotifications: true,
+  tiktokSignedIn: false,
+  freightPapers: true,
+}
 
 export type Currency = 'USD' | 'BRL' | 'EUR'
 

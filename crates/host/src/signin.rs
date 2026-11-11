@@ -98,6 +98,16 @@ pub const APPLE_MUSIC: Site = Site {
     not_yet: None,
     page_says: Some(include_str!("apple_music_sign_in.js")),
 };
+
+/// TikTok's sign-in, coming back to TikTok itself once signed in (its `/login` pages are the way there).
+pub const TIKTOK: Site = Site {
+    sign_in: "https://www.tiktok.com/login",
+    title: "Sign in to TikTok - WestPlay",
+    home: "https://www.tiktok.com/",
+    not_yet: Some("login"),
+    page_says: None,
+};
+
 const CLASS: windows::core::PCWSTR = w!("WestPlaySignIn");
 const SIZE: (i32, i32) = (520, 760);
 /// Windows' message for the mouse leaving a window that asked to be told (its value, from WinUser.h).

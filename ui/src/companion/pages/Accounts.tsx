@@ -11,17 +11,27 @@ import {
   appleMusicSignOut,
   spotifySignIn,
   spotifySignOut,
+  tiktokSignIn,
+  tiktokSignOut,
   youtubeSignIn,
   youtubeSignOut,
 } from '../useHostStatus'
 import type { PageProps } from './page'
+
+/** TikTok's colour (the phone's TikTok app has no place on the truck's screen: its Home shows meanwhile). */
+const TIKTOK_GLOW = 'oklch(0.63 0.24 15)'
+
+/** A service's words in another's name: each language's own, said of TikTok (its name is the same in all). */
+function named<T>(words: T, from: string, to: string): T {
+  return JSON.parse(JSON.stringify(words).split(from).join(to)) as T
+}
 
 /** Each service: its name, its app on the screen, its sign-in and sign-out, and what its status says. */
 const SERVICES: Record<
   Service,
   {
     name: string
-    app: AppId
+    app: AppId | 'home'
     glow: string
     signIn(): Promise<void>
     signOut(): Promise<void>
@@ -57,9 +67,18 @@ const SERVICES: Record<
     signingIn: (status) => status?.appleMusicSigningIn ?? false,
     words: (words) => words.appleMusic,
   },
+  tiktok: {
+    name: 'TikTok',
+    app: 'home',
+    glow: TIKTOK_GLOW,
+    signIn: tiktokSignIn,
+    signOut: tiktokSignOut,
+    signingIn: (status) => status?.tiktokSigningIn ?? false,
+    words: (words) => named(words.spotify, 'Spotify', 'TikTok'),
+  },
 }
 
-const ORDER: Service[] = ['youtube', 'spotify', 'appleMusic']
+const ORDER: Service[] = ['youtube', 'spotify', 'appleMusic', 'tiktok']
 
 /**
  * The services WestPlay plays from, each signed in (in its own window, on the desktop) or not. WestPlay only

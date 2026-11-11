@@ -13,6 +13,7 @@ export type AppId =
   | 'nupay'
   | 'services'
   | 'character'
+  | 'tiktok'
 
 /**
  * The apps that are the cab's too: their real icons (owner 2026-11-03: "the apps' real logos"), the cab's light
@@ -68,6 +69,9 @@ const STROKE = {
 } as const
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  tiktok: (
+    <path d="M19.3 6.4a4.8 4.8 0 0 1-3.5-4v-.4h-3.4v13.7a2.9 2.9 0 1 1-3.9-2.7c.3 0 .7.1 1 .2v-3.5a6.4 6.4 0 0 0-1-.1 6.3 6.3 0 0 0-6.3 6.3c0 3.5 2.8 6.3 6.3 6.3a6.3 6.3 0 0 0 6.3-6.3V9a8.2 8.2 0 0 0 4.8 1.5V7a4.8 4.8 0 0 1-.3-.6Z" />
+  ),
   character: (
     <>
       <circle cx="12" cy="7.5" r="3.5" />

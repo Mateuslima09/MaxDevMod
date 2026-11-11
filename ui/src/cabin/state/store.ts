@@ -5,6 +5,7 @@ import {
   type Equalizer,
   FLAT,
   type HostMessage,
+  type PhoneNotification,
   type GameWeather,
   hasTruck,
   type JobInfo,
@@ -324,6 +325,23 @@ export const useCharacter = create<{ person: number | null; opened: { app: strin
   () => ({ person: null, opened: null }),
 )
 
+/** TikTok under the phone in the game's page (crates/host tiktok.rs), as the host last said: whether it's signed
+ * in (`null`: not known yet) and as whom, its sign-in window open, the account's LIVE on. Not kept. */
+export const useTikTok = create<{ signedIn: boolean | null; user: string | null; signingIn: boolean; live: boolean }>()(
+  () => ({ signedIn: null, user: null, signingIn: false, live: false }),
+)
+
+/** The phone's notifications as they come (handset/notifications.tsx shows and sounds them): the latest, and a
+ * count that changes with each. Not kept. */
+export const usePhoneNotification = create<{ latest: PhoneNotification | null; count: number }>()(() => ({
+  latest: null,
+  count: 0,
+}))
+
+/** The cargo's paper the phone in the game's page shows in place of the phone (handset/Paper.tsx), as the host
+ * last said: `null`, none. Not kept. */
+export const usePaper = create<{ stage: 'pickup' | 'delivery' | null }>()(() => ({ stage: null }))
+
 export const useLive = create<LiveState>()(() => ({
   telemetry: null,
   truck: previewTruck(),
@@ -519,6 +537,23 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         if (typeof message.characterPerson === 'number') useCharacter.setState({ person: message.characterPerson })
         break
       }
+      case 'tiktok':
+        useTikTok.setState({
+          signedIn: message.signedIn,
+          user: message.user,
+          signingIn: message.signingIn,
+          live: message.live,
+        })
+        break
+      case 'paper':
+        usePaper.setState({ stage: message.stage === 'pickup' || message.stage === 'delivery' ? message.stage : null })
+        break
+      case 'phoneNotification':
+        if (typeof message.user === 'string' && message.user) {
+          const { type: _type, ...notification } = message
+          usePhoneNotification.setState((state) => ({ latest: notification, count: state.count + 1 }))
+        }
+        break
       case 'openApp':
         useCharacter.setState((state) => ({ opened: { app: message.app, count: (state.opened?.count ?? 0) + 1 } }))
         break

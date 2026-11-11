@@ -49,13 +49,17 @@ pub enum Action {
     Character,
     /// Hiding this bar (owner 2026-11-07: "the key that hides the bar, on the bar").
     HideBar,
+    /// E by the clerk, on foot: the cargo's papers to sign (`character::freight`).
+    SignNote,
+    /// E at the fifth wheel, on foot: the trailer coupled by hand.
+    Couple,
 }
 
 impl Action {
     /// In the game's language (two letters), English if not one of these.
     fn words(self, language: &str) -> &'static str {
         let i = self as usize;
-        let words: [&str; 10] = match language {
+        let words: [&str; 12] = match language {
             "pt" => [
                 "Descer do caminhão",
                 "Entrar no caminhão",
@@ -67,6 +71,8 @@ impl Action {
                 "Agachar",
                 "Personagem",
                 "Esconder a barra",
+                "Assinar a nota fiscal",
+                "Engatar a carreta",
             ],
             "es" => [
                 "Bajar del camión",
@@ -79,6 +85,8 @@ impl Action {
                 "Agacharse",
                 "Personaje",
                 "Ocultar la barra",
+                "Firmar la factura",
+                "Enganchar el remolque",
             ],
             "de" => [
                 "Aussteigen",
@@ -91,6 +99,8 @@ impl Action {
                 "Ducken",
                 "Figur",
                 "Leiste ausblenden",
+                "Frachtpapiere unterschreiben",
+                "Auflieger ankuppeln",
             ],
             "fr" => [
                 "Descendre du camion",
@@ -103,6 +113,8 @@ impl Action {
                 "S’accroupir",
                 "Personnage",
                 "Masquer la barre",
+                "Signer le bon de transport",
+                "Atteler la remorque",
             ],
             "it" => [
                 "Scendi dal camion",
@@ -115,6 +127,8 @@ impl Action {
                 "Accovacciati",
                 "Personaggio",
                 "Nascondi la barra",
+                "Firma la bolla",
+                "Aggancia il rimorchio",
             ],
             "pl" => [
                 "Wysiądź",
@@ -127,6 +141,8 @@ impl Action {
                 "Kucnij",
                 "Postać",
                 "Ukryj pasek",
+                "Podpisz list przewozowy",
+                "Podepnij naczepę",
             ],
             "ru" => [
                 "Выйти",
@@ -139,6 +155,8 @@ impl Action {
                 "Присесть",
                 "Персонаж",
                 "Скрыть панель",
+                "Подписать накладную",
+                "Сцепить прицеп",
             ],
             "tr" => [
                 "Tırdan in",
@@ -151,6 +169,8 @@ impl Action {
                 "Çömel",
                 "Karakter",
                 "Çubuğu gizle",
+                "İrsaliyeyi imzala",
+                "Dorseyi bağla",
             ],
             "nl" => [
                 "Uitstappen",
@@ -163,6 +183,8 @@ impl Action {
                 "Bukken",
                 "Personage",
                 "Balk verbergen",
+                "Vrachtbrief tekenen",
+                "Oplegger aankoppelen",
             ],
             "cs" => [
                 "Vystoupit",
@@ -175,6 +197,8 @@ impl Action {
                 "Přikrčit se",
                 "Postava",
                 "Skrýt lištu",
+                "Podepsat nákladní list",
+                "Připojit návěs",
             ],
             _ => [
                 "Get out",
@@ -187,6 +211,8 @@ impl Action {
                 "Crouch",
                 "Character",
                 "Hide the bar",
+                "Sign the papers",
+                "Couple the trailer",
             ],
         };
         words[i]

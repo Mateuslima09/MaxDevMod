@@ -1357,3 +1357,579 @@ body,
   font-size: 14px;
   opacity: 0.65;
 }
+
+/* ===== TikTok App (TikTokApp.tsx) ===== */
+
+.ios-icon-tiktok {
+  background: #010101;
+  color: #ffffff;
+}
+
+.ios-icon-tiktok svg {
+  filter: drop-shadow(-1.5px -1.5px 0 #25f4ee) drop-shadow(1.5px 1.5px 0 #fe2c55);
+}
+
+
+/* TikTok's own site shows under the phone's page (crates/host tiktok.rs), through the app: the phone's back and
+   the screen are left open there, the phone's edge drawn as a ring around it. */
+.handset.on-tiktok {
+  background: none;
+  box-shadow:
+    inset 0 0 0 1.5px rgb(255 255 255 / 0.18),
+    inset 0 0 0 7px #1b1c20;
+}
+
+.handset-screen.on-tiktok {
+  background: transparent;
+  color: #fff;
+}
+
+.handset-screen.on-tiktok .ios-status {
+  background: #000;
+}
+
+/* No growing in: where the app is cut open is told to the host as it's laid out. */
+.ios-app-screen.is-tiktok {
+  animation: none;
+}
+
+.ios-content-tiktok {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.tiktok-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+}
+
+.tiktok-hole {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.tiktok-cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #000;
+  font-size: 14px;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.tiktok-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgb(255 255 255 / 0.2);
+  border-top-color: #fe2c55;
+  border-radius: 50%;
+  animation: tiktok-spin 0.9s linear infinite;
+}
+
+@keyframes tiktok-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tiktok-note {
+  flex: none;
+  margin: 0;
+  padding: 6px 12px;
+  background: #121212;
+  font-size: 11.5px;
+  line-height: 1.25;
+  text-align: center;
+  color: rgb(255 255 255 / 0.75);
+}
+
+.tiktok-note.live {
+  color: #fff;
+}
+
+.tiktok-note.live::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #fe2c55;
+  animation: tiktok-live 1.4s ease-in-out infinite;
+}
+
+@keyframes tiktok-live {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The app's own tabs: TikTok's pages. Room under them for the home indicator. */
+.tiktok-tabs {
+  flex: none;
+  display: flex;
+  padding: 5px 4px 20px;
+  background: #000;
+  border-top: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.handset .tiktok-tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(255 255 255 / 0.55) !important;
+}
+
+.tiktok-tab svg {
+  width: 21px;
+  height: 21px;
+  fill: currentColor;
+}
+
+.tiktok-tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tiktok-tab.on,
+.tiktok-tab:active {
+  color: #fff !important;
+}
+
+.tiktok-remote {
+  margin: 24px 6px 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ios-secondary);
+}
+
+/* ===== Notifications (notifications.tsx) ===== */
+
+/* A banner under the status bar, as iOS's. With the phone put away only its top shows for it (the plugin's
+   handset.rs: a fifth of the phone), so it keeps within that. */
+.ios-banner {
+  position: absolute;
+  top: 46px;
+  left: 8px;
+  right: 8px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 9px 12px;
+  border-radius: 20px;
+  background: rgb(38 38 44 / 0.94);
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.45),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  color: #fff;
+  animation: ios-banner-in 420ms cubic-bezier(0.2, 1.2, 0.3, 1);
+  pointer-events: none;
+}
+
+.handset.appearance-light .ios-banner {
+  background: rgb(250 250 252 / 0.96);
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.25),
+    inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  color: #000;
+}
+
+.ios-banner.leaving {
+  animation: ios-banner-out 320ms ease-in forwards;
+}
+
+@keyframes ios-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-70px) scale(0.94);
+  }
+}
+
+@keyframes ios-banner-out {
+  to {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.96);
+  }
+}
+
+.ios-banner-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.ios-banner-icon svg {
+  width: 21px;
+  height: 21px;
+  fill: currentColor;
+}
+
+.ios-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ios-banner-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.ios-banner-head i {
+  font-style: normal;
+  opacity: 0.55;
+}
+
+.ios-banner-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13.5px;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+
+.ios-banner-gift .ios-banner-body {
+  font-weight: 650;
+}
+
+/* ===== The cargo's paper (Paper.tsx) ===== */
+
+/* In place of the phone, in its frame: a sheet of paper, shown large in the middle of the game's screen (the
+   plugin's handset.rs) and used with the mouse. */
+.handset.is-paper {
+  padding: 8px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.paper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px 14px 12px;
+  border-radius: 5px;
+  background:
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 0.012) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #fdfcf7, #f4f1e6);
+  box-shadow:
+    0 6px 22px rgb(0 0 0 / 0.5),
+    inset 0 0 0 1px rgb(0 0 0 / 0.12);
+  color: #1c1c1c;
+  font-size: 11px;
+  letter-spacing: 0;
+  animation: paper-in 320ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes paper-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) rotate(-1.5deg);
+  }
+}
+
+.handset .paper-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #6b6b6b;
+}
+
+.paper-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 22px 8px 0;
+  border-bottom: 2px solid #1c1c1c;
+}
+
+.paper-head h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.paper-head p {
+  margin: 2px 0 0;
+  font-size: 8.5px;
+  line-height: 1.2;
+  color: #555;
+}
+
+.paper-head dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 1px 6px;
+  margin: 0;
+  font-size: 9px;
+  align-content: start;
+}
+
+.paper-head dt {
+  color: #666;
+}
+
+.paper-head dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.paper-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #444;
+  border-width: 1px 0 0 1px;
+}
+
+.paper-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 6px 5px;
+  border: 1px solid #444;
+  border-width: 0 1px 1px 0;
+}
+
+.paper-field.wide {
+  grid-column: 1 / -1;
+}
+
+.paper-field small {
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #666;
+}
+
+.paper-field b {
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.paper-field span {
+  font-size: 10px;
+  color: #444;
+}
+
+.paper-sign {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.paper-pad {
+  position: relative;
+  flex: 1;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+}
+
+.paper-pad canvas {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 1px dashed #8a8a8a;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.6);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.paper-pad-hint {
+  position: absolute;
+  top: 38%;
+  left: 0;
+  right: 0;
+  font-size: 11px;
+  text-align: center;
+  color: #999;
+  pointer-events: none;
+}
+
+.paper-pad-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.paper-line {
+  margin: 0;
+  padding-top: 3px;
+  border-top: 1px solid #1c1c1c;
+  font-size: 8.5px;
+  text-align: center;
+  color: #444;
+}
+
+.paper-declares {
+  margin: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.paper-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.paper-kept {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 62px;
+}
+
+.paper-kept img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.paper-recipient {
+  width: 100%;
+  height: 100%;
+}
+
+.paper-recipient path {
+  fill: none;
+  stroke: #1d1d1d;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: paper-signing 1.6s ease-in-out forwards;
+}
+
+@keyframes paper-signing {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The stamp, come down askew: red ink, not quite even. */
+.paper-stamp {
+  position: absolute;
+  right: 10px;
+  bottom: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 12px 5px;
+  border: 2.5px solid #c21d2b;
+  border-radius: 8px;
+  color: #c21d2b;
+  opacity: 0.86;
+  transform: rotate(-11deg);
+  animation: paper-stamped 260ms cubic-bezier(0.2, 1.4, 0.4, 1);
+  pointer-events: none;
+}
+
+.paper-stamp b {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.05;
+}
+
+.paper-stamp span {
+  font-size: 7.5px;
+  font-weight: 600;
+}
+
+@keyframes paper-stamped {
+  from {
+    opacity: 0;
+    transform: rotate(-11deg) scale(1.9);
+  }
+}
+
+.paper-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 34px;
+}
+
+.paper-foot p {
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.25;
+  text-align: center;
+  color: #444;
+}
+
+.handset .paper-button {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #555;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  color: #1c1c1c;
+}
+
+.handset .paper-button.main {
+  border-color: #1f6f3d;
+  background: #1f8f4a;
+  color: #fff;
+}
+
+.handset .paper-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

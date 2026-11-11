@@ -54,6 +54,46 @@ pub fn truck() -> Truck {
     }
 }
 
+/// The trailer the SDK tells of (the job's, or the player's own), for the cargo's papers and coupling by hand
+/// (`character::freight`): whether it's coupled, where it is and how it's turned (metres; heading in turns; not
+/// `placed` until the SDK has said), and where its coupling pin is in it (the "trailer" configuration's
+/// `hook.position`).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Trailer {
+    pub connected: bool,
+    pub placed: bool,
+    pub position: [f64; 3],
+    pub heading: f32,
+    pub hook: Option<[f32; 3]>,
+}
+
+static TRAILER: Mutex<Trailer> =
+    Mutex::new(Trailer { connected: false, placed: false, position: [0.0; 3], heading: 0.0, hook: None });
+
+/// The trailer as the SDK last said (any thread).
+pub fn trailer() -> Trailer {
+    *TRAILER.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Where the truck's fifth wheel is in it (the "truck" configuration's `hook.position`), if the SDK said.
+static TRUCK_HOOK: Mutex<Option<[f32; 3]>> = Mutex::new(None);
+
+pub fn truck_hook() -> Option<[f32; 3]> {
+    *TRUCK_HOOK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The player's job as the SDK last configured it (`active` false: none).
+static JOB: Mutex<Option<JobInfo>> = Mutex::new(None);
+
+pub fn job() -> Option<JobInfo> {
+    (*JOB.lock().unwrap_or_else(|e| e.into_inner())).filter(|job| job.active)
+}
+
+/// How far the game's GPS route still goes (metres; 0: no route).
+pub fn navigation_distance() -> f32 {
+    SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner()).navigation_distance
+}
+
 static SNAPSHOT: Mutex<Telemetry> = Mutex::new(Telemetry {
     x: 0.0,
     y: 0.0,
@@ -133,6 +173,8 @@ enum Field {
     HeadOffset,
     Steering,
     MultiplayerTimeOffset,
+    TrailerConnected,
+    TrailerPlacement,
 }
 
 const CHANNELS: &[(&str, u32, Field)] = &[
@@ -160,6 +202,8 @@ const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.head.offset", SCS_VALUE_TYPE_FPLACEMENT, Field::HeadOffset),
     ("truck.effective.steering", SCS_VALUE_TYPE_FLOAT, Field::Steering),
     ("multiplayer.time.offset", SCS_VALUE_TYPE_S32, Field::MultiplayerTimeOffset),
+    ("trailer.connected", SCS_VALUE_TYPE_BOOL, Field::TrailerConnected),
+    ("trailer.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::TrailerPlacement),
 ];
 
 /// Registers the telemetry channels and events. Called from `scs_telemetry_init`.
@@ -300,6 +344,18 @@ unsafe fn on_configuration(configuration: &ConfigurationEvent) {
         match CStr::from_ptr(configuration.id).to_bytes() {
             b"truck" => on_truck(configuration),
             b"job" => on_job(configuration),
+            // The first trailer (a game from before trailers were numbered says it without its number).
+            b"trailer" | b"trailer.0" => {
+                let hook = configuration
+                    .attributes()
+                    .find(|attribute| CStr::from_ptr(attribute.name).to_bytes() == b"hook.position")
+                    .and_then(|attribute| attribute.value.fvector());
+                let mut trailer = TRAILER.lock().unwrap_or_else(|e| e.into_inner());
+                if trailer.hook != hook {
+                    log!("trailer: its coupling pin at {hook:?}");
+                    trailer.hook = hook;
+                }
+            }
             _ => {}
         }
     }
@@ -313,8 +369,13 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         let mut truck = TruckInfo::default();
         let mut head = [0.0; 3];
         let mut cabin = [0.0; 3];
+        let mut hook = None;
         for attribute in configuration.attributes() {
             match CStr::from_ptr(attribute.name).to_bytes() {
+                b"hook.position" => {
+                    hook = attribute.value.fvector();
+                    continue;
+                }
                 b"head.position" => {
                     head = attribute.value.fvector().unwrap_or_default();
                     continue;
@@ -348,6 +409,7 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         );
         *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner()) = head;
         *CABIN.lock().unwrap_or_else(|e| e.into_inner()) = cabin;
+        *TRUCK_HOOK.lock().unwrap_or_else(|e| e.into_inner()) = hook;
         if let Some(bridge) = bridge::get() {
             bridge.plugin.truck.write(&truck);
         }
@@ -389,6 +451,7 @@ unsafe fn on_job(configuration: &ConfigurationEvent) {
             job.destination_company.as_str(),
             job.destination_city.as_str()
         );
+        *JOB.lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
         if let Some(bridge) = bridge::get() {
             bridge.plugin.job.write(&job);
         }
@@ -412,6 +475,22 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
     // or null.
     unsafe {
         let Some(&(_, _, field)) = CHANNELS.get(context as usize) else { return };
+        // The trailer's are kept apart (`TRAILER`): none of the pages'.
+        if matches!(field, Field::TrailerConnected | Field::TrailerPlacement) {
+            let mut trailer = TRAILER.lock().unwrap_or_else(|e| e.into_inner());
+            match (field, value.as_ref()) {
+                (Field::TrailerConnected, value) => trailer.connected = value.is_some_and(|value| value.bool()),
+                (_, Some(value)) => {
+                    let p = value.dplacement();
+                    trailer.position = [p.x, p.y, p.z];
+                    trailer.heading = p.heading;
+                    // Before a trailer is there, the SDK says the world's origin.
+                    trailer.placed = p.x != 0.0 || p.z != 0.0;
+                }
+                (_, None) => trailer.placed = false,
+            }
+            return;
+        }
         let mut s = SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner());
         // A null value means the channel currently has no value (e.g. no truck); reset to the default.
         let Some(value) = value.as_ref() else {
@@ -451,6 +530,7 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
             }
             Field::Steering => s.steering = value.float(),
             Field::MultiplayerTimeOffset => s.multiplayer_time_offset = value.s32(),
+            Field::TrailerConnected | Field::TrailerPlacement => {}
         }
     }
 }
@@ -488,5 +568,6 @@ fn reset(s: &mut Telemetry, field: Field) {
         }
         Field::Steering => s.steering = d.steering,
         Field::MultiplayerTimeOffset => s.multiplayer_time_offset = d.multiplayer_time_offset,
+        Field::TrailerConnected | Field::TrailerPlacement => {}
     }
 }

@@ -310,7 +310,16 @@ const WORDS: Record<string, CompanionWords> = Object.fromEntries(
 
 /** The companion's words in the game's language `code` (`tr_tr`), English for one without. */
 export function companionWords(code: string): CompanionWords {
-  return WORDS[code] ?? WORDS.en_us
+  const words = WORDS[code] ?? WORDS.en_us
+  if (words === WORDS.en_us) return words
+  return {
+    ...words,
+    controls: {
+      ...words.controls,
+      character: words.controls.character ?? WORDS.en_us.controls.character,
+      hideBar: words.controls.hideBar ?? WORDS.en_us.controls.hideBar,
+    },
+  }
 }
 
 export function companionLanguages(): string[] {

@@ -211,6 +211,15 @@ export type HostMessage =
   | { type: 'menuGone'; gone: boolean }
   /** The phone in the game taken out on one of its apps (the keybind for its Personagem: crates/host). */
   | { type: 'openApp'; app: string }
+  /** TikTok under the phone in the game's page (crates/host tiktok.rs): whether it's signed in (`null`: not known
+   * yet) and as whom, whether its sign-in window is open, and whether the account's LIVE is on. */
+  | { type: 'tiktok'; signedIn: boolean | null; user: string | null; signingIn: boolean; live: boolean }
+  /** A notification for the phone to show and sound: what happened on the player's TikTok LIVE (who followed,
+   * sent a gift, shared or subscribed; a gift's name and how many). */
+  | ({ type: 'phoneNotification' } & PhoneNotification)
+  /** The cargo's paper for the phone in the game's page to show in place of the phone (crates/host; the plugin's
+   * `freight`): the nota fiscal to sign at the pick-up, the recipient's signature at the delivery; `null`: none. */
+  | { type: 'paper'; stage: 'pickup' | 'delivery' | null }
   /** A keybind of the player's (the companion's Controls), pressed in the game. */
   | { type: 'keybind'; action: KeybindAction }
   /** A volume the player's phone set (0 to 1), for the cab to show as for a keybind (crates/host remote.rs). */
@@ -359,6 +368,41 @@ export type PageMessage =
   | { type: 'appleMusic'; command: AppleMusicCommand }
   /** A command for YouTube Music's web player (`westplay_host::youtube_music::Command`). */
   | { type: 'youtubeMusic'; command: YouTubeMusicCommand }
+  /** A command for TikTok under the phone in the game's page (`westplay_host::tiktok::Command`): the phone in
+   * the game's alone to send. */
+  | { type: 'tiktok'; command: TikTokCommand }
+  /** Whether a notification is on the phone's screen: put away, its top stays in view meanwhile. */
+  | { type: 'phoneBanner'; showing: boolean }
+  /** The cargo's paper collected, signed and stamped, or put down (`collected` false): the phone in the game's. */
+  | { type: 'paperDone'; collected: boolean }
+  /** The cargo's papers and coupling the trailer by hand, on or off (the phone's Settings). */
+  | { type: 'freightPapers'; on: boolean }
+
+/** What the phone's TikTok app asks of TikTok's own site, run by the host under the phone's page
+ * (`westplay_host::tiktok::Command`): `show` places it, in the phone's pixels, where the app cuts the page open. */
+export type TikTokCommand =
+  | { action: 'start' }
+  | { action: 'show'; x: number; y: number; width: number; height: number }
+  | { action: 'hide' }
+  | { action: 'go'; page: TikTokPage }
+  | { action: 'back' }
+  /** Whether the account's LIVE is watched for the phone's notifications. */
+  | { action: 'notifications'; on: boolean }
+  /** A made-up follow, to see and hear a notification. */
+  | { action: 'testNotification' }
+
+export type TikTokPage = 'forYou' | 'following' | 'explore' | 'live' | 'profile'
+
+/** A notification on the phone (`westplay_host::tiktok::Event`). */
+export interface PhoneNotification {
+  app: 'tiktok'
+  kind: 'follow' | 'gift' | 'share' | 'subscribe'
+  /** Who did it, as TikTok shows them. */
+  user: string
+  /** A gift's name, and how many of it. */
+  detail?: string
+  count?: number
+}
 
 /** What the Spotify app asks of Spotify's web player (`westplay_host::spotify::Command`), run hidden by the
  * host: its sign-in, a question (answered with `spotifyAnswer` and the same `id`), and the player's controls

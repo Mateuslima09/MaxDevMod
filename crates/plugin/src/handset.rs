@@ -2,14 +2,19 @@
 //! it's out (`HostBlock::phone_shown`), its frame (the app's phone page, `FrameKind::Phone`) is drawn over the
 //! game's picture as it's presented, on the right, most of the screen's height.
 //!
+//! Put away with a notification on it (`westplay_shared::PHONE_PEEKS`, owner 2026-11-11: as GTA RP's phones), only
+//! its top shows, at the bottom of the screen: it slides up into view, and down again once the notification is
+//! gone ([`Slide`]).
+//!
 //! It's drawn on the game's own immediate context, in a device context state of its own
 //! (`SwapDeviceContextState`): the game's state is swapped out whole and back after, untouched.
 
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
+use std::time::{Duration, Instant};
 
-use westplay_shared::{PHONE_HEIGHT, PHONE_WIDTH};
+use westplay_shared::{PHONE_HEIGHT, PHONE_PAPER, PHONE_PEEKS, PHONE_WIDTH};
 use windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
 use windows::Win32::Graphics::Direct3D::{D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, D3D_SRV_DIMENSION_TEXTURE2D, ID3DBlob};
 use windows::Win32::Graphics::Direct3D11::{
@@ -36,6 +41,64 @@ use crate::{bridge, log};
 /// screen's height.
 const HEIGHT_OF_SCREEN: f32 = 0.62;
 const RIGHT_GAP_OF_SCREEN: f32 = 0.04;
+/// How much of the phone shows while it peeks, of its height (its status bar and a notification under it); and
+/// how long it takes to slide there, or away.
+const PEEK_OF_PHONE: f32 = 0.2;
+/// A paper to sign in the phone's frame (`PHONE_PAPER`: the cargo's nota fiscal): its height on the game's screen,
+/// of the screen's, in the middle of it.
+const PAPER_OF_SCREEN: f32 = 0.9;
+const SLIDE_TIME: Duration = Duration::from_millis(280);
+
+/// Where the phone stands: whole on the screen, only its top showing, or under the screen's bottom edge.
+const WHOLE: f32 = 0.0;
+const PEEKING: f32 = 1.0;
+const AWAY: f32 = 2.0;
+
+/// The phone's way between where it stands: it slides to its peek and away from it (and from the peek up into
+/// the hand); taken out or put away with its key, it's there or gone at once, as it always was.
+#[derive(Clone, Copy, Debug)]
+struct Slide {
+    /// `HostBlock::phone_shown` as last seen.
+    shown: u32,
+    from: f32,
+    to: f32,
+    started: Option<Instant>,
+}
+
+impl Slide {
+    const fn new() -> Self {
+        Self { shown: 0, from: AWAY, to: AWAY, started: None }
+    }
+
+    /// Where the phone stands `now`, with the app saying `shown`; `None`: nowhere (away, nothing to draw).
+    fn at(&mut self, shown: u32, now: Instant) -> Option<f32> {
+        if shown != self.shown {
+            let here = self.position(now);
+            let target = match shown {
+                0 => AWAY,
+                PHONE_PEEKS => PEEKING,
+                _ => WHOLE,
+            };
+            // Only to or from the peek does it slide.
+            let slides = shown == PHONE_PEEKS || self.shown == PHONE_PEEKS;
+            (self.from, self.to) = (if slides { here } else { target }, target);
+            self.started = slides.then_some(now);
+            self.shown = shown;
+        }
+        let position = self.position(now);
+        (position < AWAY).then_some(position)
+    }
+
+    fn position(&self, now: Instant) -> f32 {
+        let Some(started) = self.started else { return self.to };
+        let done = (now.saturating_duration_since(started).as_secs_f32() / SLIDE_TIME.as_secs_f32()).clamp(0.0, 1.0);
+        // Quick at first, settling in.
+        let eased = 1.0 - (1.0 - done).powi(3);
+        self.from + (self.to - self.from) * eased
+    }
+}
+
+static SLIDE: Mutex<Slide> = Mutex::new(Slide::new());
 
 const SHADERS: &str = r"
 cbuffer Place : register(b0) { float4 rect; };
@@ -84,9 +147,9 @@ static DRAWING: Mutex<Option<Result<Drawing, ()>>> = Mutex::new(None);
 /// The game's live swap chain, in its `Present`, on its render thread.
 pub unsafe fn on_present(swapchain: *mut c_void) {
     let Some(bridge) = bridge::get() else { return };
-    if bridge.host.phone_shown.load(Ordering::Acquire) == 0 || !bridge::host_alive() {
-        return;
-    }
+    let shown = if bridge::host_alive() { bridge.host.phone_shown.load(Ordering::Acquire) } else { 0 };
+    let position = SLIDE.lock().unwrap_or_else(|e| e.into_inner()).at(shown, Instant::now());
+    let Some(position) = position else { return };
     // SAFETY: the game's live swap chain, on its render thread (the caller's contract).
     unsafe {
         let Some(swapchain) = IDXGISwapChain::from_raw_borrowed(&swapchain) else { return };
@@ -100,7 +163,7 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
             *drawing = Some(Drawing::new(&device).map_err(|e| log!("phone: can't be drawn: {e}")));
         }
         let Some(Ok(made)) = drawing.as_mut() else { return };
-        if let Err(e) = made.draw(swapchain) {
+        if let Err(e) = made.draw(swapchain, position, shown == PHONE_PAPER) {
             log!("phone: not drawn: {e}");
             *drawing = Some(Err(()));
         }
@@ -238,7 +301,7 @@ impl Quad {
 impl Drawing {
     /// # Safety
     /// As [`on_present`]: the game's swap chain, of this drawing's device.
-    unsafe fn draw(&mut self, swapchain: &IDXGISwapChain) -> windows::core::Result<()> {
+    unsafe fn draw(&mut self, swapchain: &IDXGISwapChain, position: f32, paper: bool) -> windows::core::Result<()> {
         // SAFETY: the game's live device, context and back buffer, on its render thread; the game's context state
         // is swapped back as it was before this returns.
         unsafe {
@@ -265,7 +328,8 @@ impl Drawing {
                 self.view = Some((frame.clone(), format, view.ok_or_else(windows::core::Error::empty)?));
             }
             let Some((_, _, view)) = &self.view else { return Ok(()) };
-            let rect = place_on(back_desc.Width as f32, back_desc.Height as f32);
+            let (width, height) = (back_desc.Width as f32, back_desc.Height as f32);
+            let rect = if paper { paper_on(width, height) } else { place_on(width, height, position) };
             self.quad.draw(&self.device, &context, swapchain, view, rect)
         }
     }
@@ -308,14 +372,34 @@ unsafe fn draw_quad(
     }
 }
 
-/// Where the phone goes on a `width` x `height` screen, in clip space: left, top, right, bottom.
-fn place_on(width: f32, height: f32) -> [f32; 4] {
+/// Where the phone goes on a `width` x `height` screen, in clip space: left, top, right, bottom. `position`:
+/// whole ([`WHOLE`]), only its top showing at the screen's bottom ([`PEEKING`]), under it ([`AWAY`]), or on its
+/// way between.
+fn place_on(width: f32, height: f32, position: f32) -> [f32; 4] {
     let tall = (height * HEIGHT_OF_SCREEN).round();
     let wide = (tall * PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).round();
     let right = width - (height * RIGHT_GAP_OF_SCREEN).round();
     let left = right - wide;
-    let top = ((height - tall) / 2.0).round();
+    let whole = (height - tall) / 2.0;
+    let peeking = height - tall * PEEK_OF_PHONE;
+    let top = if position <= PEEKING {
+        whole + (peeking - whole) * position.max(WHOLE)
+    } else {
+        peeking + (height - peeking) * (position.min(AWAY) - PEEKING)
+    }
+    .round();
     let bottom = top + tall;
+    [left / width * 2.0 - 1.0, 1.0 - top / height * 2.0, right / width * 2.0 - 1.0, 1.0 - bottom / height * 2.0]
+}
+
+/// Where a paper goes on a `width` x `height` screen, in clip space (left, top, right, bottom): the frame's own
+/// shape, in the middle.
+fn paper_on(width: f32, height: f32) -> [f32; 4] {
+    let tall = (height * PAPER_OF_SCREEN).round();
+    let wide = (tall * PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).round();
+    let left = ((width - wide) / 2.0).round();
+    let top = ((height - tall) / 2.0).round();
+    let (right, bottom) = (left + wide, top + tall);
     [left / width * 2.0 - 1.0, 1.0 - top / height * 2.0, right / width * 2.0 - 1.0, 1.0 - bottom / height * 2.0]
 }
 
@@ -373,11 +457,65 @@ mod tests {
 
     #[test]
     fn the_phone_stands_on_the_right_in_its_own_shape() {
-        let [left, top, right, bottom] = place_on(1920.0, 1080.0);
+        let [left, top, right, bottom] = place_on(1920.0, 1080.0, WHOLE);
         assert!(right < 1.0 && right > 0.8);
         assert!(top > 0.0 && top < 1.0 && bottom < 0.0 && bottom > -1.0);
         let wide = (right - left) / 2.0 * 1920.0;
         let tall = (top - bottom) / 2.0 * 1080.0;
         assert!((wide / tall - PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_paper_is_in_the_middle_of_the_screen_in_the_frames_shape() {
+        let [left, top, right, bottom] = paper_on(1920.0, 1080.0);
+        assert!((left + right).abs() < 0.01 && (top + bottom).abs() < 0.01);
+        let wide = (right - left) / 2.0 * 1920.0;
+        let tall = (top - bottom) / 2.0 * 1080.0;
+        assert!((wide / tall - PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).abs() < 0.01);
+        assert!(tall > 900.0);
+    }
+
+    /// Peeking, only the phone's top is on the screen, at its bottom, where it stands when it's out; away, none.
+    #[test]
+    fn only_its_top_shows_while_it_peeks() {
+        let whole = place_on(1920.0, 1080.0, WHOLE);
+        let [left, top, right, bottom] = place_on(1920.0, 1080.0, PEEKING);
+        assert_eq!((left, right), (whole[0], whole[2]));
+        let seen = (top + 1.0) / 2.0 * 1080.0;
+        let tall = (top - bottom) / 2.0 * 1080.0;
+        assert!((seen / tall - PEEK_OF_PHONE).abs() < 0.01, "{seen} of {tall}");
+        assert!(bottom < -1.0);
+        let [_, top, _, _] = place_on(1920.0, 1080.0, AWAY);
+        assert!(top <= -1.0);
+    }
+
+    /// A notification slides the phone's top into view and away again; its key takes it out and puts it away at
+    /// once; out of a peek it comes up into the hand.
+    #[test]
+    fn slides_to_its_peek_and_away() {
+        let start = Instant::now();
+        let later = |ms: u64| start + Duration::from_millis(ms);
+        let mut slide = Slide::new();
+        assert_eq!(slide.at(0, start), None);
+        // A notification: up from under the screen.
+        slide.at(PHONE_PEEKS, later(0));
+        let middle = slide.at(PHONE_PEEKS, later(100)).unwrap();
+        assert!(middle > PEEKING && middle < AWAY, "{middle}");
+        assert_eq!(slide.at(PHONE_PEEKS, later(1000)), Some(PEEKING));
+        // Gone: down again, then nothing.
+        slide.at(0, later(1100));
+        let leaving = slide.at(0, later(1200)).unwrap();
+        assert!(leaving > PEEKING && leaving < AWAY, "{leaving}");
+        assert_eq!(slide.at(0, later(2000)), None);
+        // Its key: there at once, gone at once.
+        assert_eq!(slide.at(1, later(2100)), Some(WHOLE));
+        assert_eq!(slide.at(0, later(2200)), None);
+        // Taken out while it peeks: up into the hand.
+        slide.at(PHONE_PEEKS, later(3000));
+        assert_eq!(slide.at(PHONE_PEEKS, later(4000)), Some(PEEKING));
+        slide.at(1, later(4100));
+        let rising = slide.at(1, later(4200)).unwrap();
+        assert!(rising > WHOLE && rising < PEEKING, "{rising}");
+        assert_eq!(slide.at(1, later(5000)), Some(WHOLE));
     }
 }
