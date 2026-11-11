@@ -64,3 +64,4 @@ modelos do personagem não esticam assim. Três saídas:
   desgaste real de cada parte mostrado no celular.
 - **Descanso a pé:** em vez de dormir pelo menu, descer e ir até a porta da cabine ou do hotel, com o cansaço
   aparecendo no celular.
+- **Porta abrindo, descer e subir a escada:** plano próprio em `docs/porta/PLANO.md`.
