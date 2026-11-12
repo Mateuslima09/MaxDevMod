@@ -48,6 +48,34 @@ memória do jogo só para leitura (`route.rs`, `ReadProcessMemory`), do mesmo je
 Como no resto: achar tudo pelo formato no código do jogo, nunca por endereço fixo, conferir, e não fazer nada se
 não bater (trava só a função, não o app).
 
+## Etapa 2b — usar o GPS original do jogo como base (pedido do dono, 2026-11-12)
+
+O GPS que o jogo mostra na tela do caminhão já tem tudo desenhado, com o mod pago incluído, porque é o jogo que
+desenha. Duas formas de aproveitar:
+
+**A. Copiar a imagem do GPS do jogo** (a mais rápida de testar)
+- O plugin já fica no meio do desenho dessa tela: o mod do WestPlay põe a nossa imagem como a **camada de cima** do
+  GPS do jogo, e o plugin enche essa imagem quando o jogo vai desenhá-la (`crates/plugin/src/screens.rs`,
+  `on_set_render_targets` em `d3d.rs`). Nesse momento o jogo **já desenhou o mapa dele por baixo**, no mesmo
+  alvo. Dá pra copiar esse alvo antes da nossa camada e mandar a imagem pro app (como o app já manda as dele pro
+  jogo, pelo bridge, só que no sentido contrário).
+- Bom: é exatamente o que o jogo mostra, mod pago incluso, sem ler arquivo nenhum.
+- Ruim: é uma foto. Zoom, ângulo, estilo e resolução são os do jogo (a tela do GPS é pequena); não dá pra deixar
+  no visual do WestPlay nem mexer no mapa à vontade. Serve como um modo "GPS original" ou só onde o mod ficou de
+  fora.
+- A conferir: se o jogo desenha o GPS mesmo com a câmera fora da cabine, ou com a tela do caminhão desligada.
+
+**B. Ler o que o jogo usa pra desenhar o GPS** (mais detalhe, mais trabalho)
+- Pra desenhar o GPS o jogo monta, na memória, as estradas em volta e a linha da rota já com as curvas (os pontos
+  que vão pra tela). Ler esses pontos (só leitura, como o `route.rs` já faz com a rota) e **desenhar com o nosso
+  visual**, com zoom e rotação livres.
+- Começar pela **linha da rota** (o que mais falta hoje), depois as estradas em volta.
+- Achar pelo formato, nunca por endereço fixo; muda a cada versão do jogo, então tem que conferir e cair fora
+  limpo se não bater.
+
+**Juntando:** onde temos o mapa (mods abertos), segue o nosso; onde o mod ficou de fora, usar B (ou A enquanto B
+não existir).
+
 ## Etapa 3 — mais detalhe sem ler o mod (se as de cima não derem)
 
 - Desenhar a rota com curva suave entre os nós (usando a rotação de cada nó, que já é lida) em vez de linha reta.
