@@ -43,6 +43,28 @@ export interface Telemetry {
   leftBlinker: boolean
   rightBlinker: boolean
   paused: boolean
+  /** The steering as the truck has it (-1 to 1, left positive). */
+  steering: number
+  /** The reversing camera's (cabin/reversing): the steered wheels' turn (radians, left positive), and the truck
+   * laid out in its own space (metres, z back): its steered axle, the axle it turns about, its fifth wheel, its
+   * rear end and its half width (0 until known). */
+  wheelSteering: number
+  frontAxleZ: number
+  rearAxleZ: number
+  hookZ: number
+  rearZ: number
+  halfWidth: number
+  /** The first trailer, coupled: where it is and how it's turned (turns), and laid out in its own space (its
+   * kingpin, its axle, its rear end, its half width). */
+  trailerConnected: boolean
+  trailerX: number
+  trailerY: number
+  trailerZ: number
+  trailerHeading: number
+  trailerHookZ: number
+  trailerAxleZ: number
+  trailerRearZ: number
+  trailerHalfWidth: number
 }
 
 /** The time the cab's clock shows (minutes since day 0, 00:00): the game's, or in a Convoy session the

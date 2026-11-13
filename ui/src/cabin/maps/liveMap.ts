@@ -663,6 +663,13 @@ export function holdLiveMap(hold: boolean) {
   held = hold
 }
 
+/** Whether the reversing camera covers the screen (reversing/ReversingCamera.tsx): the map under it held still. */
+let covered = false
+
+export function coverLiveMap(cover: boolean) {
+  covered = cover
+}
+
 /**
  * Shows the live map in `host` and follows the truck there (letting the player move it if `interactive`),
  * until the returned function is called (the map then stays alive, ready for the next screen).
@@ -717,7 +724,7 @@ function place() {
     frame = requestAnimationFrame(function step(now) {
       frame = requestAnimationFrame(step)
       // Held, or the screen out of the game's view (nothing sent to the game then: crates/host camera.rs Unseen).
-      if (held || !useLive.getState().screenSeen) return
+      if (held || covered || !useLive.getState().screenSeen) return
       // At most MAP_FPS a second (frameCap.ts): the game is handed no more, and each frame drawn here redraws every 3D
       // building in view (a player's log, 2026-10-27: the cab page's share up to 4x in towns).
       const next = mapFrameDue(now, due)

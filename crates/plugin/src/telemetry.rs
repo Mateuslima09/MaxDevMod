@@ -96,6 +96,21 @@ static SNAPSHOT: Mutex<Telemetry> = Mutex::new(Telemetry {
     cabin_z: 0.0,
     steering: 0.0,
     multiplayer_time_offset: 0,
+    wheel_steering: 0.0,
+    front_axle_z: 0.0,
+    rear_axle_z: 0.0,
+    hook_z: 0.0,
+    rear_z: 0.0,
+    half_width: 0.0,
+    trailer_connected: false,
+    trailer_x: 0.0,
+    trailer_y: 0.0,
+    trailer_z: 0.0,
+    trailer_heading: 0.0,
+    trailer_hook_z: 0.0,
+    trailer_axle_z: 0.0,
+    trailer_rear_z: 0.0,
+    trailer_half_width: 0.0,
 });
 
 /// Where the driver's head is by default in the truck's cab (the "truck" configuration's `head.position`).
@@ -133,7 +148,13 @@ enum Field {
     HeadOffset,
     Steering,
     MultiplayerTimeOffset,
+    TrailerConnected,
+    TrailerPlacement,
 }
+
+/// The context `truck.wheel.steering` is registered with for its wheel 0 (its index added): apart from the
+/// [`CHANNELS`]' indices.
+const WHEEL_CONTEXT: usize = 0x1000;
 
 const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::Placement),
@@ -160,6 +181,8 @@ const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.head.offset", SCS_VALUE_TYPE_FPLACEMENT, Field::HeadOffset),
     ("truck.effective.steering", SCS_VALUE_TYPE_FLOAT, Field::Steering),
     ("multiplayer.time.offset", SCS_VALUE_TYPE_S32, Field::MultiplayerTimeOffset),
+    ("trailer.0.connected", SCS_VALUE_TYPE_BOOL, Field::TrailerConnected),
+    ("trailer.0.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::TrailerPlacement),
 ];
 
 /// Registers the telemetry channels and events. Called from `scs_telemetry_init`.
@@ -199,6 +222,16 @@ pub unsafe fn register(params: &TelemetryInitParamsV100) {
             }
         }
         log!("telemetry: {registered}/{} channels registered", CHANNELS.len());
+        // How far each wheel is turned, for the reversing camera's lines (only the steered ones are read).
+        let Ok(c_name) = CString::new("truck.wheel.steering") else { return };
+        let wheels = (0..crate::reversing::MOST_WHEELS)
+            .filter(|&wheel| {
+                let context = (WHEEL_CONTEXT + wheel) as *mut c_void;
+                register_channel(c_name.as_ptr(), wheel as u32, SCS_VALUE_TYPE_FLOAT, 0, on_channel, context)
+                    == SCS_RESULT_OK
+            })
+            .count();
+        log!("telemetry: the steering of {wheels} wheels registered");
     }
 }
 
@@ -255,6 +288,10 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                 if let Some(bridge) = bridge::get() {
                     let [x, y, z] = *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
                     let [cabin_x, cabin_y, cabin_z] = *CABIN.lock().unwrap_or_else(|e| e.into_inner());
+                    let vehicles = crate::reversing::VEHICLES.lock().unwrap_or_else(|e| e.into_inner());
+                    let (truck_layout, trailer_layout) = (vehicles.truck, vehicles.trailer);
+                    let wheel_steering = vehicles.wheel_steering();
+                    drop(vehicles);
                     let camera = crate::camera::position();
                     let [camera_x, camera_y, camera_z] = camera.unwrap_or_default();
                     let published = Telemetry {
@@ -268,6 +305,16 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                         cabin_x,
                         cabin_y,
                         cabin_z,
+                        wheel_steering,
+                        front_axle_z: truck_layout.front_axle_z,
+                        rear_axle_z: truck_layout.rear_axle_z,
+                        hook_z: truck_layout.hook_z,
+                        rear_z: truck_layout.rear_z,
+                        half_width: truck_layout.half_width,
+                        trailer_hook_z: trailer_layout.hook_z,
+                        trailer_axle_z: trailer_layout.rear_axle_z,
+                        trailer_rear_z: trailer_layout.rear_z,
+                        trailer_half_width: trailer_layout.half_width,
                         ..*snapshot
                     };
                     bridge.plugin.telemetry.write(&published);
@@ -300,6 +347,7 @@ unsafe fn on_configuration(configuration: &ConfigurationEvent) {
         match CStr::from_ptr(configuration.id).to_bytes() {
             b"truck" => on_truck(configuration),
             b"job" => on_job(configuration),
+            b"trailer.0" => on_trailer(configuration),
             _ => {}
         }
     }
@@ -313,7 +361,9 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         let mut truck = TruckInfo::default();
         let mut head = [0.0; 3];
         let mut cabin = [0.0; 3];
+        let mut configured = crate::reversing::Configured::default();
         for attribute in configuration.attributes() {
+            configured.take(attribute);
             match CStr::from_ptr(attribute.name).to_bytes() {
                 b"head.position" => {
                     head = attribute.value.fvector().unwrap_or_default();
@@ -348,10 +398,26 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         );
         *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner()) = head;
         *CABIN.lock().unwrap_or_else(|e| e.into_inner()) = cabin;
+        crate::reversing::truck_configured(&configured);
         if let Some(bridge) = bridge::get() {
             bridge.plugin.truck.write(&truck);
         }
         crate::screens::truck_changed(truck.id.as_str());
+    }
+}
+
+/// The first trailer's layout, for the reversing camera (no attributes: no trailer).
+///
+/// # Safety
+/// As [`on_configuration`].
+unsafe fn on_trailer(configuration: &ConfigurationEvent) {
+    // SAFETY: the attributes are the SDK's, alive through the call (this function's contract).
+    unsafe {
+        let mut configured = crate::reversing::Configured::default();
+        for attribute in configuration.attributes() {
+            configured.take(attribute);
+        }
+        crate::reversing::trailer_configured(&configured);
     }
 }
 
@@ -411,6 +477,14 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
     // SAFETY: `value` is the SDK's, of the type the channel was registered with (each `Field` reads its own),
     // or null.
     unsafe {
+        // A wheel's steering (`register`): its turns, none without a value.
+        if let Some(wheel) = (context as usize).checked_sub(WHEEL_CONTEXT) {
+            let mut vehicles = crate::reversing::VEHICLES.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(steering) = vehicles.steering.get_mut(wheel) {
+                *steering = value.as_ref().map_or(0.0, ScsValue::float);
+            }
+            return;
+        }
         let Some(&(_, _, field)) = CHANNELS.get(context as usize) else { return };
         let mut s = SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner());
         // A null value means the channel currently has no value (e.g. no truck); reset to the default.
@@ -451,6 +525,11 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
             }
             Field::Steering => s.steering = value.float(),
             Field::MultiplayerTimeOffset => s.multiplayer_time_offset = value.s32(),
+            Field::TrailerConnected => s.trailer_connected = value.bool(),
+            Field::TrailerPlacement => {
+                let p = value.dplacement();
+                (s.trailer_x, s.trailer_y, s.trailer_z, s.trailer_heading) = (p.x, p.y, p.z, p.heading);
+            }
         }
     }
 }
@@ -488,5 +567,10 @@ fn reset(s: &mut Telemetry, field: Field) {
         }
         Field::Steering => s.steering = d.steering,
         Field::MultiplayerTimeOffset => s.multiplayer_time_offset = d.multiplayer_time_offset,
+        Field::TrailerConnected => s.trailer_connected = d.trailer_connected,
+        Field::TrailerPlacement => {
+            (s.trailer_x, s.trailer_y, s.trailer_z) = (d.trailer_x, d.trailer_y, d.trailer_z);
+            s.trailer_heading = d.trailer_heading;
+        }
     }
 }

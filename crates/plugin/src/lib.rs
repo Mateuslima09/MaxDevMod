@@ -21,6 +21,7 @@ mod mod_mount;
 mod money;
 mod navigation;
 mod screens;
+mod reversing;
 mod scs;
 mod telemetry;
 mod truckersmp;

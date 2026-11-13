@@ -1,0 +1,142 @@
+/* The reversing camera (ReversingCamera.tsx): over the CarPlay area, under the cursor (40). */
+.reversing {
+  position: absolute;
+  inset: 0 0 var(--oem-bottom, 0px) var(--oem-left, 0px);
+  z-index: 30;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-weight: 600;
+}
+
+.reversing-host,
+.reversing-picture,
+.reversing-map,
+.reversing-guides {
+  position: absolute;
+  inset: 0;
+}
+
+/* Mirrored, as a real reversing camera's picture is: the screen's left is the driver's left. */
+.reversing-picture {
+  transform: scaleX(-1);
+}
+
+.reversing-guides {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.reversing-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  font-size: calc(18px * var(--ui-scale, 1));
+}
+
+.reversing-where {
+  opacity: 0.7;
+}
+
+.reversing-caution {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 30%;
+  text-align: center;
+  font-size: calc(17px * var(--ui-scale, 1));
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.8);
+}
+
+.reversing-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: 26%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 24px;
+  background: rgb(18 18 20 / 0.78);
+}
+
+.reversing-mute {
+  align-self: flex-end;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
+.reversing-mute.off {
+  color: var(--apple-red, #ff4245);
+}
+
+.reversing-diagram {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.reversing-diagram .body {
+  fill: rgb(255 255 255 / 0.85);
+}
+
+.reversing-diagram .body.truck {
+  fill: rgb(255 255 255 / 0.55);
+}
+
+.reversing-diagram .band {
+  fill: rgb(255 255 255 / 0.1);
+}
+
+.reversing-diagram .band.beyond {
+  fill: rgb(255 255 255 / 0.04);
+}
+
+.reversing-diagram .band.lit.red {
+  fill: var(--apple-red, #ff4245);
+}
+
+.reversing-diagram .band.lit.yellow {
+  fill: var(--apple-yellow, #ffd600);
+}
+
+.reversing-diagram .band.lit.green {
+  fill: var(--apple-green, #30d158);
+}
+
+.reversing-distance {
+  font-size: calc(34px * var(--ui-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.reversing-distance.clear {
+  opacity: 0.4;
+}
+
+.reversing-distance.red {
+  color: var(--apple-red, #ff4245);
+}
+
+.reversing-distance.yellow {
+  color: var(--apple-yellow, #ffd600);
+}
+
+.reversing-distance.green {
+  color: var(--apple-green, #30d158);
+}

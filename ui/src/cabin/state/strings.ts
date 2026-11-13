@@ -434,6 +434,28 @@ export interface Strings {
     unavailable: string
   }
   /** The Settings app: its pages, rows and the words under them. */
+  /** The reversing camera (cabin/reversing), and its page in Settings. */
+  reversing: {
+    /** The camera's own name, over its picture and in Settings. */
+    title: string
+    /** Under the picture, as on a real one. */
+    checkSurroundings: string
+    /** The nearest thing the sensors see, metres. */
+    distance: (metres: string) => string
+    /** Right up against it. */
+    stop: string
+    /** On the trailer, or the truck alone. */
+    onTrailer: string
+    onTruck: string
+    /** The sensors' sound: off, and on again (the button over the picture). */
+    mute: string
+    unmute: string
+    /** Settings. */
+    showCamera: string
+    showCameraNote: string
+    beeps: string
+    guides: string
+  }
   settings: {
     appearance: string
     light: string
@@ -926,6 +948,21 @@ export const STRINGS: Record<Language, Strings> = {
       roadStates: { dry: 'Dry', damp: 'Damp', wet: 'Wet' },
       roadTrends: { drying: 'Drying', gettingWet: 'Getting wetter' },
       unavailable: 'The weather shows while the game runs.',
+    },
+    reversing: {
+      title: 'Reversing Camera',
+      checkSurroundings: 'Check your surroundings',
+      distance: (metres) => `${metres} m`,
+      stop: 'STOP',
+      onTrailer: 'Trailer',
+      onTruck: 'Truck',
+      mute: 'Mute the sensors',
+      unmute: 'Sensors’ sound on',
+      showCamera: 'Show When Reversing',
+      showCameraNote:
+        'The camera’s picture is drawn from your game’s map: its roads and buildings. The sensors hear the buildings and other players’ trucks.',
+      beeps: 'Sensors’ Beeps',
+      guides: 'Guide Lines',
     },
     settings: {
       appearance: 'Appearance',
@@ -1424,6 +1461,21 @@ export const STRINGS: Record<Language, Strings> = {
       roadStates: { dry: 'Seca', damp: 'Úmida', wet: 'Molhada' },
       roadTrends: { drying: 'Secando', gettingWet: 'Ficando mais molhada' },
       unavailable: 'O clima aparece enquanto o jogo está aberto.',
+    },
+    reversing: {
+      title: 'Câmera de Ré',
+      checkSurroundings: 'Verifique os arredores',
+      distance: (metres) => `${metres} m`,
+      stop: 'PARE',
+      onTrailer: 'Carreta',
+      onTruck: 'Caminhão',
+      mute: 'Silenciar os sensores',
+      unmute: 'Som dos sensores',
+      showCamera: 'Mostrar ao Engatar a Ré',
+      showCameraNote:
+        'A imagem da câmera é desenhada a partir do mapa do seu jogo: as ruas e os prédios. Os sensores percebem os prédios e os caminhões de outros jogadores.',
+      beeps: 'Bipe dos Sensores',
+      guides: 'Linhas Guia',
     },
     settings: {
       appearance: 'Aparência',
@@ -1924,6 +1976,21 @@ export const STRINGS: Record<Language, Strings> = {
       roadStates: { dry: 'Kuru', damp: 'Nemli', wet: 'Islak' },
       roadTrends: { drying: 'Kuruyor', gettingWet: 'Islanıyor' },
       unavailable: 'Hava durumu oyun açıkken görünür.',
+    },
+    reversing: {
+      title: 'Geri Görüş Kamerası',
+      checkSurroundings: 'Çevrenizi kontrol edin',
+      distance: (metres) => `${metres} m`,
+      stop: 'DUR',
+      onTrailer: 'Römork',
+      onTruck: 'Çekici',
+      mute: 'Sensörleri sustur',
+      unmute: 'Sensör sesi açık',
+      showCamera: 'Geri Viteste Göster',
+      showCameraNote:
+        'Kameranın görüntüsü oyununuzun haritasından çizilir: yolları ve binaları. Sensörler binaları ve diğer oyuncuların tırlarını algılar.',
+      beeps: 'Sensör Sesleri',
+      guides: 'Kılavuz Çizgiler',
     },
     settings: {
       appearance: 'Görünüm',

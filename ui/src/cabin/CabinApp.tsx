@@ -10,6 +10,7 @@ import { AppScreen } from './apps/AppScreen'
 import { BootScreen } from './boot/BootScreen'
 import { Dashboard } from './dashboard/Dashboard'
 import { Home } from './home/Home'
+import { ReversingCamera } from './reversing/ReversingCamera'
 import { followTruckersMp } from './maps/truckersmp'
 import { routeClicksDuringTransitions } from './shell/clickThrough'
 import { installDragScroll } from './shell/dragScroll'
@@ -69,6 +70,8 @@ export function CabinApp() {
       entering={entering}
       overlay={
         <>
+          {/* In reverse, the reversing camera over the screen (reversing/ReversingCamera.tsx). */}
+          {powered && <ReversingCamera />}
           {FOLLOW_POWER && phase !== 'on' && <BootScreen phase={phase} />}
           {/* In a plain browser the system cursor is there already. */}
           {isInHost() && <Cursor />}

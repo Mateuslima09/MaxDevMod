@@ -63,6 +63,11 @@ pub use webview::{Error, wait_for_browsers};
 /// Size the cabin page is rendered at: the size of the frames the plugin copies into the screen textures.
 pub use westplay_shared::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
+/// How often the page is sent the game's telemetry (ms): 20 times a second, and in reverse as often as the
+/// screen shows frames (30: capture.rs MAX_FPS), for the reversing camera to follow the truck smoothly.
+const TELEMETRY_MS: u64 = 50;
+const TELEMETRY_REVERSING_MS: u64 = 33;
+
 /// Built-in page used when no UI URL is given: shows that frames and telemetry arrive.
 pub const TEST_PAGE: &str = include_str!("test_page.html");
 
@@ -1630,7 +1635,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
         }
 
-        if last_telemetry_post.elapsed() >= Duration::from_millis(50) {
+        // In reverse, the reversing camera follows the truck: telemetry as often as the screen shows frames.
+        let reversing = last_telemetry.is_some_and(|telemetry| telemetry.gear < 0);
+        let telemetry_every = Duration::from_millis(if reversing { TELEMETRY_REVERSING_MS } else { TELEMETRY_MS });
+        if last_telemetry_post.elapsed() >= telemetry_every {
             last_telemetry_post = Instant::now();
             let plugin = &bridge.bridge().plugin;
             // A write the game never finished (it crashed in the middle) reads as nothing: nothing to send. A

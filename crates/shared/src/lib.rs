@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 31;
+pub const BRIDGE_VERSION: u32 = 32;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -788,6 +788,29 @@ pub struct Telemetry {
     /// SDK's `multiplayer.time.offset`; 0 out of one): the cab's clock shows `game_time` plus this. A job's
     /// times are the player's own.
     pub multiplayer_time_offset: i32,
+    /// The reversing camera's: how far the steered wheels are turned (radians, left positive: the mean of the
+    /// SDK's `truck.wheel.steering` over the wheels the truck's configuration says steer), and the truck as
+    /// its configuration lays it out (metres, its own space: z back): the steered axle, the axle it turns about
+    /// (the middle of the others), its fifth wheel (`hook.position`), its rear end (behind its last axle) and
+    /// its half width (at its widest wheels). All 0 until the configuration is known.
+    pub wheel_steering: f32,
+    pub front_axle_z: f32,
+    pub rear_axle_z: f32,
+    pub hook_z: f32,
+    pub rear_z: f32,
+    pub half_width: f32,
+    /// The first trailer, while it's coupled (the SDK's `trailer.0.*`): where it is (world, as `x`, `y`, `z`)
+    /// and how it's turned (turns), and its configuration as the truck's (its own space: the kingpin, the axle
+    /// it turns about, its rear end, its half width).
+    pub trailer_connected: bool,
+    pub trailer_x: f64,
+    pub trailer_y: f64,
+    pub trailer_z: f64,
+    pub trailer_heading: f32,
+    pub trailer_hook_z: f32,
+    pub trailer_axle_z: f32,
+    pub trailer_rear_z: f32,
+    pub trailer_half_width: f32,
 }
 
 /// Identity of the current truck, from the SDK's "truck" configuration.
