@@ -364,10 +364,11 @@ fn brake_sounds() {
         sounds.warning_until = None;
     }
     let pedal = (t.input_brake - f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed)).min(0.0)).clamp(0.0, 1.0);
-    if hot && squeal > 0.0 && pedal > 0.05 && t.speed.abs() > 1.0 && due(sounds.squeal_until) {
-        // Overlapping a little, so it doesn't stop between two.
-        let lasts = crate::character::brake_sound(crate::character::BrakeSound::Squeal, squeal * (0.5 + 0.5 * pedal));
-        sounds.squeal_until = Some(now + lasts.saturating_sub(Duration::from_millis(150)));
+    // The grinding as a seamless loop while braking hot, louder the harder; let go the moment it isn't.
+    let grinding = hot && squeal > 0.0 && pedal > 0.05 && t.speed.abs() > 1.0;
+    if grinding || sounds.squeal_until.is_some() {
+        crate::character::brake_loop(grinding, squeal * (0.5 + 0.5 * pedal));
+        sounds.squeal_until = grinding.then_some(now);
     }
 }
 

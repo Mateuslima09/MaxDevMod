@@ -56,7 +56,7 @@ mod probe;
 mod refuel;
 mod steps;
 
-pub(crate) use steps::{BrakeSound, brake as brake_sound};
+pub(crate) use steps::{BrakeSound, brake as brake_sound, brake_loop};
 
 /// The configuration scene starting its walking camera: `mov r8, [rsi+world]; lea rdx, [rsi+placement];
 /// mov rcx, r15; call start; mov eax, 0xdfffffff; lock xadd [rdi], eax; mov rdx, r15; mov rcx, r14; call assign`.

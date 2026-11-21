@@ -148,6 +148,11 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   `BRAKE_ALARM_STRENGTH 0,38` (~360 °C, quase sem freio): aviso da Toyota em loop + "Sem freio!" no celular. O
   aviso foi recortado mais longo (2,8 s). Mínimo de força aos 400 °C.
 
+- **Rangido em loop contínuo (dono, 21/11 20:20: "fica vai e volta"):** `steps.rs` ganhou vozes em loop
+  (`brake_loop(on, volume)`: `at` = `LOOP`/`STOP`, fade de 80 ms ao parar); o asset `brake_squeal.raw` virou um
+  loop de 1,6 s (1,8–3,8 s do original, últimos 0,4 s cruzados com o começo). `commands.rs` liga o loop enquanto
+  freia quente e solta na hora. Prévia `docs/fadiga-freio/sons/rangido-loop-previa.wav`. Plugin trocado 20:22.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

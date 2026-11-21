@@ -89,14 +89,27 @@ pub(super) fn door(which: Door, after: f32) {
 /// The brake fade's sounds (crate::brake_sounds).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BrakeSound {
-    Squeal,
+    /// The dashboard's warning (the grinding loops: [`brake_loop`]).
     Warning,
+}
+
+/// `at` meaning "loop this sound (or keep looping it, at this gain)" and "stop looping it": the grinding goes on
+/// as long as the brake is held, seamless (owner 2026-11-21: "holding the brake it should follow on, not end the
+/// loop and start it all over").
+const LOOP: isize = isize::MIN;
+const STOP: isize = isize::MIN + 1;
+/// A loop stopped fades out over this many samples (80 ms).
+const STOP_FADE: isize = 1_920;
+
+/// The grinding looping at `volume` (0..1) while `on`; let go (fading out) once not.
+pub(crate) fn brake_loop(on: bool, volume: f32) {
+    let sound = WALKS + RUNS + 2;
+    if on { send(sound, LOOP, volume.clamp(0.0, 1.0)) } else { send(sound, STOP, 0.0) }
 }
 
 /// One of the brake fade's sounds now, at `volume` (0..1); how long it lasts.
 pub(crate) fn brake(which: BrakeSound, volume: f32) -> Duration {
     let (sound, bytes) = match which {
-        BrakeSound::Squeal => (WALKS + RUNS + 2, BRAKE_SQUEAL.len()),
         BrakeSound::Warning => (WALKS + RUNS + 3, BRAKE_WARNING.len()),
     };
     send(sound, 0, volume.clamp(0.0, 1.0));
@@ -127,6 +140,28 @@ struct Voice {
     sound: usize,
     at: isize,
     gain: f32,
+    /// Played over and over until stopped.
+    looping: bool,
+    /// Where (in `at`'s samples) it started fading out, stopped.
+    stopping: Option<isize>,
+}
+
+impl Voice {
+    fn new(sound: usize, at: isize, gain: f32) -> Self {
+        Self { sound, at, gain, looping: false, stopping: None }
+    }
+}
+
+/// A command to the voices: a sound to play, a loop to start, keep at a gain, or stop.
+fn command(voices: &mut Vec<Voice>, sound: usize, at: isize, gain: f32) {
+    let looping = voices.iter_mut().find(|v| v.sound == sound && v.looping && v.stopping.is_none());
+    match (at, looping) {
+        (LOOP, Some(voice)) => voice.gain = gain,
+        (LOOP, None) => voices.push(Voice { looping: true, ..Voice::new(sound, 0, gain) }),
+        (STOP, Some(voice)) => voice.stopping = Some(voice.at),
+        (STOP, None) => {}
+        _ => voices.push(Voice::new(sound, at, gain)),
+    }
 }
 
 /// The steps' thread: waits for a step, opens the stream, mixes what's playing into it, closes it when quiet.
@@ -134,7 +169,11 @@ fn run(steps: Receiver<(usize, isize, f32)>) {
     let sounds = SOUNDS.get_or_init(recorded);
     // Waiting for a step with the stream closed.
     while let Ok((first, at, gain)) = steps.recv() {
-        let mut voices = vec![Voice { sound: first, at, gain }];
+        let mut voices = Vec::new();
+        command(&mut voices, first, at, gain);
+        if voices.is_empty() {
+            continue;
+        }
         // SAFETY: the stream's own calls, on buffers that outlive it (reset and unprepared before they go).
         unsafe {
             let Some(mut stream) = Stream::open() else {
@@ -144,7 +183,7 @@ fn run(steps: Receiver<(usize, isize, f32)>) {
             let mut heard = Instant::now();
             loop {
                 while let Ok((sound, at, gain)) = steps.try_recv() {
-                    voices.push(Voice { sound, at, gain });
+                    command(&mut voices, sound, at, gain);
                     heard = Instant::now();
                 }
                 stream.feed(|out| mix(sounds, &mut voices, out));
@@ -154,7 +193,7 @@ fn run(steps: Receiver<(usize, isize, f32)>) {
                 // Until the next step or the next buffer (5 ms).
                 match steps.recv_timeout(Duration::from_millis(5)) {
                     Ok((sound, at, gain)) => {
-                        voices.push(Voice { sound, at, gain });
+                        command(&mut voices, sound, at, gain);
                         heard = Instant::now();
                     }
                     Err(RecvTimeoutError::Timeout) => {}
@@ -172,7 +211,11 @@ fn mix(sounds: &[Vec<f32>], voices: &mut Vec<Voice>, out: &mut [i16]) {
         let sum: f32 = voices
             .iter()
             .map(|v| {
-                usize::try_from(v.at + k as isize).ok().and_then(|i| sounds[v.sound].get(i)).map_or(0.0, |s| s * v.gain)
+                let at = v.at + k as isize;
+                let len = sounds[v.sound].len() as isize;
+                let at = if v.looping && len > 0 { at.rem_euclid(len) } else { at };
+                let fade = v.stopping.map_or(1.0, |from| (1.0 - (v.at + k as isize - from) as f32 / STOP_FADE as f32).max(0.0));
+                usize::try_from(at).ok().and_then(|i| sounds[v.sound].get(i)).map_or(0.0, |s| s * v.gain * fade)
             })
             .sum();
         *sample = (sum.clamp(-1.0, 1.0) * f32::from(i16::MAX)) as i16;
@@ -180,7 +223,10 @@ fn mix(sounds: &[Vec<f32>], voices: &mut Vec<Voice>, out: &mut [i16]) {
     for voice in voices.iter_mut() {
         voice.at += out.len() as isize;
     }
-    voices.retain(|v| v.at < sounds[v.sound].len() as isize);
+    voices.retain(|v| match v.stopping {
+        Some(from) => v.at - from < STOP_FADE,
+        None => v.looping || v.at < sounds[v.sound].len() as isize,
+    });
 }
 
 /// The plugin's sound stream: a `waveOut` device and its buffers, refilled as each is played.
@@ -280,18 +326,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_loop_goes_on_until_stopped_then_fades() {
+        let sounds = vec![vec![0.5; 100]];
+        let mut voices = Vec::new();
+        command(&mut voices, 0, LOOP, 1.0);
+        command(&mut voices, 0, LOOP, 0.5);
+        assert_eq!(voices.len(), 1);
+        let mut out = [0i16; 480];
+        mix(&sounds, &mut voices, &mut out);
+        mix(&sounds, &mut voices, &mut out);
+        assert_eq!(voices.len(), 1);
+        assert!(out.iter().all(|&s| s > 8000), "the loop has no gap");
+        command(&mut voices, 0, STOP, 0.0);
+        for _ in 0..5 {
+            mix(&sounds, &mut voices, &mut out);
+        }
+        assert!(voices.is_empty());
+    }
+
+    #[test]
     fn the_recorded_steps_are_whole_and_smooth() {
         assert_eq!(WALK.len() % (2 * WALK_STEP), 0);
         assert_eq!(RUN.len() % (2 * RUN_STEP), 0);
         assert_eq!((WALKS, RUNS), (10, 12));
         let sounds = recorded();
         assert_eq!(sounds.len(), WALKS + RUNS + 4);
-        // The brake fade's two, last: loud, faded out at their ends.
+        // The brake fade's two, last: loud; the warning faded out at its end, the grinding a loop (its end runs on
+        // into its start, no jump).
         for s in &sounds[WALKS + RUNS + 2..] {
             let loudest = s.iter().fold(0.0f32, |m, v| m.max(v.abs()));
             assert!(loudest > 0.8 && loudest <= 1.0, "{loudest}");
-            assert!(s[s.len() - 1].abs() < 1e-2);
         }
+        let warning = &sounds[WALKS + RUNS + 3];
+        assert!(warning[warning.len() - 1].abs() < 1e-2);
+        let grinding = &sounds[WALKS + RUNS + 2];
+        assert!((grinding[grinding.len() - 1] - grinding[0]).abs() < 0.2);
         // The door's two, after the steps: whole, faded, louder than a step.
         for s in &sounds[WALKS + RUNS..WALKS + RUNS + 2] {
             let loudest = s.iter().fold(0.0f32, |m, v| m.max(v.abs()));
@@ -313,7 +382,7 @@ mod tests {
     #[test]
     fn steps_are_mixed_not_cut() {
         let sounds = vec![vec![0.1; 1000], vec![0.2; 300]];
-        let mut voices = vec![Voice { sound: 0, at: 0, gain: 1.0 }, Voice { sound: 1, at: 0, gain: 1.0 }];
+        let mut voices = vec![Voice::new(0, 0, 1.0), Voice::new(1, 0, 1.0)];
         let mut out = [0i16; 441];
         mix(&sounds, &mut voices, &mut out);
         assert!((f32::from(out[0]) / f32::from(i16::MAX) - 0.3).abs() < 1e-3);
@@ -328,7 +397,7 @@ mod tests {
     #[test]
     fn a_sound_can_start_later() {
         let sounds = vec![vec![0.5; 100]];
-        let mut voices = vec![Voice { sound: 0, at: -50, gain: 1.0 }];
+        let mut voices = vec![Voice::new(0, -50, 1.0)];
         let mut out = [0i16; 60];
         mix(&sounds, &mut voices, &mut out);
         assert_eq!(out[49], 0);
