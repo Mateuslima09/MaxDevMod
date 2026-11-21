@@ -303,6 +303,55 @@ fn toward(target: f32, game: f32) -> f32 {
     if still.abs() < RELATIVE_NEAR { 0.0 } else { (still * RELATIVE_GAIN).clamp(-1.0, 1.0) }
 }
 
+/// Brake fade, step A2 (owner 2026-11-21, docs/fadiga-freio/PLANO.md): whether the plugin can take brake away by
+/// giving the game's `abackward` a negative value. On while a file `fade-probe.txt` is in WestPlay's folder (next
+/// to `logs`), holding the value to give (e.g. `-0.4`; -0.85 at most); read every 2 s. Only with the phone wheel
+/// not driving (it has the axis then). Gone, the axis is let back to 0 once, as the wheel's is.
+fn fade_probe() -> f32 {
+    static PROBE: Mutex<(Option<Instant>, f32)> = Mutex::new((None, 0.0));
+    let mut probe = PROBE.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if probe.0.is_none_or(|at| now.duration_since(at) >= Duration::from_secs(2)) {
+        probe.0 = Some(now);
+        let path = log::log_dir().parent().map(|dir| dir.join("fade-probe.txt"));
+        let value = path
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .map(|text| text.trim().replace(',', ".").parse::<f32>().unwrap_or(-0.4))
+            .filter(|value| value.is_finite())
+            .map_or(0.0, |value| value.clamp(-0.85, 0.0));
+        if value != probe.1 {
+            log!("brake fade probe: abackward {value:+.2} ({})", if value != 0.0 { "on" } else { "off" });
+            probe.1 = value;
+        }
+    }
+    probe.1
+}
+
+/// Brake fade, step A1: the game's brake temperature, the pedal before and after the game, and the speed, every
+/// second while the truck moves or brakes (with the probe's value), for the owner's test down a hill.
+fn brake_log() {
+    static LOGGED: Mutex<Option<Instant>> = Mutex::new(None);
+    let mut logged = LOGGED.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if logged.is_some_and(|at| now.duration_since(at) < Duration::from_secs(1)) {
+        return;
+    }
+    *logged = Some(now);
+    drop(logged);
+    let Some(t) = bridge::get().and_then(|bridge| bridge.plugin.telemetry.read()) else { return };
+    if t.speed.abs() < 0.5 && t.input_brake < 0.01 && t.brake < 0.01 {
+        return;
+    }
+    log!(
+        "brake fade: temp {:.1} C, pedal {:.2}, effective {:.2}, speed {:.0} km/h, probe {:+.2}",
+        t.brake_temperature,
+        t.input_brake,
+        t.brake,
+        t.speed * 3.6,
+        fade_probe()
+    );
+}
+
 /// Whether an axis told `reported` should be told `wanted`: a change worth it, or back to exactly 0.
 fn axis_changed(reported: f32, wanted: f32) -> bool {
     (wanted - reported).abs() > 0.0005 || (wanted == 0.0 && reported != 0.0)
@@ -314,7 +363,8 @@ fn next_axis(event: Option<&mut InputEvent>, flags: u32) -> ScsResult {
     if AXES_FRAME.swap(frame, Ordering::Relaxed) != frame || flags & FIRST_IN_FRAME != 0 {
         AXES_TOLD.store(0, Ordering::Relaxed);
     }
-    let wanted = wheel_values().unwrap_or([0.0; 3]);
+    brake_log();
+    let wanted = wheel_values().unwrap_or_else(|| [0.0, 0.0, fade_probe()]);
     let told = AXES_TOLD.load(Ordering::Relaxed);
     let Some(axis) = (0..AXES.len()).find(|&axis| {
         told & (1 << axis) == 0

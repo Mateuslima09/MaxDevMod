@@ -3,6 +3,10 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.5 (beta, 2026-11-21)
+- Brake fade, first step: the plugin writes the brakes' temperature to its log while driving, and can try taking
+  brake away for a test (nothing changes in the game unless that test is switched on).
+
 ## 2.4.4 (beta, 2026-11-21)
 - Virtual mirrors: with one side chosen, only that one shows again (on ETS2 1.62 both showed).
 

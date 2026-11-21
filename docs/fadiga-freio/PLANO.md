@@ -1,72 +1,326 @@
-# Fadiga de freio (plano, não iniciado)
+# Fadiga de freio: plano completo para outra IA executar
 
-Pedido do dono (21/11): os freios esquentam com o uso e, superaquecidos, perdem força até esfriar. Um HUD próprio, à
-parte da barra de teclas, com dois discos de freio (no estilo do BG Drive), a temperatura em °C ao lado e a cor
-mudando conforme esquenta. Esfria mais rápido com chuva e à noite. Sons de caminhão "sem freio" quando a força cai.
+Pedido do dono (21/11/2026): os freios esquentam com o uso e, superaquecidos, perdem força até esfriar. Um HUD
+próprio, separado da barra de teclas, com **dois discos de freio** (estilo BG Drive), a **temperatura em °C** ao lado
+e a **cor mudando** conforme esquenta. Esfria **mais rápido com chuva e à noite**. **Sons** de caminhão "sem freio"
+quando a força cai.
 
-Combinado: fazer **depois**, numa sessão nova (esta conversa ficou longa e cara por mensagem), de preferência depois
-que o limite semanal zerar (25/11).
+Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e instalar.
 
-## 1. A temperatura do freio
+## ONDE PAROU (atualizado 21/11/2026)
 
-- **Ver primeiro o que o jogo dá:** o SDK tem o canal `truck.brake.temperature` (°C, conferir em
-  `tools/scs_sdk_1_15/include/common/scssdk_telemetry_truck_common_channels.h`). O `def/vehicle/physics.sii` do jogo
-  tem `max_brake_temperature: 200`, `brake_cooling_rate` e `brake_friction_warming_rate`: o jogo já esquenta e esfria o
-  freio, mas (a conferir) não tira força dele.
-- **Se o canal servir:** usar a temperatura do jogo e só acrescentar os efeitos (chuva, noite, perda de força).
-- **Se não servir:** um modelo próprio no app (`crates/host`, como a `auto_suspension.rs`):
-  - aquece com `freio × velocidade` (energia jogada no disco; mais com carga, pelo peso do frete);
-  - esfria sempre um pouco, mais com o vento (velocidade) e mais ainda **com chuva** e **à noite** (pedido do dono);
-  - o freio-motor e o retarder **não** esquentam o disco: descer a serra no retarder é o jeito certo de poupar o freio.
-- **Chuva:** o SDK não diz se chove. Pistas: o limpador de para-brisa ligado (`truck.wipers`), ou achar na memória do
-  jogo (pesquisa, mais cara). Começar pelo limpador.
-- **Noite:** pela hora do jogo (`game.time`, como o relógio da cabine já faz).
+**Feito:**
+- 0.2: as mudanças da 2.4.4 foram commitadas (`19f7c7b`).
+- **Fase A pronta no código** (versão **2.4.5 beta, ponte 54**):
+  - `crates/shared/src/lib.rs`: `Telemetry::brake_temperature` e `Telemetry::input_brake`; `BRIDGE_VERSION = 54`.
+  - `crates/plugin/src/telemetry.rs`: canais `truck.brake.temperature` e `truck.input.brake` (enum `Field`,
+    `CHANNELS`, o `match` que grava, o `reset` e o `SNAPSHOT` inicial).
+  - `crates/plugin/src/commands.rs`: `brake_log()` (log `brake fade: temp ...` a cada 1 s andando/freando) e
+    `fade_probe()` (sonda A2: arquivo `Documentos\WestPlay\fade-probe.txt` com `-0.4` manda esse valor no eixo
+    `abackward` quando o volante do celular não está dirigindo). Chamados em `next_axis()`.
+  - Versão 2.4.5 em `Cargo.toml`, `app/tauri.conf.json`, `ui/package.json`, `CHANGELOG.md`.
+  - `docs/fadiga-freio/TESTES.md` escrito (A1 e A2, o que o dono faz e manda).
+- Ver no fim desta seção se a instalação e o commit foram feitos.
 
-## 2. Perder força quando superaquece
+**Próximo passo:** esperar o dono mandar o log dos testes A1 e A2 (`docs/fadiga-freio/TESTES.md`). Com o log:
+- A1: `temp` sobe freando e desce parado? → seção 2.1 (usar a do jogo ou modelo próprio).
+- A2: `effective` caiu para ~0,6 com `pedal 1.00` e o arquivo? → seção 3.3 caminho 1; senão caminho 2.
+Depois seguir a Fase B (seção 2). **Ao terminar a fadiga, tirar a sonda `fade_probe()`** (ou trocá-la pela força
+calculada) e baixar o log de 1 s para só quando `strength < 1`.
 
-- O `controls.sii` do dono soma `semantical.abackward?0` ao pedal de freio. **Testar** se o plugin consegue mandar um
-  valor **negativo** ali e tirar freio (ex.: a 100% do pedal, o plugin manda −0,4 → freia 60%).
-- Se o jogo cortar o valor em 0 (não deixar negativo), outro caminho: o `brake_torque_factor` do `physics.sii` (fixo,
-  só muda ao reabrir o jogo), ou pesquisa na memória do jogo. Decidir depois do teste.
-- Curva sugerida: até ~250 °C freio cheio; de 250 a 400 °C cai aos poucos até ~40% da força; acima disso, quase
-  nada. Volta conforme esfria. (Números para ajustar no teste.)
+Status da instalação/commit: **2.4.5 compilada e instalada** 21/11 17:07 com `instalar-local.ps1` (app aberto,
+DLL nos dois jogos, backup em `%LOCALAPPDATA%\MaxDevMod\backups\20261121-170511`) e **commitada** localmente.
+Nada testado no jogo ainda. Os testes unitários (`cargo test`) não foram rodados: rodar na próxima sessão.
 
-## 3. O HUD dos discos
+---
 
-- Desenhado pelo plugin como a barra de teclas (`crates/plugin/src/hud.rs` `HudQuad`, a textura pintada só quando
-  muda), mas **separado**: liga, desliga e se esconde sozinho.
-- Desenho: **dois discos de freio** (dianteiro e traseiro, ou eixo do caminhão e da carreta), com a **temperatura em °C**
-  ao lado de cada um.
-- **Cor** pela temperatura: azul (frio) → verde (normal) → amarelo (quente) → vermelho → vermelho vivo, pulsando
-  quando está perdendo força. Volta às cores conforme esfria.
-- **Lugar e tamanho escolhidos pelo jogador**, num canto que não atrapalhe (ex.: embaixo à esquerda); tamanho pequeno,
-  médio ou grande.
-- **Esconder separado:** uma tecla própria e uma opção no app/celular, independente da barra de teclas.
+## 0. Antes de tudo (leia, é obrigatório)
 
-## 4. Sons
+### 0.1 Regras do dono
 
-- Quando a força cai: chiado de ar/freio e o rangido de disco superaquecido, mais forte quanto pior.
-- Como nos minigames, o dono pode escolher gravações (ElevenLabs, Pixabay); registrar em `THIRD_PARTY_NOTICES.md`.
-- Tocar pelo app (como os passos e a catraca) ou pelo plugin (o mesmo fluxo de som dos passos, `steps.rs`).
+- **Só instalar local.** Nada de `git push`, nada de `gh release`, até o dono dizer "release" ou "enviar".
+  Commits locais podem.
+- **Nunca mexer em configurações de segurança do Windows** (Smart App Control etc.). Se um exe novo for bloqueado,
+  voltar o backup e avisar o dono.
+- **Tudo que não foi testado no jogo** vai para `docs/fadiga-freio/TESTES.md` (o dono testa e responde).
+- Textos para o jogador em **português do Brasil**. Comentários no código em inglês, no estilo do repositório
+  (frases completas, citando o pedido do dono com data: `owner 2026-11-21: "..."`).
+- Nunca deixar o caminhão **sem nenhum** freio: sempre um mínimo (ver 3.3).
 
-## 5. Ajustes (app e celular)
+### 0.2 Estado do repositório quando este plano foi escrito
 
-Fadiga ligada/desligada; HUD ligado, posição, tamanho; mostrar °C; sons ligados e volume; intensidade da fadiga
-(leve/realista/dura).
+Pasta: `C:\Users\barce\Documents\ATS-CarPlay\westplay-base` (git, branch local). Havia mudanças **não commitadas**
+das versões 2.4.3 e 2.4.4 (tela flutuante, câmera de ré, retrovisores):
 
-## 6. Ordem sugerida
+```
+M CHANGELOG.md  Cargo.lock  Cargo.toml  app/src/setup.rs  app/tauri.conf.json  crates/host/src/webview.rs
+M crates/plugin/src/float_screen.rs  crates/plugin/src/rear_camera.rs  docs/tela-flutuante/TESTES.md  ui/package.json
+```
 
-1. Ler `truck.brake.temperature` e escrever no log a cada segundo; o dono desce uma serra freando e manda o log.
-2. Testar o freio negativo (`semantical.abackward`) com um valor fixo.
-3. Com os dois respondidos: modelo de temperatura (do jogo ou próprio), chuva e noite.
-4. HUD dos discos.
-5. Perda de força, sons e ajustes.
-6. Testes em `docs/fadiga-freio/TESTES.md`.
+**Primeiro passo:** rodar `git status`. Se essas mudanças ainda estiverem lá, commitar elas sozinhas antes de começar
+(ex.: `git add -A; git commit -m "MaxDevMod 2.4.4 beta: virtual mirrors, floating screen fixes"`), para o trabalho do
+freio ficar num commit separado e fácil de desfazer.
 
-Os passos 1 e 2 são baratos e decidem o resto: vale fazê-los primeiro, numa instalação só.
+### 0.3 Mapa do código (o que já existe e serve)
 
-## Cuidados
+| Peça | Arquivo | Para quê aqui |
+|---|---|---|
+| Ponte app↔plugin (memória compartilhada) | `crates/shared/src/lib.rs` (`BRIDGE_VERSION = 53`, `HostBlock`, `Telemetry`) | passar temperatura, ajustes e "quanto tirar de freio" |
+| Canais de telemetria do jogo | `crates/plugin/src/telemetry.rs` (lista `CHANNELS`, enum `Field`) | registrar `truck.brake.temperature` |
+| Freio que o jogador aplica | já lido: `truck.effective.brake` → `Telemetry::brake` (0..1) | aquecimento |
+| Injeção de entrada no jogo | `crates/plugin/src/commands.rs` (dispositivo *semantical*, eixos `steering`, `aforward`, `abackward`) | tentativa de tirar freio |
+| Volante do celular (usa `abackward`) | `crates/host/src/wheel.rs`, `HostBlock::wheel_brake` | **não quebrar**: o volante usa o mesmo eixo |
+| Modelo que roda no app a cada tick | `crates/host/src/auto_suspension.rs` (`tick(...)`, constantes, testes) | **modelo a copiar** para `brake_fade.rs` |
+| Chuva | `crates/host/src/weather.rs` (`Sky::Rain`, `wetness` 0..100, lido da memória do jogo) | esfriar mais com chuva (melhor que o limpador) |
+| Hora do jogo | `Telemetry::game_time` (minutos desde o início; `% 1440` = hora do dia) + `multiplayer_time_offset` | esfriar mais à noite |
+| HUD desenhado pelo plugin | `crates/plugin/src/hud.rs` (`HudQuad`, textura GDI pintada só quando muda, fade de entrada/saída) | **modelo a copiar** para `brake_hud.rs` |
+| Sons pelo plugin | `crates/plugin/src/character/steps.rs` | tocar chiado/rangido |
+| Sons pelo app | `crates/host/src/cab_sound.js` | alternativa |
+| Ajustes do app | `crates/host/src/settings.rs` | liga/desliga, posição, tamanho, volume |
+| Apps do celular | `ui/src/handset/*.tsx` (ex.: `SuspensionApp.tsx`, `FloatScreenApp.tsx`), `HandsetApp.tsx`, `Home.tsx`, `icons.tsx`, `prefs.ts` | app "Freios" |
+| SDK | `tools/scs_sdk_1_15/include/common/scssdk_telemetry_truck_common_channels.h` linha ~317 | `truck.brake.temperature`: float, °C, **um valor para o caminhão todo** (não por roda) |
 
-- Mexer na ponte (`BRIDGE_VERSION`) instala app e plugin juntos; não instalar enquanto outra sessão estiver com
-  mudanças pela metade na mesma pasta.
-- Nunca deixar o caminhão **sem nenhum** freio: um mínimo sempre (segurança da jogabilidade).
+Regra do `CLAUDE.md` do projeto: antes de procurar no código, rodar `graphify query "<pergunta>"` (ou
+`graphify explain "<conceito>"`); depois de mexer no código, `graphify update .`.
+
+---
+
+## 1. Fase A: sondas (baratas, decidem o resto). Uma instalação só.
+
+### A1. Ler a temperatura do jogo
+
+1. `crates/shared/src/lib.rs`, struct `Telemetry`: acrescentar `pub brake_temperature: f32` (°C) perto de `brake`.
+2. `crates/plugin/src/telemetry.rs`:
+   - enum `Field`: acrescentar `BrakeTemperature`;
+   - `CHANNELS`: `("truck.brake.temperature", SCS_VALUE_TYPE_FLOAT, Field::BrakeTemperature),`
+   - no `match` que grava cada campo (procurar `Field::Brake =>`), gravar o float em `brake_temperature`.
+3. Log a cada 1 s (no plugin, com `log!`): `brake: temp {t:.1} C, pedal {b:.2}, speed {kmh:.0} km/h`.
+4. Como a struct `Telemetry` faz parte da ponte, **subir `BRIDGE_VERSION` para 54** (app e plugin juntos).
+
+### A2. Testar tirar freio com valor negativo
+
+Em `crates/plugin/src/commands.rs`, só para a sonda:
+
+- Uma constante de teste `FADE_PROBE: f32 = -0.4` e um interruptor no `HostBlock` (`brake_fade_probe: AtomicU32`,
+  1 = ligado), ligado por um botão escondido no app (ou por um arquivo `fade-probe.txt` na pasta do app, o que for
+  mais rápido).
+- Com o interruptor ligado **e o volante do celular desligado** (`wheel_values()` retornou `None`), mandar
+  `abackward = FADE_PROBE` todo frame; desligado, mandar 0 **uma vez** e largar (como o volante faz).
+- Log: `fade probe: sent abackward {v:+.2}, effective brake now {b:.2}`.
+
+**O que o dono faz:** liga a sonda, pisa o freio até o fim a 60 km/h e manda o log. Resultado:
+
+- `truck.effective.brake` cai para ~0,6 → **caminho 1 funciona** (seguir 3.3 caminho 1).
+- Fica em 1,0 (o jogo corta em 0 ou o mix usa "maior valor") → caminho 2 (ver 3.3).
+
+Atenção: o mix do `controls.sii` do dono é do tipo `... | semantical.abackward?0`. Na linguagem de mix da SCS, `|`
+costuma ser "o maior dos dois", então é provável que o negativo **não** funcione. Por isso a sonda vem antes de tudo.
+
+### A3. Instalar e escrever o teste
+
+- Rodar `docs/fadiga-freio/instalar-local.ps1` (ver seção 6).
+- Criar `docs/fadiga-freio/TESTES.md` com os itens A1 e A2 (o que fazer no jogo, o que mandar de volta: o arquivo de
+  log do plugin).
+- Parar aqui e esperar o dono responder. **Não seguir para a Fase B sem os dois resultados.**
+
+---
+
+## 2. Fase B: o modelo de temperatura (`crates/host/src/brake_fade.rs`, novo)
+
+Seguir o formato de `auto_suspension.rs`: struct com estado, `fn tick(&mut self, settings, telemetry, weather, now)
+-> Fade`, constantes com doc-comment, testes `#[cfg(test)]` no mesmo arquivo. Registrar o módulo em
+`crates/host/src/lib.rs` e chamar o `tick` no mesmo laço que chama a suspensão automática (procurar
+`auto_suspension` em `lib.rs`).
+
+### 2.1 Duas temperaturas (os dois discos do HUD)
+
+- **Disco 1, caminhão:** se a sonda A1 mostrou que `truck.brake.temperature` sobe ao frear e desce parado, usar o
+  valor do jogo e **só somar** o extra de chuva/noite (2.3). Se ficou parado em um valor, usar o modelo próprio (2.2).
+- **Disco 2, carreta:** o jogo não dá. Sempre modelo próprio, com o mesmo freio (`brake`), peso maior com carga.
+  Sem carreta engatada (`trailer_connected == false`), o disco 2 aparece apagado/cinza.
+
+### 2.2 Modelo próprio (por disco), a cada tick `dt` em segundos
+
+```
+calor   = K_HEAT * brake * speed_ms * massa_fator          // energia no disco
+frio    = K_COOL * (T - T_AMB) * (1 + K_WIND * speed_ms) * chuva_fator * noite_fator
+T      += (calor - frio) * dt
+T       = clamp(T, T_AMB, 700)
+```
+
+- `brake` = `Telemetry::brake` (`truck.effective.brake`, só o freio de serviço; freio-motor e retarder **não**
+  esquentam o disco: descer a serra no retarder é o jeito certo de poupar o freio).
+- `massa_fator`: 1,0 sem carga; com carga, `1 + peso_carga_t / 20` (o peso do frete está nos dados do frete,
+  procurar `cargo_mass` / job em `shared/src/lib.rs`; se não houver, usar 1,4 com carreta engatada).
+- `T_AMB` = 25 °C (15 °C à noite, 18 °C com chuva).
+- Valores iniciais para ajustar no teste: `K_HEAT = 0,012`, `K_COOL = 0,010`, `K_WIND = 0,03`. Objetivo: descer
+  uma serra de 6 % por 3 km só no freio leva a ~400 °C; parar 2 min esfria uns 100 °C.
+
+### 2.3 Chuva e noite (pedido do dono)
+
+- **Chuva:** `weather.rs` dá `Sky::Rain` e `wetness` (0..100). `chuva_fator = 1 + 1,5 * wetness/100`
+  (sem `wetness`, `1,8` se `now == Rain`). Sem leitura do clima (mapa/versão sem layout): `1,0`.
+- **Noite:** hora do dia = `(game_time + multiplayer_time_offset).rem_euclid(1440) / 60`. Entre 20h e 6h:
+  `noite_fator = 1,3`.
+
+### 2.4 Força do freio (curva de fadiga)
+
+```
+T <= 250 °C          -> força 100 %
+250..400 °C          -> cai linear até 40 %
+400..550 °C          -> cai linear até 15 %
+>= 550 °C            -> 15 % (MÍNIMO, nunca menos)
+```
+
+Intensidade (ajuste do jogador): **leve** = limites +100 °C; **realista** = como acima; **dura** = limites −50 °C.
+Histerese: a força só volta a subir quando a temperatura cair 20 °C abaixo do ponto onde caiu (evita ficar
+piscando no limite).
+
+Usar o disco mais quente dos dois para a força (com carreta, a média ponderada 40 % caminhão, 60 % carreta).
+
+### 2.5 O que o app manda ao plugin (ponte)
+
+Em `HostBlock` (`crates/shared/src/lib.rs`), com doc-comment em cada um:
+
+```rust
+/// Brake fade (owner 2026-11-21): the truck's and the trailer's disc temperatures, °C, f32 bits; NaN = none.
+pub brake_temp_truck: AtomicU32,
+pub brake_temp_trailer: AtomicU32,
+/// How much of the player's brake is left, 0..1 as f32 bits (1 = all of it): the plugin takes the rest away.
+pub brake_strength: AtomicU32,
+/// The HUD: bit 0 on, bits 1-2 corner (0 bottom-left, 1 bottom-right, 2 top-left, 3 top-right),
+/// bits 3-4 size (0 small, 1 medium, 2 large), bit 5 hidden by its key.
+pub brake_hud: AtomicU32,
+/// The fade sounds: 0..100 volume, 0 off.
+pub brake_sound: AtomicU32,
+```
+
+Subir `BRIDGE_VERSION` (se a Fase A já subiu para 54, agora 55; ou fazer tudo numa subida só se der).
+
+Testes do modelo (no `brake_fade.rs`): esquenta freando, não esquenta parado nem sem pedal, esfria mais rápido com
+chuva e à noite, força nunca abaixo de 15 %, histerese, sem carreta o disco 2 é `None`.
+
+---
+
+## 3. Fase C: perder força de verdade (plugin)
+
+### 3.1 Onde
+
+`crates/plugin/src/commands.rs`, na função que monta os valores dos eixos todo frame (a que chama
+`wheel_values()`).
+
+### 3.2 Convivência com o volante do celular
+
+- Volante ativo: ele manda o freio. Aplicar a fadiga **no valor dele**: `brake_do_volante * strength`. Simples.
+- Volante inativo: é o freio do jogador (teclado/volante físico), que o plugin não vê nem muda direto. Ver 3.3.
+
+### 3.3 Caminhos, conforme a sonda A2
+
+**Caminho 1 (negativo funciona):** `abackward = -(1 - strength) * pedal_do_jogador`, onde `pedal_do_jogador` vem de
+`truck.input.brake` (registrar esse canal também na Fase A: é o pedal antes do jogo, enquanto `effective` é depois).
+Mandar só quando `strength < 0,999`; voltando a 1, mandar 0 uma vez e largar. Nunca passar de `-0,85`.
+
+**Caminho 2 (negativo não funciona), em ordem de preferência:**
+
+1. **Pesquisa na memória do jogo** do multiplicador de torque do freio do caminhão (como `weather.rs` acha o objeto
+   do clima: procurar o valor de `brake_torque` do `physics.sii`/`chassis` na memória, mudar e ver o efeito).
+   Mais caro, mas é o único que tira força ao vivo. Documentar o layout achado como `weather.rs` documenta o dele.
+2. Se não achar: **fadiga só visual e sonora** (HUD, cores, sons, aviso no celular "freio superaquecido"), sem tirar
+   força. Perguntar ao dono antes de decidir por esta.
+3. **Não** usar `brake_torque_factor` do `physics.sii`: só muda ao reabrir o jogo, não serve para fadiga.
+
+Em todos: log a cada 2 s quando `strength < 1`: `brake fade: truck {t1:.0} C trailer {t2:.0} C, strength {s:.2}`.
+
+---
+
+## 4. Fase D: o HUD dos discos (`crates/plugin/src/brake_hud.rs`, novo)
+
+- **Copiar a estrutura de `hud.rs`:** `HudQuad` próprio (estado D3D próprio, `ID3DDeviceContextState`), textura
+  BGRA premultiplicada pintada com GDI **só quando muda** (temperatura arredondada a 5 °C, cor, tamanho, canto),
+  fade de entrada 200 ms / saída 170 ms. Registrar o desenho no mesmo ponto onde `hud.rs` desenha (procurar quem
+  chama o `step` do HUD em `hooks.rs`/`lib.rs` do plugin).
+- **Separado da barra de teclas:** estado e liga/desliga próprios (`HostBlock::brake_hud`). Esconder a barra não
+  esconde os discos e vice-versa.
+- **Desenho:** dois discos lado a lado (círculo com furos de ventilação e a pinça por cima), legenda pequena
+  "CAVALO" e "CARRETA", temperatura em °C ao lado de cada um ("312 °C"). Fundo de vidro escuro igual à identidade
+  do `hud.rs` (grafite `#101010`/`#25282C`, branco, prata `#AEB4BA`).
+- **Cor do disco pela temperatura** (interpolar suave):
+  - < 100 °C azul `#3A8DFF`; 100–250 verde `#2ECC71`; 250–350 amarelo `#F5C400`; 350–450 laranja `#FF7A00`;
+    450+ vermelho `#D71920`;
+  - perdendo força (`strength < 1`): **pulsar** o vermelho (via shader/opacidade, sem repintar a textura).
+- **Lugar e tamanho escolhidos pelo jogador:** 4 cantos, pequeno/médio/grande (altura ~6 %, 9 %, 12 % da tela),
+  margem que não cubra o painel do jogo nem a barra de teclas (padrão: embaixo à esquerda, pequeno).
+- **Tecla própria** para esconder: usar o mecanismo de `keybinds.rs` (ver como as outras teclas do mod são
+  registradas) e mostrar a tecla nas Configurações.
+- Só aparece dirigindo (motor/elétrica ligados, fora de menu/pausa), como o HUD de dicas.
+
+---
+
+## 5. Fase E: sons e ajustes
+
+### 5.1 Sons
+
+- Com `strength < 0,9`: chiado de ar/freio em loop, mais alto quanto menor a força; acima de 450 °C freando: rangido
+  de disco superaquecido.
+- Tocar pelo plugin no mesmo fluxo de `crates/plugin/src/character/steps.rs` (ver como ele carrega e toca um wav).
+- **Os arquivos de som o dono escolhe** (ElevenLabs/Pixabay, como nos minigames). Deixar nomes fixos
+  (`brake_hiss.wav`, `brake_squeal.wav`) e funcionar em silêncio se não existirem. Registrar a origem em
+  `THIRD_PARTY_NOTICES.md` quando o dono mandar.
+
+### 5.2 Ajustes (app e celular)
+
+- `crates/host/src/settings.rs`: `brake_fade_enabled` (padrão **desligado** até o dono testar), `brake_fade_level`
+  (leve/realista/dura), `brake_hud_enabled`, `brake_hud_corner`, `brake_hud_size`, `brake_hud_celsius`,
+  `brake_sound_enabled`, `brake_sound_volume`.
+- Celular: app novo **"Freios"** em `ui/src/handset/BrakesApp.tsx`, no formato de `SuspensionApp.tsx`: os dois discos
+  ao vivo com a temperatura e a força, e os ajustes acima. Registrar em `HandsetApp.tsx`, ícone em `icons.tsx`,
+  entrada em `Home.tsx`, preferências em `prefs.ts`. Textos em português.
+- Notificação no celular (`alerts.rs`) uma vez quando a força cair abaixo de 60 %: "Freio superaquecido: use o freio
+  motor".
+
+---
+
+## 6. Compilar e instalar (sempre local)
+
+Script pronto: `docs/fadiga-freio/instalar-local.ps1`. Ele:
+
+1. para o `westplay.exe`;
+2. faz backup do exe, do dll e da pasta `ui` instalados (com data no nome);
+3. `npx tauri build` e depois `cargo build --release -p westplay-plugin` (o build do app copia um DLL velho por
+   cima, por isso o plugin é compilado **depois**);
+4. confere se o DLL novo contém um texto de prova (padrão `brake fade`);
+5. copia exe + dll para `%LOCALAPPDATA%\MaxDevMod`, troca a pasta `ui` por `ui\dist`, e o dll para a pasta de
+   plugins dos jogos que já têm o `westplay.dll`;
+6. abre o app de novo.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File docs\fadiga-freio\instalar-local.ps1
+```
+
+Antes de instalar: `cargo test -p westplay-host` e `cargo clippy --workspace` (e `npm test` em `ui` se mexer no
+celular). Depois de instalar: o jogo **precisa ser reaberto** (ponte mudou).
+
+Se o Windows bloquear o exe novo: rodar o script com `-Restaurar` (volta o último backup) e avisar o dono.
+
+---
+
+## 7. Ordem de trabalho (checklist)
+
+- [ ] 0.2 commitar o que ficou da 2.4.4
+- [ ] A1 temperatura no log + A2 sonda do freio negativo (+ `truck.input.brake`) → ponte 54 → instalar → TESTES.md
+- [ ] **esperar o dono** com o log
+- [ ] B `brake_fade.rs` com testes, ponte 55
+- [ ] C perder força pelo caminho que a sonda decidiu
+- [ ] D HUD dos discos
+- [ ] E sons + ajustes + app Freios + notificação
+- [ ] versão nova (`Cargo.toml`, `app/tauri.conf.json`, `ui/package.json`, `CHANGELOG.md` em inglês no estilo das
+      outras entradas), instalar, atualizar `TESTES.md`, commit local
+- [ ] **não** dar push nem release
+
+## 8. Cuidados
+
+- Mexer na ponte (`BRIDGE_VERSION`) instala app e plugin juntos; nunca instalar com outra sessão mexendo pela metade
+  na mesma pasta.
+- O volante do celular usa o mesmo eixo `abackward`: testar os dois juntos.
+- TruckersMP: a fadiga mexe só no próprio caminhão; conferir que nada quebra no multiplayer (`truckersmp.rs`).
+- Freio de estacionamento e freio de emergência por falta de ar **nunca** são afetados.

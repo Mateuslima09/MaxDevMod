@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 53;
+pub const BRIDGE_VERSION: u32 = 54;
 
 /// Live D3D11 screen sharpness tier in `HostBlock::screen_resolution`: applied immediately by the plugin on the next
 /// frame without restarting the game.
@@ -1014,6 +1014,11 @@ pub struct Telemetry {
     /// How hard the truck brakes (0..1, the SDK's `truck.effective.brake`): the automatic suspension raises it a little
     /// under long braking (owner 2026-11-19: "braking long, lowered, it touches the ground").
     pub brake: f32,
+    /// Brake fade (owner 2026-11-21): the brakes temperature, degrees C, as the game has it (the SDK `truck.brake.temperature`,
+    /// one value for the whole truck).
+    pub brake_temperature: f32,
+    /// The brake pedal as the player gives it, before the game (`truck.input.brake`, 0..1); `brake` is after it.
+    pub input_brake: f32,
     /// Whether the plugin's reversing camera has settled on the mirror and can be shown (plugin/src/rear_camera.rs
     /// `ready`): the page covers the screen going into reverse until then.
     pub camera_ready: bool,
