@@ -73,6 +73,13 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
     `THIRD_PARTY_NOTICES.md`. Os arquivos ficam com o dono baixar (Pixabay/Freesound pedem login); o código deve
     funcionar em silêncio sem eles.
 
+- **Sons, atualização (21/11 18:25):** o dono achou um rangido de **trem (ferro com ferro)** de que gostou
+  (`Downloads/90acdb7bee25dc76434b0b28ba17ef47/5b8684e632306.wav`, 5,3 s; trechos altos 2,0–3,0 s e 4,25–4,5 s),
+  **mas é do Baotu (ibaotu.com), banco comercial chinês: o .docx junto diz que é proibido usar sem licença**. Não
+  pôr no MaxDevMod sem o dono confirmar que tem licença. Para o aviso, em vez de baixar (os sites pedem login), foram
+  **gerados três avisos originais** (sem licença de terceiros) em `docs/fadiga-freio/sons/`: `aviso-A-ding-dong.wav`,
+  `aviso-B-bips.wav`, `aviso-C-gongo.wav`. O dono escolhe um → vira `brake_warning.wav`.
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
