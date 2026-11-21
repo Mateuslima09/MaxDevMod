@@ -352,9 +352,8 @@ fn brake_sounds() {
         if said & 0x1_0000 != 0 { ((said & 0xff) as f32 / 100.0, ((said >> 8) & 0xff) as f32 / 100.0) } else { (0.7, 0.7) };
     let strength = brake_strength();
     let least = strength <= westplay_shared::BRAKE_ALARM_STRENGTH;
-    // The grinding from the phone's first word on, "overheating" (owner 2026-11-21: "it has to grind once the
-    // message that you're running out of brakes comes").
-    let hot = strength <= westplay_shared::BRAKE_HOT_STRENGTH;
+    // The grinding braking from orange to red (about 320 °C).
+    let hot = strength <= westplay_shared::BRAKE_SQUEAL_STRENGTH;
     let due = |until: Option<Instant>| until.is_none_or(|until| now >= until);
     if least && warning > 0.0 && due(sounds.warning_until) {
         let lasts = crate::character::brake_sound(crate::character::BrakeSound::Warning, warning);

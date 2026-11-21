@@ -118,7 +118,15 @@ try {
     Copy-Item $dll.FullName "$install\westplay.dll" -Force
     foreach ($p in $plugins) { Copy-Dll $dll.FullName $p; Write-Host "  DLL -> $p" }
     if (-not $SoPlugin) {
-        Copy-Item $exe.FullName "$install\westplay.exe" -Force
+        # The app may take a moment to let go of its exe after being stopped.
+        for ($try = 1; ; $try++) {
+            try { Copy-Item $exe.FullName "$install\westplay.exe" -Force -ErrorAction Stop; break }
+            catch {
+                if ($try -ge 15) { throw }
+                Stop-App
+                Start-Sleep -Seconds 1
+            }
+        }
         Remove-Item "$install\ui" -Recurse -Force -ErrorAction SilentlyContinue
         Copy-Item "$repo\ui\dist" "$install\ui" -Recurse
         Write-Host "  exe + ui -> $install"

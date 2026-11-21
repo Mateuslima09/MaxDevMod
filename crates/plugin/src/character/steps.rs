@@ -41,7 +41,7 @@ const DOOR_SHUT: &[u8] = include_bytes!("../../assets/door_shut.raw");
 const DOOR_OPEN_VOLUME: f32 = 0.3;
 const DOOR_SHUT_VOLUME: f32 = 0.4;
 /// The brake fade's sounds (owner 2026-11-21, THIRD_PARTY_NOTICES.md): iron grinding on iron (2 s) and the
-/// dashboard's warning chime (1.4 s), like the steps' (mono, 16-bit, 24 kHz), peaking at 0.9 of full scale.
+/// dashboard's warning chime (2.8 s), like the steps' (mono, 16-bit, 24 kHz), peaking at 0.9 of full scale.
 const BRAKE_SQUEAL: &[u8] = include_bytes!("../../assets/brake_squeal.raw");
 const BRAKE_WARNING: &[u8] = include_bytes!("../../assets/brake_warning.raw");
 

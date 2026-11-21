@@ -256,4 +256,4 @@ The sounds of the overheated brakes (`crates/plugin/assets`), chosen by the owne
 - `brake_warning.raw`: "BEEPVeh-CU_Warning Chime, Fast, Toyota Highlander, Looped_Nicholas Judy_TDC" by
   designerschoice, from Freesound (<https://freesound.org/people/designerschoice/sounds/804728/>), under the
   Creative Commons Attribution 4.0 license (<https://creativecommons.org/licenses/by/4.0/>). Changed: its first
-  1.4 s only, fading out over the last 0.12 s, mono at 24 kHz.
+  2.8 s only, fading out over the last 0.12 s, mono at 24 kHz.

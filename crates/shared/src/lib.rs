@@ -634,9 +634,11 @@ pub struct HostBlock {
 
 /// Brake fade: the brake left from which it counts as gone (owner 2026-11-21: "under 380 °C there was almost no
 /// brake already, and no sound": the weakened brake never heats the discs to the least, 400 °C, so the alarm
-/// waited for nothing). 0.6 is about 320 °C on the realistic level: the dashboard's warning, the grinding and the
-/// phone's "no brakes" come from here.
-pub const BRAKE_ALARM_STRENGTH: f32 = 0.6;
+/// waited for nothing). About 0.38 is 360 °C on the realistic level, the brake almost gone (owner: "the Toyota
+/// warning right at the end, around 360 °C"): the dashboard's warning and the phone's "no brakes" from here.
+pub const BRAKE_ALARM_STRENGTH: f32 = 0.38;
+/// The grinding braking from about 320 °C (0.6), as the discs go from orange to red (owner 2026-11-21).
+pub const BRAKE_SQUEAL_STRENGTH: f32 = 0.6;
 /// The phone's first word, "overheating", a little before (about 280 °C).
 pub const BRAKE_HOT_STRENGTH: f32 = 0.85;
 

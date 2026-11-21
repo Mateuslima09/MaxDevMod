@@ -143,6 +143,11 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   (`BRAKE_HOT_STRENGTH`, ~280 °C, freando e andando); o aviso da Toyota continua no `BRAKE_ALARM_STRENGTH`. Plugin
   trocado 20:08.
 
+- **Ajuste final dos limites (dono, 21/11 ~20:15):** `BRAKE_HOT_STRENGTH 0,85` (~280 °C): "Freio superaquecido" no
+  celular. `BRAKE_SQUEAL_STRENGTH 0,6` (~320 °C, laranja → vermelho): rangido freando e andando.
+  `BRAKE_ALARM_STRENGTH 0,38` (~360 °C, quase sem freio): aviso da Toyota em loop + "Sem freio!" no celular. O
+  aviso foi recortado mais longo (2,8 s). Mínimo de força aos 400 °C.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
