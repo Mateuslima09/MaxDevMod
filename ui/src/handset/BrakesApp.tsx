@@ -22,7 +22,7 @@ export const BRAKES_WORDS = {
     realistic: 'Realistic',
     hard: 'Hard',
     levelNote:
-      'The brakes heat up as you use them and, overheated, lose force until they cool (faster at speed, in the rain and at night). Light: from about 350 °C. Realistic: 250 °C. Hard: 200 °C. Down long hills use the engine brake and the retarder.',
+      'The brakes heat up as you use them and, overheated, lose force until they cool (faster at speed, in the rain and at night). Realistic: weaker from 250 °C, no brake left at 400 °C. Light: 100 °C later. Hard: 50 °C sooner. Down long hills use the engine brake and the retarder.',
     sounds: 'Sounds',
     squeal: 'Grinding (no brakes)',
     warning: 'Dashboard warning',
@@ -56,7 +56,7 @@ export const BRAKES_WORDS = {
     realistic: 'Realista',
     hard: 'Dura',
     levelNote:
-      'Os freios esquentam com o uso e, superaquecidos, perdem força até esfriar (mais rápido em velocidade, na chuva e à noite). Leve: a partir de uns 350 °C. Realista: 250 °C. Dura: 200 °C. Na serra, use o freio motor e o retarder.',
+      'Os freios esquentam com o uso e, superaquecidos, perdem força até esfriar (mais rápido em velocidade, na chuva e à noite). Realista: enfraquece a partir de 250 °C, sem freio aos 400 °C. Leve: 100 °C depois. Dura: 50 °C antes. Na serra, use o freio motor e o retarder.',
     sounds: 'Sons',
     squeal: 'Rangido (sem freio)',
     warning: 'Aviso no painel',
@@ -83,9 +83,9 @@ export type BrakesWords = (typeof BRAKES_WORDS)['en']
 /** A disc's colour by its temperature: blue cold, green, yellow, orange, red (as the game's HUD draws it). */
 export function discColour(celsius: number): string {
   if (celsius < 100) return '#3a8dff'
-  if (celsius < 250) return '#2ecc71'
-  if (celsius < 350) return '#f5c400'
-  if (celsius < 450) return '#ff7a00'
+  if (celsius < 230) return '#2ecc71'
+  if (celsius < 300) return '#f5c400'
+  if (celsius < 380) return '#ff7a00'
   return '#d71920'
 }
 

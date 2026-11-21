@@ -101,17 +101,13 @@ impl Default for BrakeFade {
     }
 }
 
-/// The brake left at a disc temperature: all of it to 250 °C, down to 40 % at 400, 15 % at 550 and over.
+/// The brake left at a disc temperature: all of it to 250 °C, down to the least ([`LEAST`], no brake to speak of)
+/// at 400 °C and over (owner 2026-11-21: "at 400 °C the truck has no brakes any more": with the least only at 550,
+/// the weakened brake never heated the discs that far, and the sounds of the brake gone never came).
 pub fn strength_at(celsius: f32, level: Level) -> f32 {
     let t = celsius - level.shift();
-    let between = |t: f32, from: f32, to: f32, a: f32, b: f32| a + (b - a) * ((t - from) / (to - from)).clamp(0.0, 1.0);
-    if t <= 250.0 {
-        1.0
-    } else if t <= 400.0 {
-        between(t, 250.0, 400.0, 1.0, 0.4)
-    } else {
-        between(t, 400.0, 550.0, 0.4, LEAST)
-    }
+    let past = ((t - 250.0) / 150.0).clamp(0.0, 1.0);
+    (1.0 - (1.0 - LEAST) * past).max(LEAST)
 }
 
 /// Whether it's night in the game (20:00 to 06:00), from its minutes (and a Convoy's offset).
@@ -201,7 +197,8 @@ mod tests {
     #[test]
     fn the_curve_keeps_all_the_brake_cool_and_never_none() {
         assert_eq!(strength_at(200.0, Level::Realistic), 1.0);
-        assert!((strength_at(400.0, Level::Realistic) - 0.4).abs() < 1e-4);
+        assert_eq!(strength_at(400.0, Level::Realistic), LEAST);
+        assert!((strength_at(325.0, Level::Realistic) - (1.0 + LEAST) / 2.0).abs() < 1e-4);
         assert_eq!(strength_at(2000.0, Level::Realistic), LEAST);
         assert_eq!(strength_at(320.0, Level::Light), 1.0);
         assert!(strength_at(250.0, Level::Hard) < 1.0);

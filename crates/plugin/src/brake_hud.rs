@@ -50,9 +50,9 @@ pub fn disc_colour(celsius: f32) -> [u8; 3] {
     let stops: [(f32, [f32; 3]); 5] = [
         (60.0, [0x3a as f32, 0x8d as f32, 0xff as f32]),
         (180.0, [0x2e as f32, 0xcc as f32, 0x71 as f32]),
-        (300.0, [0xf5 as f32, 0xc4 as f32, 0x00 as f32]),
-        (400.0, [0xff as f32, 0x7a as f32, 0x00 as f32]),
-        (500.0, [0xd7 as f32, 0x19 as f32, 0x20 as f32]),
+        (270.0, [0xf5 as f32, 0xc4 as f32, 0x00 as f32]),
+        (340.0, [0xff as f32, 0x7a as f32, 0x00 as f32]),
+        (400.0, [0xd7 as f32, 0x19 as f32, 0x20 as f32]),
     ];
     let c = if celsius <= stops[0].0 {
         stops[0].1

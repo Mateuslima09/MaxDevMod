@@ -996,7 +996,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 let gone = strength <= 0.155;
                 brake_told = if gone { 2 } else { 1 };
                 let alert = alerts::Alert::new(alerts::Group::Damage, "truck", if gone { "brakeGone" } else { "brakeHot" });
-                if alert_filter.allows(&alert) {
+                let allowed = alert_filter.allows(&alert);
+                log!("[brake fade] the phone told: {} ({})", alert.kind, if allowed { "sent" } else { "its group is off" });
+                if allowed {
                     notify_phone!(&alert.message());
                 }
             }

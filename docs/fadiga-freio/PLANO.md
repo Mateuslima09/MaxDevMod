@@ -128,6 +128,13 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   - **Falta:** tecla própria para esconder o HUD (`keybinds.rs`); usar o `g_brake_intensity` do perfil no modelo;
     baixar os logs de 1 s/2 s para só com a força < 1; ajustes depois do teste do dono.
 
+- **Teste D do dono (21/11 19:30–19:37):** o disco chegou a ~495 °C, força só 0,24, e **nem som, nem aviso**: a
+  curva antiga só chegava ao mínimo aos 550 °C, e freio fraco quase não esquenta mais, então nunca chegava.
+  **Corrigido (pedido do dono: "aos 400 °C já não tem freio"):** `strength_at` agora é reta de 100 % aos 250 °C
+  até o mínimo (15 %) aos 400 °C (Leve +100, Dura −50). Cores do HUD/app: vermelho aos 400. A notificação agora
+  escreve no log do app (`[brake fade] the phone told: brakeHot (sent | its group is off)`), porque o dono disse
+  que não viu o aviso de 60 % (não dava para saber pelo log se foi mandado). Instalado 21/11 ~19:45.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
