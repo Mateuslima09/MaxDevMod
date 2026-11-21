@@ -73,7 +73,7 @@ pub struct Alert {
 }
 
 impl Alert {
-    fn new(group: Group, app: &'static str, kind: &'static str) -> Self {
+    pub fn new(group: Group, app: &'static str, kind: &'static str) -> Self {
         Self { group, app, kind, amount: None, currency: None, value: None, detail: None, count: None, total: None }
     }
 

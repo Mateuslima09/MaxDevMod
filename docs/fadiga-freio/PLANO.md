@@ -110,6 +110,24 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   30 km/h ×1,15, 60 ×1,35, 90 ×1,6, 120 ×1,9, 140 ×2,1, 180 ×2,4 (retas entre os pontos); `HEAT` subiu de 1,15
   para 1,4 para compensar (a serra lenta continua o caso perigoso). 9 testes. Instalado só o app (ponte igual).
 
+- **Tudo da lista feito (21/11, 2.4.7, ponte 56)** — sem teste no jogo ainda (TESTES.md seção D):
+  - **Sons** (`plugin/src/character/steps.rs`: voz com `gain`, `brake(BrakeSound, volume)`; `commands.rs`
+    `brake_sounds()` a cada 100 ms): aviso em loop no mínimo, rangido no mínimo + pedal + andando. Volumes por
+    `HostBlock::brake_sound` (bit 16 = dito; 0–7 rangido, 8–15 aviso).
+  - **Notificações** (`host/src/lib.rs`, bloco da fadiga): `brakeHot` (força ≤ 60 %) e `brakeGone` (mínimo),
+    grupo Damage, uma vez por episódio (zera com força 1). Textos em `ui/src/handset/notificationText.ts`.
+  - **App Freios** (`ui/src/handset/BrakesApp.tsx`, ícone em `icons.tsx`, `Home.tsx` pág. 2, `HandsetApp.tsx`):
+    discos ao vivo pela mensagem `brakes` (1/s, `useBrakes` em `store.ts`), opções `brakeFade`,
+    `brakeFadeLevel`, `brakeSqueal`, `brakeWarning`, `brakeHud`, `brakeHudCorner`, `brakeHudSize` (settings em
+    `host/src/settings.rs`: `Volume70`, `BrakeHudCorner`, `BrakeHudSize`).
+  - **HUD** (`plugin/src/brake_hud.rs`, chamado em `d3d.rs` depois do `fuel_meter`): pintado na CPU (fonte 5×7
+    própria, discos por SDF), desenhado com `HudQuad` como o `fade.rs`; `HostBlock::brake_hud` (bit 8 = dito,
+    bit 0 mostrar, 1–2 canto, 3–4 tamanho). Prévia `docs/fadiga-freio/hud-previa.png` (teste ignorado
+    `brake_hud_picture`).
+  - Instalada 21/11 19:09 (backup `backups/20261121-190716`), commitada.
+  - **Falta:** tecla própria para esconder o HUD (`keybinds.rs`); usar o `g_brake_intensity` do perfil no modelo;
+    baixar os logs de 1 s/2 s para só com a força < 1; ajustes depois do teste do dono.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

@@ -4,6 +4,7 @@
 //! `scs_telemetry_shutdown` on its main thread, possibly several times per process (`sdk reload`). Under
 //! TruckersMP its client loads it too, as one of its own plugins (`truckersmp_init`: `truckersmp`).
 
+mod brake_hud;
 mod bridge;
 mod camera;
 mod character;

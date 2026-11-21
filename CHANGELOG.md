@@ -3,6 +3,13 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.7 (beta, 2026-11-21)
+- Brake fade: with the brakes at their limit, the dashboard's warning sounds over and over, and braking grinds
+  iron on iron; the phone says when they overheat and when they're gone. A Freios app on the phone shows both
+  discs live and has its options: on or off, how soon (light, realistic, hard), the sounds' volumes. They cool
+  faster the faster you go. A little HUD of its own in the game shows both discs, their °C and colour (blue to
+  red), pulsing while the brakes are weak; its corner and size are chosen in the Freios app.
+
 ## 2.4.6 (beta, 2026-11-21)
 - Brake fade: the brakes heat up as you use them and, overheated (from about 250 °C), lose force, down to 15 % at
   the worst, coming back as they cool; they cool faster in the rain and at night. The trailer's brakes heat on

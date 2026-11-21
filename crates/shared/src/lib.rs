@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 55;
+pub const BRIDGE_VERSION: u32 = 56;
 
 /// Live D3D11 screen sharpness tier in `HostBlock::screen_resolution`: applied immediately by the plugin on the next
 /// frame without restarting the game.
@@ -624,7 +624,19 @@ pub struct HostBlock {
     /// brakes' HUD and sounds.
     pub brake_temp_truck: AtomicU32,
     pub brake_temp_trailer: AtomicU32,
+    /// The brake fade's sounds (owner 2026-11-21): bit 16 set once the app said; bits 0-7 the squeal's volume and
+    /// bits 8-15 the warning's, 0 (off) to 100.
+    pub brake_sound: AtomicU32,
+    /// The brakes' HUD (owner 2026-11-21, plugin/src/brake_hud.rs): bit 8 set once the app said; bit 0 shown,
+    /// bits 1-2 its corner ([`BRAKE_HUD_BOTTOM_LEFT`]…), bits 3-4 its size (0 small, 1 medium, 2 large).
+    pub brake_hud: AtomicU32,
 }
+
+/// The brakes' HUD's corners (`HostBlock::brake_hud` bits 1-2).
+pub const BRAKE_HUD_BOTTOM_LEFT: u32 = 0;
+pub const BRAKE_HUD_BOTTOM_RIGHT: u32 = 1;
+pub const BRAKE_HUD_TOP_LEFT: u32 = 2;
+pub const BRAKE_HUD_TOP_RIGHT: u32 = 3;
 
 /// [`HostBlock::float_screen`]'s presses: on or off, moved (in the truck's axes: forward, back, up, down, left,
 /// right), turned (yaw left or right, tilted up or down, rolled left or right), or as it was.

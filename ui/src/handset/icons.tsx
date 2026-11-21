@@ -17,6 +17,7 @@ export type AppId =
   | 'suspension'
   | 'camera'
   | 'floatScreen'
+  | 'brakes'
 
 /**
  * The apps that are the cab's too: their real icons (owner 2026-11-03: "the apps' real logos"), the cab's light
@@ -74,6 +75,14 @@ const STROKE = {
 const GLYPHS: Record<AppId, ReactNode> = {
   // The reversing camera (owner 2026-11-20: "make an app for it"): a camera, and the reverse arrow under it.
   // MaxDevMod's floating screen in the cab (owner 2026-11-20): a screen on a stand, its picture in red.
+  // The brakes (owner 2026-11-21): a disc, red hot, its caliper over it.
+  brakes: (
+    <>
+      <circle cx="12" cy="12" r="8.5" fill="#ff453a" />
+      <circle cx="12" cy="12" r="3" fill="#ffffff" />
+      <path d="M17 3.5a9.5 9.5 0 0 1 4 5l-3 1.4a6.5 6.5 0 0 0-2.6-3.4Z" fill="#ffffff" />
+    </>
+  ),
   floatScreen: (
     <>
       <rect x="3" y="4.5" width="18" height="11" rx="2" fill="none" stroke="#ffffff" strokeWidth={1.8} />

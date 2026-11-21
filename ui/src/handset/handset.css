@@ -3289,3 +3289,21 @@ body,
     transform: translateX(-6px);
   }
 }
+
+/* The Freios app's discs (BrakesApp.tsx). */
+.ios-brake-discs {
+  display: flex;
+  justify-content: space-around;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.ios-brake-disc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.ios-brake-disc b {
+  font-size: 17px;
+}

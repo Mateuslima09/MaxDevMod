@@ -365,6 +365,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // Brake fade (brake_fade.rs): only modelled and logged for now (docs/fadiga-freio/PLANO.md, phase B).
     let mut brake_fade = brake_fade::BrakeFade::default();
     let mut brake_fade_logged: Option<Instant> = None;
+    // How far the phone was told of the brake fading: 0 not, 1 weak, 2 gone.
+    let mut brake_told = 0u8;
+    let mut brakes_posted: Option<Instant> = None;
     let mut last_weather: Option<weather::Weather> = None;
     // The player's account, for the phone's Nupay (wallet.rs).
     let mut wallet_game = westplay_setup::game::current();
@@ -973,6 +976,41 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             host.brake_strength.store(strength.to_bits(), Ordering::Release);
             host.brake_temp_truck.store(fade.truck.to_bits(), Ordering::Release);
             host.brake_temp_trailer.store(fade.trailer.unwrap_or(f32::NAN).to_bits(), Ordering::Release);
+            host.brake_sound.store(
+                0x1_0000
+                    | u32::from(fade_settings.brake_squeal_volume.0)
+                    | u32::from(fade_settings.brake_warning_volume.0) << 8,
+                Ordering::Release,
+            );
+            let corner = fade_settings.brake_hud_corner as u32;
+            let size = fade_settings.brake_hud_size as u32;
+            host.brake_hud.store(
+                0x100 | u32::from(fade_settings.brake_hud.0 && fade_settings.brake_fade.0) | corner << 1 | size << 3,
+                Ordering::Release,
+            );
+            // The phone told once as the brake weakens and once as it's gone (owner 2026-11-21), again only once
+            // it has all come back.
+            if strength >= 0.999 {
+                brake_told = 0;
+            } else if strength <= 0.6 && brake_told < 1 || strength <= 0.155 && brake_told < 2 {
+                let gone = strength <= 0.155;
+                brake_told = if gone { 2 } else { 1 };
+                let alert = alerts::Alert::new(alerts::Group::Damage, "truck", if gone { "brakeGone" } else { "brakeHot" });
+                if alert_filter.allows(&alert) {
+                    notify_phone!(&alert.message());
+                }
+            }
+            // The phone's Freios app: the discs live, once a second.
+            if brakes_posted.is_none_or(|at| at.elapsed() >= Duration::from_secs(1)) {
+                brakes_posted = Some(Instant::now());
+                let message = serde_json::json!({
+                    "type": "brakes",
+                    "truck": fade.truck.round(),
+                    "trailer": fade.trailer.map(f32::round),
+                    "strength": (strength * 100.0).round(),
+                });
+                let _ = webview.post_json(&message.to_string());
+            }
             let moving = last_telemetry.as_ref().is_some_and(|t| t.speed.abs() > 0.5 || t.brake > 0.01);
             if moving && brake_fade_logged.is_none_or(|at| at.elapsed() >= Duration::from_secs(2)) {
                 brake_fade_logged = Some(Instant::now());
@@ -1430,6 +1468,38 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
                         log!("[handset] brake fade: {level:?}");
+                    }
+                }
+                // The brake fade's sounds and HUD (owner 2026-11-21).
+                Some(
+                    message @ (PageMessage::BrakeSqueal { .. }
+                    | PageMessage::BrakeWarning { .. }
+                    | PageMessage::BrakeHud { .. }
+                    | PageMessage::BrakeHudCorner { .. }
+                    | PageMessage::BrakeHudSize { .. }),
+                ) => {
+                    let mut settings = config.settings.get();
+                    let volume = |v: f64| settings::Volume70(v.clamp(0.0, 100.0).round() as u8);
+                    match &message {
+                        PageMessage::BrakeSqueal { volume: v } => settings.brake_squeal_volume = volume(*v),
+                        PageMessage::BrakeWarning { volume: v } => settings.brake_warning_volume = volume(*v),
+                        PageMessage::BrakeHud { on } => settings.brake_hud = settings::Shown(*on),
+                        PageMessage::BrakeHudCorner { which } => {
+                            if let Ok(corner) = serde_json::from_value(serde_json::Value::String(which.clone())) {
+                                settings.brake_hud_corner = corner;
+                            }
+                        }
+                        PageMessage::BrakeHudSize { which } => {
+                            if let Ok(size) = serde_json::from_value(serde_json::Value::String(which.clone())) {
+                                settings.brake_hud_size = size;
+                            }
+                        }
+                        _ => {}
+                    }
+                    if settings != config.settings.get() {
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] brakes: {message:?}");
                     }
                 }
                 // How big the mouse's dot is, from a phone's Settings (owner 2026-11-19).
@@ -2963,6 +3033,11 @@ fn settings_message(settings: &settings::Settings) -> String {
         "suspensionAuto": settings.suspension_auto,
         "brakeFade": settings.brake_fade.0,
         "brakeFadeLevel": settings.brake_fade_level,
+        "brakeSquealVolume": settings.brake_squeal_volume,
+        "brakeWarningVolume": settings.brake_warning_volume,
+        "brakeHud": settings.brake_hud.0,
+        "brakeHudCorner": settings.brake_hud_corner,
+        "brakeHudSize": settings.brake_hud_size,
     })
     .to_string()
 }
@@ -3056,6 +3131,12 @@ enum PageMessage {
     /// Brake fade (owner 2026-11-21): on or off, and how soon (`light`, `realistic`, `hard`).
     BrakeFade { on: bool },
     BrakeFadeLevel { which: String },
+    /// The brake fade's sounds' volumes (0..100; 0 off) and the brakes' HUD (shown, `bottomLeft`… and `small`…).
+    BrakeSqueal { volume: f64 },
+    BrakeWarning { volume: f64 },
+    BrakeHud { on: bool },
+    BrakeHudCorner { which: String },
+    BrakeHudSize { which: String },
     /// Where the reversing camera shows the game's rear-view mirrors (the page see-through there), in the frame's
     /// pixels; a width of 0 while it doesn't (`HostBlock::mirror_rect`).
     MirrorCamera { x: f64, y: f64, width: f64, height: f64 },
@@ -3553,6 +3634,11 @@ mod tests {
                 "suspensionAuto": false,
                 "brakeFade": true,
                 "brakeFadeLevel": "realistic",
+                "brakeSquealVolume": 70,
+                "brakeWarningVolume": 70,
+                "brakeHud": true,
+                "brakeHudCorner": "bottomLeft",
+                "brakeHudSize": "small",
             })
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;

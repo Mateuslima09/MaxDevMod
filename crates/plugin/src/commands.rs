@@ -329,6 +329,45 @@ fn fade_axis() -> f32 {
     (-(1.0 - strength) * pedal).clamp(-0.85, 0.0)
 }
 
+/// The brake fade's sounds (owner 2026-11-21), checked every 100 ms: with the brake at its least, the dashboard's
+/// warning over and over (stopping as soon as the brake comes back a little) and, with the pedal down and the truck
+/// moving, iron grinding on iron. Their volumes from the app (`HostBlock::brake_sound`; 0 off).
+fn brake_sounds() {
+    struct Sounds {
+        checked: Option<Instant>,
+        warning_until: Option<Instant>,
+        squeal_until: Option<Instant>,
+    }
+    static SOUNDS: Mutex<Sounds> = Mutex::new(Sounds { checked: None, warning_until: None, squeal_until: None });
+    let mut sounds = SOUNDS.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if sounds.checked.is_some_and(|at| now.duration_since(at) < Duration::from_millis(100)) {
+        return;
+    }
+    sounds.checked = Some(now);
+    let Some(bridge) = bridge::get().filter(|_| bridge::host_alive()) else { return };
+    let Some(t) = bridge.plugin.telemetry.read().filter(|t| !t.paused) else { return };
+    let said = bridge.host.brake_sound.load(Ordering::Acquire);
+    let (squeal, warning) =
+        if said & 0x1_0000 != 0 { ((said & 0xff) as f32 / 100.0, ((said >> 8) & 0xff) as f32 / 100.0) } else { (0.7, 0.7) };
+    let least = brake_strength() <= 0.155;
+    let due = |until: Option<Instant>| until.is_none_or(|until| now >= until);
+    if least && warning > 0.0 && due(sounds.warning_until) {
+        let lasts = crate::character::brake_sound(crate::character::BrakeSound::Warning, warning);
+        sounds.warning_until = Some(now + lasts + Duration::from_millis(300));
+        log!("brake fade: the warning");
+    }
+    if !least {
+        sounds.warning_until = None;
+    }
+    let pedal = (t.input_brake - f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed)).min(0.0)).clamp(0.0, 1.0);
+    if least && squeal > 0.0 && pedal > 0.05 && t.speed.abs() > 1.0 && due(sounds.squeal_until) {
+        // Overlapping a little, so it doesn't stop between two.
+        let lasts = crate::character::brake_sound(crate::character::BrakeSound::Squeal, squeal * (0.5 + 0.5 * pedal));
+        sounds.squeal_until = Some(now + lasts.saturating_sub(Duration::from_millis(150)));
+    }
+}
+
 /// Brake fade: the game's brake temperature, the pedal before and after the game, the speed and the brake left,
 /// every second while the truck moves or brakes (the owner's tests; to be let down to only while fading).
 fn brake_log() {
@@ -367,6 +406,7 @@ fn next_axis(event: Option<&mut InputEvent>, flags: u32) -> ScsResult {
         AXES_TOLD.store(0, Ordering::Relaxed);
     }
     brake_log();
+    brake_sounds();
     let wanted = match wheel_values() {
         // The phone wheel's brake, faded as the player's own is.
         Some([steering, throttle, brake]) => [steering, throttle, brake * brake_strength()],

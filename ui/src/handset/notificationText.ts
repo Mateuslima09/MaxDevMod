@@ -108,6 +108,10 @@ function gameText(notification: GameNotification, language: 'en' | 'pt', currenc
         return `Faltam ${value} min para o prazo da entrega`
       case 'jobLate':
         return 'A entrega está atrasada'
+      case 'brakeHot':
+        return 'Freio superaquecido: use o freio motor e o retarder'
+      case 'brakeGone':
+        return 'Sem freio! Freios no limite: reduza a marcha e pare para esfriar'
     }
   }
   switch (kind) {
@@ -149,6 +153,10 @@ function gameText(notification: GameNotification, language: 'en' | 'pt', currenc
       return `${value} min left to deliver on time`
     case 'jobLate':
       return 'The delivery is late'
+    case 'brakeHot':
+      return 'Brakes overheating: use the engine brake and the retarder'
+    case 'brakeGone':
+      return 'No brakes! Brakes at their limit: shift down and stop to cool them'
   }
 }
 
@@ -156,7 +164,7 @@ function gameText(notification: GameNotification, language: 'en' | 'pt', currenc
 export function isWarning(notification: PhoneNotification): boolean {
   return (
     notification.app !== 'tiktok' &&
-    ['fined', 'fuelLow', 'damage', 'crash', 'restNow', 'jobLate', 'cancelled', 'payAttendant'].includes(
+    ['fined', 'fuelLow', 'damage', 'crash', 'restNow', 'jobLate', 'cancelled', 'payAttendant', 'brakeHot', 'brakeGone'].includes(
       notification.kind,
     )
   )

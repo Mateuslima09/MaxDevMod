@@ -218,6 +218,14 @@ export type HostMessage =
       suspensionAutoReset?: boolean
       /** The suspension by itself: lowered on the motorway, normal in town (the Suspensão app). */
       suspensionAuto?: boolean
+      /** Brake fade (the phone's Freios app, owner 2026-11-21). */
+      brakeFade?: boolean
+      brakeFadeLevel?: BrakeFadeLevel
+      brakeSquealVolume?: number
+      brakeWarningVolume?: number
+      brakeHud?: boolean
+      brakeHudCorner?: BrakeHudCorner
+      brakeHudSize?: BrakeHudSize
       /** How low the front may go (the Suspensão app). */
       suspensionLowFront?: LowFront
       /** How firm the dampers are (the Suspensão app). */
@@ -276,6 +284,9 @@ export type HostMessage =
   /** The game's weather (`null` when it can't be read: no game, or a game version whose weather the host
    * doesn't know). */
   | { type: 'weather'; weather: GameWeather | null }
+  /** The brakes (host brake_fade.rs): the truck's and the trailer's discs (°C; the trailer's `null` without
+   * one) and how much brake is left (percent). Once a second. */
+  | { type: 'brakes'; truck: number; trailer: number | null; strength: number }
   /** How YouTube's player plays (`null`: YouTube isn't running). */
   | { type: 'youtube'; state: YouTubeState | null }
   /** YouTube's answer to the page's question `id` (a `youtube` command with an `id`). */
@@ -485,6 +496,14 @@ export type PageMessage =
   | { type: 'suspensionAutoReset'; on: boolean }
   /** The suspension by itself, on or off (the Suspensão app, owner 2026-11-19). */
   | { type: 'suspensionAuto'; on: boolean }
+  /** Brake fade (the Freios app, owner 2026-11-21): on or off, how soon, the sounds' volumes (0 off..100), the HUD. */
+  | { type: 'brakeFade'; on: boolean }
+  | { type: 'brakeFadeLevel'; which: BrakeFadeLevel }
+  | { type: 'brakeSqueal'; volume: number }
+  | { type: 'brakeWarning'; volume: number }
+  | { type: 'brakeHud'; on: boolean }
+  | { type: 'brakeHudCorner'; which: BrakeHudCorner }
+  | { type: 'brakeHudSize'; which: BrakeHudSize }
   /** How low the front may go (the Suspensão app): counts from the game's next start. */
   | { type: 'suspensionLowFront'; which: LowFront }
   /** How firm the dampers are (the Suspensão app): counts from the game's next start. */
@@ -598,6 +617,8 @@ export type GameNotificationKind =
   | 'jobNew'
   | 'jobDeadline'
   | 'jobLate'
+  | 'brakeHot'
+  | 'brakeGone'
 
 /** The groups of the game's notifications the phone's Settings turn on and off (`westplay_host::alerts::Group`). */
 export const ALERT_GROUPS = ['moneyIn', 'moneyOut', 'fine', 'fuel', 'damage', 'rest', 'job'] as const
@@ -1362,3 +1383,9 @@ export type LowFront = 'normal' | 'low' | 'lowest'
 export type Damping = 'soft' | 'normal' | 'firm' | 'firmest'
 /** How big the mouse's dot is (the phones' Settings). */
 export type CursorSize = 'small' | 'normal' | 'large' | 'larger'
+
+/** How soon the brakes fade (`westplay_host::brake_fade::Level`). */
+export type BrakeFadeLevel = 'light' | 'realistic' | 'hard'
+/** Where the brakes' HUD sits, and how big. */
+export type BrakeHudCorner = 'bottomLeft' | 'bottomRight' | 'topLeft' | 'topRight'
+export type BrakeHudSize = 'small' | 'medium' | 'large'

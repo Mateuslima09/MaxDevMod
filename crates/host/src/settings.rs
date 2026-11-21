@@ -64,6 +64,63 @@ pub struct Settings {
     /// How soon it comes on: `light`, `realistic` or `hard`.
     #[serde(deserialize_with = "lenient")]
     pub brake_fade_level: crate::brake_fade::Level,
+    /// The brake fade's sounds' volumes, 0 (off) to 100: the iron grinding with the brake gone, the dashboard's
+    /// warning (owner 2026-11-21: "an option to turn it off, or louder").
+    #[serde(deserialize_with = "lenient")]
+    pub brake_squeal_volume: Volume70,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_warning_volume: Volume70,
+    /// The brakes' HUD (plugin brake_hud.rs): shown, its corner and its size.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud: Shown,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud_corner: BrakeHudCorner,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud_size: BrakeHudSize,
+}
+
+/// A volume, 0..100, 70 at first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
+pub struct Volume70(pub u8);
+
+impl Default for Volume70 {
+    fn default() -> Self {
+        Self(70)
+    }
+}
+
+impl From<u8> for Volume70 {
+    fn from(value: u8) -> Self {
+        Self(value.min(100))
+    }
+}
+
+impl From<Volume70> for u8 {
+    fn from(value: Volume70) -> Self {
+        value.0
+    }
+}
+
+/// Where the brakes' HUD sits (`westplay_shared::BRAKE_HUD_*`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BrakeHudCorner {
+    #[default]
+    BottomLeft,
+    BottomRight,
+    TopLeft,
+    TopRight,
+}
+
+/// How big the brakes' HUD is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BrakeHudSize {
+    #[default]
+    Small,
+    Medium,
+    Large,
 }
 
 /// How big the mouse's dot is (`Settings::cursor_size`), times the one drawn at first.

@@ -40,6 +40,11 @@ const DOOR_OPEN: &[u8] = include_bytes!("../../assets/door_open.raw");
 const DOOR_SHUT: &[u8] = include_bytes!("../../assets/door_shut.raw");
 const DOOR_OPEN_VOLUME: f32 = 0.3;
 const DOOR_SHUT_VOLUME: f32 = 0.4;
+/// The brake fade's sounds (owner 2026-11-21, THIRD_PARTY_NOTICES.md): iron grinding on iron (2 s) and the
+/// dashboard's warning chime (1.4 s), like the steps' (mono, 16-bit, 24 kHz), peaking at 0.9 of full scale.
+const BRAKE_SQUEAL: &[u8] = include_bytes!("../../assets/brake_squeal.raw");
+const BRAKE_WARNING: &[u8] = include_bytes!("../../assets/brake_warning.raw");
+
 /// The stream: this many buffers of this many samples (20 ms each: a step starts at most ~60 ms late).
 const BUFFERS: usize = 3;
 const BUFFER: usize = 480;
@@ -47,7 +52,7 @@ const BUFFER: usize = 480;
 const QUIET: Duration = Duration::from_secs(3);
 
 static SOUNDS: OnceLock<Vec<Vec<f32>>> = OnceLock::new();
-static STREAM: OnceLock<Mutex<Sender<(usize, isize)>>> = OnceLock::new();
+static STREAM: OnceLock<Mutex<Sender<(usize, isize, f32)>>> = OnceLock::new();
 static LAST: AtomicU32 = AtomicU32::new(u32::MAX);
 static SEED: AtomicU32 = AtomicU32::new(0x2545_f491);
 
@@ -64,7 +69,7 @@ pub(super) fn play(running: bool) {
     }
     SEED.store(seed, Ordering::Relaxed);
     LAST.store(pick as u32, Ordering::Relaxed);
-    send(pick, 0);
+    send(pick, 0, 1.0);
 }
 
 /// The driver's door: opening (the inside handle pulled, its latch) or shut (a metallic slam), after `after`
@@ -78,18 +83,35 @@ pub(super) enum Door {
 
 pub(super) fn door(which: Door, after: f32) {
     let sound = WALKS + RUNS + usize::from(which == Door::Shut);
-    send(sound, -((after.max(0.0) * RATE as f32) as isize));
+    send(sound, -((after.max(0.0) * RATE as f32) as isize), 1.0);
 }
 
-/// A sound to the stream, starting `at` samples in (negative: that many later).
-fn send(sound: usize, at: isize) {
+/// The brake fade's sounds (crate::brake_sounds).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BrakeSound {
+    Squeal,
+    Warning,
+}
+
+/// One of the brake fade's sounds now, at `volume` (0..1); how long it lasts.
+pub(crate) fn brake(which: BrakeSound, volume: f32) -> Duration {
+    let (sound, bytes) = match which {
+        BrakeSound::Squeal => (WALKS + RUNS + 2, BRAKE_SQUEAL.len()),
+        BrakeSound::Warning => (WALKS + RUNS + 3, BRAKE_WARNING.len()),
+    };
+    send(sound, 0, volume.clamp(0.0, 1.0));
+    Duration::from_secs_f32(bytes as f32 / 2.0 / RATE as f32)
+}
+
+/// A sound to the stream, starting `at` samples in (negative: that many later), at `gain`.
+fn send(sound: usize, at: isize, gain: f32) {
     let stream = STREAM.get_or_init(|| {
         let (send, receive) = channel();
         let _ = std::thread::Builder::new().name("westplay-steps".into()).spawn(move || run(receive));
         Mutex::new(send)
     });
     if let Ok(send) = stream.lock() {
-        let _ = send.send((sound, at));
+        let _ = send.send((sound, at, gain));
     }
 }
 
@@ -104,14 +126,15 @@ fn xorshift(mut seed: u32) -> u32 {
 struct Voice {
     sound: usize,
     at: isize,
+    gain: f32,
 }
 
 /// The steps' thread: waits for a step, opens the stream, mixes what's playing into it, closes it when quiet.
-fn run(steps: Receiver<(usize, isize)>) {
+fn run(steps: Receiver<(usize, isize, f32)>) {
     let sounds = SOUNDS.get_or_init(recorded);
     // Waiting for a step with the stream closed.
-    while let Ok((first, at)) = steps.recv() {
-        let mut voices = vec![Voice { sound: first, at }];
+    while let Ok((first, at, gain)) = steps.recv() {
+        let mut voices = vec![Voice { sound: first, at, gain }];
         // SAFETY: the stream's own calls, on buffers that outlive it (reset and unprepared before they go).
         unsafe {
             let Some(mut stream) = Stream::open() else {
@@ -120,8 +143,8 @@ fn run(steps: Receiver<(usize, isize)>) {
             };
             let mut heard = Instant::now();
             loop {
-                while let Ok((sound, at)) = steps.try_recv() {
-                    voices.push(Voice { sound, at });
+                while let Ok((sound, at, gain)) = steps.try_recv() {
+                    voices.push(Voice { sound, at, gain });
                     heard = Instant::now();
                 }
                 stream.feed(|out| mix(sounds, &mut voices, out));
@@ -130,8 +153,8 @@ fn run(steps: Receiver<(usize, isize)>) {
                 }
                 // Until the next step or the next buffer (5 ms).
                 match steps.recv_timeout(Duration::from_millis(5)) {
-                    Ok((sound, at)) => {
-                        voices.push(Voice { sound, at });
+                    Ok((sound, at, gain)) => {
+                        voices.push(Voice { sound, at, gain });
                         heard = Instant::now();
                     }
                     Err(RecvTimeoutError::Timeout) => {}
@@ -149,7 +172,7 @@ fn mix(sounds: &[Vec<f32>], voices: &mut Vec<Voice>, out: &mut [i16]) {
         let sum: f32 = voices
             .iter()
             .map(|v| {
-                usize::try_from(v.at + k as isize).ok().and_then(|i| sounds[v.sound].get(i)).copied().unwrap_or(0.0)
+                usize::try_from(v.at + k as isize).ok().and_then(|i| sounds[v.sound].get(i)).map_or(0.0, |s| s * v.gain)
             })
             .sum();
         *sample = (sum.clamp(-1.0, 1.0) * f32::from(i16::MAX)) as i16;
@@ -237,6 +260,8 @@ fn recorded() -> Vec<Vec<f32>> {
     sounds.extend(cut(RUN, RUN_STEP, RUN_VOLUME));
     sounds.extend(cut(DOOR_OPEN, DOOR_OPEN.len() / 2, DOOR_OPEN_VOLUME));
     sounds.extend(cut(DOOR_SHUT, DOOR_SHUT.len() / 2, DOOR_SHUT_VOLUME));
+    sounds.extend(cut(BRAKE_SQUEAL, BRAKE_SQUEAL.len() / 2, 1.0));
+    sounds.extend(cut(BRAKE_WARNING, BRAKE_WARNING.len() / 2, 1.0));
     sounds
 }
 
@@ -260,9 +285,15 @@ mod tests {
         assert_eq!(RUN.len() % (2 * RUN_STEP), 0);
         assert_eq!((WALKS, RUNS), (10, 12));
         let sounds = recorded();
-        assert_eq!(sounds.len(), WALKS + RUNS + 2);
+        assert_eq!(sounds.len(), WALKS + RUNS + 4);
+        // The brake fade's two, last: loud, faded out at their ends.
+        for s in &sounds[WALKS + RUNS + 2..] {
+            let loudest = s.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+            assert!(loudest > 0.8 && loudest <= 1.0, "{loudest}");
+            assert!(s[s.len() - 1].abs() < 1e-2);
+        }
         // The door's two, after the steps: whole, faded, louder than a step.
-        for s in &sounds[WALKS + RUNS..] {
+        for s in &sounds[WALKS + RUNS..WALKS + RUNS + 2] {
             let loudest = s.iter().fold(0.0f32, |m, v| m.max(v.abs()));
             assert!(loudest > 0.2 && loudest < 0.5, "{loudest}");
             assert!(s[0].abs() < 1e-3 && s[s.len() - 1].abs() < 1e-3);
@@ -282,7 +313,7 @@ mod tests {
     #[test]
     fn steps_are_mixed_not_cut() {
         let sounds = vec![vec![0.1; 1000], vec![0.2; 300]];
-        let mut voices = vec![Voice { sound: 0, at: 0 }, Voice { sound: 1, at: 0 }];
+        let mut voices = vec![Voice { sound: 0, at: 0, gain: 1.0 }, Voice { sound: 1, at: 0, gain: 1.0 }];
         let mut out = [0i16; 441];
         mix(&sounds, &mut voices, &mut out);
         assert!((f32::from(out[0]) / f32::from(i16::MAX) - 0.3).abs() < 1e-3);
@@ -297,7 +328,7 @@ mod tests {
     #[test]
     fn a_sound_can_start_later() {
         let sounds = vec![vec![0.5; 100]];
-        let mut voices = vec![Voice { sound: 0, at: -50 }];
+        let mut voices = vec![Voice { sound: 0, at: -50, gain: 1.0 }];
         let mut out = [0i16; 60];
         mix(&sounds, &mut voices, &mut out);
         assert_eq!(out[49], 0);

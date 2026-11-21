@@ -36,6 +36,7 @@ import { TikTokApp } from './TikTokApp'
 import { SideKeys } from './SideKeys'
 import { SuspensionApp, SUSPENSION_WORDS } from './SuspensionApp'
 import { FloatScreenApp, FLOAT_SCREEN_WORDS } from './FloatScreenApp'
+import { BrakesApp, BRAKES_WORDS } from './BrakesApp'
 import { ScrollThumb } from './ScrollThumb'
 import { Scaled } from './Scaled'
 import { ScreenFitList } from './ScreenFitList'
@@ -180,6 +181,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'tiktok' && <TikTokApp language={language === 'pt' ? 'pt' : 'en'} remote={remote} />}
               {app === 'suspension' && <SuspensionApp words={SUSPENSION_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'camera' && <CameraApp words={words} />}
+              {app === 'brakes' && <BrakesApp words={BRAKES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'floatScreen' && (
                 <FloatScreenApp
                   words={FLOAT_SCREEN_WORDS[language === 'pt' ? 'pt' : 'en']}
@@ -845,6 +847,7 @@ const WORDS = {
       suspension: 'Suspension',
       camera: 'Rear Camera',
       floatScreen: 'Screen',
+      brakes: 'Brakes',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -998,6 +1001,7 @@ const WORDS = {
       suspension: 'Suspensão',
       camera: 'Câmera de Ré',
       floatScreen: 'Tela',
+      brakes: 'Freios',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',

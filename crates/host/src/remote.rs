@@ -79,6 +79,11 @@ const PAGE_MESSAGES: &[&str] = &[
     "suspensionAuto",
     "brakeFade",
     "brakeFadeLevel",
+    "brakeSqueal",
+    "brakeWarning",
+    "brakeHud",
+    "brakeHudCorner",
+    "brakeHudSize",
     // The reversing camera moved by hand, from the phones too (owner 2026-11-20).
     "cameraNudge",
     // MaxDevMod's floating screen in the cab, switched and moved from the phones (owner 2026-11-20).

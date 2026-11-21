@@ -56,6 +56,8 @@ mod probe;
 mod refuel;
 mod steps;
 
+pub(crate) use steps::{BrakeSound, brake as brake_sound};
+
 /// The configuration scene starting its walking camera: `mov r8, [rsi+world]; lea rdx, [rsi+placement];
 /// mov rcx, r15; call start; mov eax, 0xdfffffff; lock xadd [rdi], eax; mov rdx, r15; mov rcx, r14; call assign`.
 const START_SITE: &str = "4C 8B 86 ?? ?? ?? ?? 48 8D 96 ?? ?? ?? ?? 49 8B CF E8 ?? ?? ?? ?? B8 FF FF FF DF F0 0F C1 07 \

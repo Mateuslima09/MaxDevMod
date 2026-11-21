@@ -24,6 +24,9 @@ import {
   type TruckInfo,
   type VirtualMirrors,
   type LowFront,
+  type BrakeFadeLevel,
+  type BrakeHudCorner,
+  type BrakeHudSize,
   type CursorSize,
   type Damping,
 } from '../../shared/host'
@@ -381,6 +384,13 @@ export const useCharacterSwitches = create<{
   suspensionLowFront: LowFront
   suspensionDamping: Damping
   cursorSize: CursorSize
+  brakeFade: boolean
+  brakeFadeLevel: BrakeFadeLevel
+  brakeSquealVolume: number
+  brakeWarningVolume: number
+  brakeHud: boolean
+  brakeHudCorner: BrakeHudCorner
+  brakeHudSize: BrakeHudSize
   /** Whether the auto reset is in the games' options as chosen (`null`: not said yet). */
   suspensionApplied: boolean | null
   keepScreenOn: boolean
@@ -394,6 +404,13 @@ export const useCharacterSwitches = create<{
   suspensionLowFront: 'normal',
   suspensionDamping: 'normal',
   cursorSize: 'normal',
+  brakeFade: true,
+  brakeFadeLevel: 'realistic',
+  brakeSquealVolume: 70,
+  brakeWarningVolume: 70,
+  brakeHud: true,
+  brakeHudCorner: 'bottomLeft',
+  brakeHudSize: 'small',
   suspensionApplied: null,
   keepScreenOn: false,
 }))
@@ -604,6 +621,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       case 'weather':
         useLive.setState({ weather: message.weather })
         break
+      case 'brakes':
+        useBrakes.setState({ truck: message.truck, trailer: message.trailer, strength: message.strength })
+        break
       case 'screen':
         // A layout this UI doesn't know yet (newer plugin) is treated like a screen without a profile.
         useLive.setState({ screenLayout: isScreenLayoutId(message.layout) ? message.layout : null })
@@ -652,6 +672,13 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           suspensionLowFront: message.suspensionLowFront ?? was.suspensionLowFront,
           suspensionDamping: message.suspensionDamping ?? was.suspensionDamping,
           cursorSize: message.cursorSize ?? was.cursorSize,
+          brakeFade: message.brakeFade ?? was.brakeFade,
+          brakeFadeLevel: message.brakeFadeLevel ?? was.brakeFadeLevel,
+          brakeSquealVolume: message.brakeSquealVolume ?? was.brakeSquealVolume,
+          brakeWarningVolume: message.brakeWarningVolume ?? was.brakeWarningVolume,
+          brakeHud: message.brakeHud ?? was.brakeHud,
+          brakeHudCorner: message.brakeHudCorner ?? was.brakeHudCorner,
+          brakeHudSize: message.brakeHudSize ?? was.brakeHudSize,
           keepScreenOn: message.keepScreenOn ?? was.keepScreenOn,
         }))
         break
@@ -826,3 +853,11 @@ export function go(action: NavigationAction, origin: LaunchOrigin | null = null)
     animateNavigation(launchFor(before, after, origin), () => useCabin.getState().navigate(action))
   })
 }
+
+/** The brakes now (host brake_fade.rs, the `brakes` message): the discs' °C (the trailer's `null` without one)
+ * and the brake left (percent); `null` until the host says. */
+export const useBrakes = create<{ truck: number | null; trailer: number | null; strength: number | null }>()(() => ({
+  truck: null,
+  trailer: null,
+  strength: null,
+}))

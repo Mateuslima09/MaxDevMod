@@ -471,6 +471,7 @@ unsafe fn on_present(swapchain: *mut c_void) {
         crate::handset::on_present(swapchain);
         crate::hints::on_present(swapchain);
         crate::fuel_meter::on_present(swapchain);
+        crate::brake_hud::on_present(swapchain);
         crate::mirror_probe::on_present(swapchain, frame);
         crate::mirror::on_present(swapchain);
         crate::hires::on_present(swapchain);

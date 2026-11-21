@@ -60,3 +60,20 @@ Instalado 21/11. A fadiga já vem **ligada** e no nível **realista** (ainda sem
 5. Se usar o volante do celular: o freio dele também deve enfraquecer.
 
 O que me dizer: se ficou fraco demais, de menos, cedo ou tarde demais. Sons, HUD e opções ainda não estão nesta versão.
+
+## D. Sons, notificações, app Freios e HUD (2.4.7, ponte 56) — **reabra o jogo**
+
+Instalado 21/11. Prévia do HUD: `docs/fadiga-freio/hud-previa.png`.
+
+1. **HUD:** dirigindo (motor/elétrica ligados), aparece embaixo à esquerda um quadrinho com dois discos (CAVALO e
+   CARRETA) e a temperatura. Sem carreta, o da direita fica cinza com "-". A cor vai do azul ao vermelho conforme
+   esquenta, e o quadro pisca quando o freio está fraco. Some com o jogo pausado.
+2. **App Freios no celular** (segunda página): os dois discos ao vivo e o "Freio que sobrou". Teste as opções:
+   ligar/desligar a fadiga, Leve/Realista/Dura, volumes (Desl./Baixo/Médio/Alto) e o HUD (mostrar, canto, tamanho)
+   — o HUD do jogo deve mudar na hora.
+3. **Notificações:** com o freio caindo para ~60 %, chega "Freio superaquecido"; no mínimo (15 %), "Sem freio!".
+   Elas ficam no grupo "Dano no caminhão" das notificações.
+4. **Sons:** no mínimo (15 %), o aviso da Toyota repete até o freio voltar um pouco; freando nessa hora, o rangido
+   de ferro. Volume 0 (Desl.) cala cada um.
+
+Ainda não tem: tecla própria para esconder o HUD (por enquanto, pelo app Freios).

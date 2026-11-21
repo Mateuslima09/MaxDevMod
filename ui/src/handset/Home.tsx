@@ -26,7 +26,7 @@ const DRAG = 14
 /** The apps in the dock, on every page; and each page's own. */
 const DOCK: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify']
 const PAGE_ONE: AppId[] = ['freight', 'truck', 'commands', 'settings']
-const PAGE_TWO: AppId[] = ['nupay', 'services', 'character', 'tiktok', 'suspension', 'camera', 'floatScreen']
+const PAGE_TWO: AppId[] = ['nupay', 'services', 'character', 'tiktok', 'suspension', 'camera', 'floatScreen', 'brakes']
 
 /** The home screen's page last shown: back from an app, the phone is on the page it was left on (owner 2026-11-11:
  * out of TikTok, on the second page, it went back to the first, "to drag again each time"). */
