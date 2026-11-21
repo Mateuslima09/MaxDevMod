@@ -88,6 +88,10 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   obrigatório, já em `THIRD_PARTY_NOTICES.md`)**: recortado 1,4 s em `crates/plugin/assets/brake_warning.raw`
   (prévia `docs/fadiga-freio/sons/aviso-toyota-recortado.wav`). **Escolhido pelo dono (21/11): fica este.** Os C1–C5 e A/B/C ficam só como sobra.
 
+- **Regra do aviso (dono, 21/11):** com a força no mínimo (`strength <= LEAST + 0,005`) o aviso da Toyota
+  **fica tocando em loop** (o recorte de 1,4 s repetido, uns 0,3 s de pausa entre um e outro), freando ou não; **para
+  assim que a força sobe um pouco** (o disco esfriou: `strength > LEAST + 0,01`). Volume e liga/desliga próprios.
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
