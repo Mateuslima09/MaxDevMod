@@ -40,6 +40,17 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   valor: na Fase C, guardar o valor mandado e calcular `pedal_real = input_brake - valor_mandado`. Seguir a
   seção 3.3 **caminho 1**. Arquivo `fade-probe.txt` apagado.
 
+- **Observação do dono (21/11): a intensidade do freio dele no jogo não é 100 %** (ele lembra de ~70 %; o
+  `config_local.cfg` do perfil do ATS tem `g_brake_intensity "0.517282"`). A telemetria (`input`/`effective`) vem
+  **antes** desse ajuste (pedal no fundo = 1.00 mesmo assim). Consequências:
+  - a sonda tirou 40 % do que o jogador aplica, qualquer que seja a intensidade: o caminho 1 vale igual;
+  - o calor real é proporcional a `brake × g_brake_intensity`. O `HEAT = 1,15` foi calibrado com 0,517: fazer o
+    modelo usar `HEAT × brake × (intensidade / 0,517)`. `crates/host/src/game_settings.rs` **já lê**
+    `config_local.cfg` do perfil (`g_cam_steering`...): acrescentar `g_brake_intensity` lá (padrão 1,0) e passar
+    ao `BrakeFade::tick`;
+  - o mínimo de 15 % é do que o jogador aplica: com intensidade 0,5 o freio real mínimo é ~7,5 %. Talvez subir o
+    `LEAST` para 0,25 se o dono achar pouco no teste.
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
