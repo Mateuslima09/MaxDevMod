@@ -293,4 +293,6 @@ found in … frames, drawn …`. Com `the cab's 0`, o plugin não achou a cabine
 ### Desliga com o caminhão (21/11, 2.4.1)
 Teste do dono: "desligando o caminhão, a tela flutuante não desliga". Agora ela some com a energia do caminhão
 desligada, como a tela do próprio caminhão, e o mouse também não vai para ela.
-- [ ] Desligar a ignição: a tela flutuante some? Religando: volta?
+- [ ] (2.4.2, pedido do dono: a tela fica, a imagem apaga) Desligar o caminhão de vez: a moldura fica e a imagem
+      fica **preta**. Ignição ligada com o motor desligado: continua acesa. Religando: aparece o MaxDevMod e depois a
+      tela, como a do caminhão.

@@ -182,6 +182,9 @@ pub fn showing() -> bool {
         && FOUND_AT.load(Ordering::Relaxed) != 0
 }
 
+/// The picture held when it's black (the truck's electrics off), as a version no frame has.
+const BLACK_VERSION: u64 = u64::MAX - 1;
+
 /// Whether the truck's electrics are on (not known yet: on, as the truck's own screen takes it).
 fn powered() -> bool {
     bridge::get().is_none_or(|b| b.plugin.telemetry.read().is_none_or(|t| t.electric_enabled))
@@ -991,9 +994,7 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
     }
     log_stats(presents, cab.is_some());
     let Some((modelview, projection)) = cab else { return };
-    // Off with the truck's electrics, as the truck's own screen is (owner 2026-11-21: the truck switched off, the
-    // floating screen stayed on).
-    if crate::telemetry::paused() || !bridge::host_alive() || !powered() {
+    if crate::telemetry::paused() || !bridge::host_alive() {
         return;
     }
     let place = product(&modelview, &placement(head, pose_now()));
@@ -1011,7 +1012,9 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
             *drawing = Some(Drawing::new(&device).map_err(|e| log!("tela flutuante: can't be drawn: {e}")));
         }
         let Some(Ok(made)) = drawing.as_mut() else { return };
-        match made.draw(swapchain, &mvp) {
+        // The truck's electrics off: the frame stays, its picture black (owner 2026-11-21: "not the screen gone,
+        // the picture on it: black with the truck off, and on again as our screen comes on, MaxDevMod first").
+        match made.draw(swapchain, &mvp, !powered()) {
             Ok(drawn) => STATS.lock().unwrap_or_else(|e| e.into_inner()).drawn += u64::from(drawn),
             Err(e) => {
                 log!("tela flutuante: not drawn: {e}");
@@ -1149,7 +1152,7 @@ impl Drawing {
     ///
     /// # Safety
     /// As [`on_present`]: the game's swap chain, of this drawing's device.
-    unsafe fn draw(&mut self, swapchain: &IDXGISwapChain, mvp: &M4) -> windows::core::Result<bool> {
+    unsafe fn draw(&mut self, swapchain: &IDXGISwapChain, mvp: &M4, black: bool) -> windows::core::Result<bool> {
         // SAFETY: the game's live device, context and back buffer, on its render thread; the game's context state is
         // swapped back as it was before this returns.
         unsafe {
@@ -1205,12 +1208,23 @@ impl Drawing {
                 Some((composed, count)) => (composed, COMPOSED_VERSION | count),
                 None => (frame, version),
             };
-            if let Some((_, _, texture, view, held)) = &mut self.view
-                && *held != version
-            {
-                context.CopySubresourceRegion(&*texture, 0, 0, 0, 0, &source, 0, None);
-                context.GenerateMips(&*view);
-                *held = version;
+            if let Some((_, _, texture, view, held)) = &mut self.view {
+                if black {
+                    // The picture black (once), its smaller sizes with it.
+                    if *held != BLACK_VERSION {
+                        let mut target = None;
+                        self.device.CreateRenderTargetView(&*texture, None, Some(&mut target))?;
+                        if let Some(target) = target {
+                            context.ClearRenderTargetView(&target, &[0.0, 0.0, 0.0, 1.0]);
+                        }
+                        context.GenerateMips(&*view);
+                        *held = BLACK_VERSION;
+                    }
+                } else if *held != version {
+                    context.CopySubresourceRegion(&*texture, 0, 0, 0, 0, &source, 0, None);
+                    context.GenerateMips(&*view);
+                    *held = version;
+                }
             }
             if !matches!(&self.logo_view, Some((made, _)) if *made == format) {
                 let mut view = None;

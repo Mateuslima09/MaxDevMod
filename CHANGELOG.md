@@ -3,6 +3,10 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.2 (beta, 2026-11-21)
+- The floating screen stays with the truck switched off, its picture black; it lights up again as the truck's own
+  screen does (MaxDevMod first), and with the ignition on it stays on.
+
 ## 2.4.1 (beta, 2026-11-21)
 - The floating screen goes off with the truck's electrics, as the truck's own screen does (it stayed on with the
   truck switched off).
