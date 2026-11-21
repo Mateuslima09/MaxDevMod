@@ -77,6 +77,18 @@ pub struct Settings {
     pub brake_hud_corner: BrakeHudCorner,
     #[serde(deserialize_with = "lenient")]
     pub brake_hud_size: BrakeHudSize,
+    /// At what temperature the dashboard's warning and the phone's "no brakes" come (°C on the realistic level; the
+    /// light and hard ones move it with the fade); 0, the usual 360.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_alarm_c: u16,
+}
+
+/// The brake alarm's temperature on the realistic level (`Settings::brake_alarm_c`, 0 the usual).
+pub fn brake_alarm_c(settings: &Settings) -> u16 {
+    match settings.brake_alarm_c {
+        0 => 360,
+        c => c.clamp(260, 395),
+    }
 }
 
 /// A volume, 0..100, 70 at first.

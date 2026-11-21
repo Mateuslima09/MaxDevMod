@@ -391,6 +391,7 @@ export const useCharacterSwitches = create<{
   brakeHud: boolean
   brakeHudCorner: BrakeHudCorner
   brakeHudSize: BrakeHudSize
+  brakeAlarm: number
   /** Whether the auto reset is in the games' options as chosen (`null`: not said yet). */
   suspensionApplied: boolean | null
   keepScreenOn: boolean
@@ -411,6 +412,7 @@ export const useCharacterSwitches = create<{
   brakeHud: true,
   brakeHudCorner: 'bottomLeft',
   brakeHudSize: 'small',
+  brakeAlarm: 360,
   suspensionApplied: null,
   keepScreenOn: false,
 }))
@@ -679,6 +681,7 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           brakeHud: message.brakeHud ?? was.brakeHud,
           brakeHudCorner: message.brakeHudCorner ?? was.brakeHudCorner,
           brakeHudSize: message.brakeHudSize ?? was.brakeHudSize,
+          brakeAlarm: message.brakeAlarm ?? was.brakeAlarm,
           keepScreenOn: message.keepScreenOn ?? was.keepScreenOn,
         }))
         break

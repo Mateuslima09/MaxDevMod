@@ -351,7 +351,9 @@ fn brake_sounds() {
     let (squeal, warning) =
         if said & 0x1_0000 != 0 { ((said & 0xff) as f32 / 100.0, ((said >> 8) & 0xff) as f32 / 100.0) } else { (0.7, 0.7) };
     let strength = brake_strength();
-    let least = strength <= westplay_shared::BRAKE_ALARM_STRENGTH;
+    let chosen = f32::from_bits(bridge.host.brake_alarm.load(Ordering::Acquire));
+    let alarm = if chosen.is_finite() && chosen > 0.0 { chosen } else { westplay_shared::BRAKE_ALARM_STRENGTH };
+    let least = strength <= alarm;
     // The grinding braking from orange to red (about 320 °C).
     let hot = strength <= westplay_shared::BRAKE_SQUEAL_STRENGTH;
     let due = |until: Option<Instant>| until.is_none_or(|until| now >= until);

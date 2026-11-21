@@ -982,6 +982,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     | u32::from(fade_settings.brake_warning_volume.0) << 8,
                 Ordering::Release,
             );
+            // The alarm's brake left, from its temperature (on the realistic level, the same point of the fade on all).
+            let alarm = brake_fade::strength_at(f32::from(settings::brake_alarm_c(&fade_settings)), brake_fade::Level::Realistic);
+            host.brake_alarm.store(alarm.to_bits(), Ordering::Release);
             let corner = fade_settings.brake_hud_corner as u32;
             let size = fade_settings.brake_hud_size as u32;
             host.brake_hud.store(
@@ -993,9 +996,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             if strength >= 0.999 {
                 brake_told = 0;
             } else if strength <= westplay_shared::BRAKE_HOT_STRENGTH && brake_told < 1
-                || strength <= westplay_shared::BRAKE_ALARM_STRENGTH && brake_told < 2
+                || strength <= alarm && brake_told < 2
             {
-                let gone = strength <= westplay_shared::BRAKE_ALARM_STRENGTH;
+                let gone = strength <= alarm;
                 brake_told = if gone { 2 } else { 1 };
                 let alert = alerts::Alert::new(alerts::Group::Damage, "truck", if gone { "brakeGone" } else { "brakeHot" });
                 let allowed = alert_filter.allows(&alert);
@@ -1480,7 +1483,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     | PageMessage::BrakeWarning { .. }
                     | PageMessage::BrakeHud { .. }
                     | PageMessage::BrakeHudCorner { .. }
-                    | PageMessage::BrakeHudSize { .. }),
+                    | PageMessage::BrakeHudSize { .. }
+                    | PageMessage::BrakeAlarm { .. }),
                 ) => {
                     let mut settings = config.settings.get();
                     let volume = |v: f64| settings::Volume70(v.clamp(0.0, 100.0).round() as u8);
@@ -1497,6 +1501,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             if let Ok(size) = serde_json::from_value(serde_json::Value::String(which.clone())) {
                                 settings.brake_hud_size = size;
                             }
+                        }
+                        PageMessage::BrakeAlarm { celsius } => {
+                            settings.brake_alarm_c = celsius.clamp(260.0, 395.0).round() as u16;
                         }
                         _ => {}
                     }
@@ -3042,6 +3049,7 @@ fn settings_message(settings: &settings::Settings) -> String {
         "brakeHud": settings.brake_hud.0,
         "brakeHudCorner": settings.brake_hud_corner,
         "brakeHudSize": settings.brake_hud_size,
+        "brakeAlarm": settings::brake_alarm_c(&settings),
     })
     .to_string()
 }
@@ -3141,6 +3149,8 @@ enum PageMessage {
     BrakeHud { on: bool },
     BrakeHudCorner { which: String },
     BrakeHudSize { which: String },
+    /// When the brake alarm comes (°C on the realistic level).
+    BrakeAlarm { celsius: f64 },
     /// Where the reversing camera shows the game's rear-view mirrors (the page see-through there), in the frame's
     /// pixels; a width of 0 while it doesn't (`HostBlock::mirror_rect`).
     MirrorCamera { x: f64, y: f64, width: f64, height: f64 },
@@ -3643,6 +3653,7 @@ mod tests {
                 "brakeHud": true,
                 "brakeHudCorner": "bottomLeft",
                 "brakeHudSize": "small",
+                "brakeAlarm": 360,
             })
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;

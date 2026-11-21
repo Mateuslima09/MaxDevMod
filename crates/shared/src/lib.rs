@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 56;
+pub const BRIDGE_VERSION: u32 = 57;
 
 /// Live D3D11 screen sharpness tier in `HostBlock::screen_resolution`: applied immediately by the plugin on the next
 /// frame without restarting the game.
@@ -630,6 +630,10 @@ pub struct HostBlock {
     /// The brakes' HUD (owner 2026-11-21, plugin/src/brake_hud.rs): bit 8 set once the app said; bit 0 shown,
     /// bits 1-2 its corner ([`BRAKE_HUD_BOTTOM_LEFT`]…), bits 3-4 its size (0 small, 1 medium, 2 large).
     pub brake_hud: AtomicU32,
+    /// The brake left from which the dashboard's warning sounds, as the player chose its temperature on the phone
+    /// (owner 2026-11-21: "an option for when the alarm comes"): an `f32`'s bits; 0, not said
+    /// ([`BRAKE_ALARM_STRENGTH`]).
+    pub brake_alarm: AtomicU32,
 }
 
 /// Brake fade: the brake left from which it counts as gone (owner 2026-11-21: "under 380 °C there was almost no

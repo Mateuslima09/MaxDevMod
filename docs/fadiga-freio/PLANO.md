@@ -153,6 +153,11 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   loop de 1,6 s (1,8–3,8 s do original, últimos 0,4 s cruzados com o começo). `commands.rs` liga o loop enquanto
   freia quente e solta na hora. Prévia `docs/fadiga-freio/sons/rangido-loop-previa.wav`. Plugin trocado 20:22.
 
+- **Opção do alarme (dono, 21/11 ~20:30), 2.4.8, ponte 57:** `Settings::brake_alarm_c` (0 = 360; 260–395),
+  mensagem `brakeAlarm {celsius}`, JSON `brakeAlarm`; o app converte em força (`strength_at(c, Realistic)`) e
+  grava `HostBlock::brake_alarm`; o plugin (`brake_sounds`) e a notificação `brakeGone` usam esse valor. No app
+  Freios: linha "Alarme aos" com 320/340/360/380 °C (somados ao deslocamento do nível: Leve +100, Dura −50).
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

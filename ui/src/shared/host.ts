@@ -226,6 +226,7 @@ export type HostMessage =
       brakeHud?: boolean
       brakeHudCorner?: BrakeHudCorner
       brakeHudSize?: BrakeHudSize
+      brakeAlarm?: number
       /** How low the front may go (the Suspensão app). */
       suspensionLowFront?: LowFront
       /** How firm the dampers are (the Suspensão app). */
@@ -504,6 +505,8 @@ export type PageMessage =
   | { type: 'brakeHud'; on: boolean }
   | { type: 'brakeHudCorner'; which: BrakeHudCorner }
   | { type: 'brakeHudSize'; which: BrakeHudSize }
+  /** When the brake alarm comes (°C on the realistic level). */
+  | { type: 'brakeAlarm'; celsius: number }
   /** How low the front may go (the Suspensão app): counts from the game's next start. */
   | { type: 'suspensionLowFront'; which: LowFront }
   /** How firm the dampers are (the Suspensão app): counts from the game's next start. */

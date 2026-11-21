@@ -24,6 +24,9 @@ export const BRAKES_WORDS = {
     levelNote:
       'The brakes heat up as you use them and, overheated, lose force until they cool (faster at speed, in the rain and at night). Realistic: weaker from 250 °C, no brake left at 400 °C. Light: 100 °C later. Hard: 50 °C sooner. Down long hills use the engine brake and the retarder.',
     sounds: 'Sounds',
+    alarm: 'Warning at',
+    alarmNote:
+      'When the dashboard’s warning sounds and the phone says “no brakes”. The grinding starts at about 320 °C.',
     squeal: 'Grinding (no brakes)',
     warning: 'Dashboard warning',
     mute: 'Off',
@@ -58,6 +61,8 @@ export const BRAKES_WORDS = {
     levelNote:
       'Os freios esquentam com o uso e, superaquecidos, perdem força até esfriar (mais rápido em velocidade, na chuva e à noite). Realista: enfraquece a partir de 250 °C, sem freio aos 400 °C. Leve: 100 °C depois. Dura: 50 °C antes. Na serra, use o freio motor e o retarder.',
     sounds: 'Sons',
+    alarm: 'Alarme aos',
+    alarmNote: 'Quando o aviso do painel toca e o celular avisa “Sem freio!”. O rangido começa por volta de 320 °C.',
     squeal: 'Rangido (sem freio)',
     warning: 'Aviso no painel',
     mute: 'Desl.',
@@ -88,6 +93,10 @@ export function discColour(celsius: number): string {
   if (celsius < 380) return '#ff7a00'
   return '#d71920'
 }
+
+/** The alarm's temperatures to choose from (on the realistic level), and how far each level moves them. */
+const ALARMS = [320, 340, 360, 380]
+const SHIFT: Record<BrakeFadeLevel, number> = { light: 100, realistic: 0, hard: -50 }
 
 const VOLUMES: [string, number][] = [
   ['0', 0],
@@ -170,6 +179,17 @@ export function BrakesApp({ words }: { words: BrakesWords }) {
             ]}
             chosen={o.brakeFadeLevel}
             choose={(which) => postToHost({ type: 'brakeFadeLevel', which })}
+          />
+        </Row>
+      </List>
+      <List footer={words.alarmNote}>
+        <Row label={words.alarm}>
+          <Segmented
+            options={ALARMS.map((c) => [String(c), `${c + SHIFT[o.brakeFadeLevel]}°`] as [string, string])}
+            chosen={String(
+              ALARMS.reduce((best, c) => (Math.abs(c - o.brakeAlarm) < Math.abs(best - o.brakeAlarm) ? c : best)),
+            )}
+            choose={(c) => postToHost({ type: 'brakeAlarm', celsius: Number(c) })}
           />
         </Row>
       </List>

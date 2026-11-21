@@ -3,6 +3,11 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.8 (beta, 2026-11-21)
+- Brake fade: no brake left at 400 °C. Braking from about 320 °C grinds, a steady sound while the pedal is held;
+  the dashboard's warning, longer now, comes at the temperature you choose in the Freios app (320 to 380 °C, 360
+  at first), with the phone's "no brakes".
+
 ## 2.4.7 (beta, 2026-11-21)
 - Brake fade: with the brakes at their limit, the dashboard's warning sounds over and over, and braking grinds
   iron on iron; the phone says when they overheat and when they're gone. A Freios app on the phone shows both
