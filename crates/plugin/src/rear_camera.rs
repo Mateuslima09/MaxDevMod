@@ -543,12 +543,15 @@ pub fn side_of_texture(address: usize) -> i32 {
         return *side;
     }
     let now = PRESENTS.load(Ordering::Relaxed);
-    SIDES
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&address)
-        .filter(|(_, at)| now.saturating_sub(*at) <= SIDE_FOR)
-        .map_or(0, |(side, _)| *side)
+    let sides = SIDES.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(&(side, at)) = sides.get(&address).filter(|(_, at)| now.saturating_sub(*at) <= SIDE_FOR) else { return 0 };
+    // Another texture told the same side since: the game handed the views round (ETS2 1.62, owner 2026-11-21: with
+    // the right one chosen, both showed, each texture kept as "right" from a frame of its own). Not known then: the
+    // side's told from our mirror's (hide_virtual).
+    if sides.iter().any(|(other, (other_side, other_at))| *other != address && *other_side == side && *other_at > at) {
+        return 0;
+    }
+    side
 }
 
 /// Blocks a texture's votes need this frame before its side is told from them.

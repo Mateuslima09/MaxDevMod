@@ -893,10 +893,7 @@ pub fn leave_pc(keep: bool, app: AppHandle, store: State<SetupStore>) -> Result<
 fn after_exit(paths: &[PathBuf], uninstaller: Option<&Path>) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut script = after_exit_script(std::process::id(), paths);
-    if let Some(uninstaller) = uninstaller {
-        script.push_str(&format!("Start-Process -FilePath {} -ArgumentList '/S'\n", quoted(uninstaller)));
-    }
+    let script = after_exit_script(std::process::id(), paths, uninstaller);
     std::process::Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden"])
         .args(["-EncodedCommand", &encoded_command(&script)])
@@ -906,14 +903,30 @@ fn after_exit(paths: &[PathBuf], uninstaller: Option<&Path>) -> Result<(), Strin
         .map_err(|e| format!("Couldn't remove WestPlay's data: {e}"))
 }
 
-/// The step's script: wait for process `pid` to end (a minute at most), then remove each of `paths`, trying
-/// again for up to half a minute while it's in use.
-fn after_exit_script(pid: u32, paths: &[PathBuf]) -> String {
+/// The step's script: wait for process `pid` to end (a minute at most), run `uninstaller` quietly and wait for it,
+/// then remove each of `paths`, trying again for up to half a minute while it's in use.
+///
+/// The uninstaller first, and waited for (owner 2026-11-21): started last and left to itself, it was still
+/// running, or hadn't run, when the player opened the new installer, which found the old one's entry in Windows
+/// with its uninstaller gone and stopped ("Não foi possível instalar!"). Run in its own folder (`_?=`), as NSIS
+/// otherwise hands the work to a copy of itself and returns at once; the uninstaller itself removed after.
+fn after_exit_script(pid: u32, paths: &[PathBuf], uninstaller: Option<&Path>) -> String {
     let list: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
+    let uninstall = uninstaller.map(|uninstaller| {
+        let folder = uninstaller.parent().unwrap_or(uninstaller);
+        format!(
+            "Start-Process -FilePath {} -ArgumentList {} -Wait\nRemove-Item -LiteralPath {} -Force",
+            quoted(uninstaller),
+            // One string, as it is: NSIS reads _?= to the end, unquoted (a user name with a space).
+            quoted(Path::new(&format!("/S _?={}", folder.display()))),
+            quoted(uninstaller),
+        )
+    });
     [
         "$ErrorActionPreference = 'SilentlyContinue'".to_owned(),
         format!("$westplay = Get-Process -Id {pid}"),
         "if ($westplay) { $westplay.WaitForExit(60000) | Out-Null }".to_owned(),
+        uninstall.unwrap_or_default(),
         format!("foreach ($path in @({})) {{", list.join(", ")),
         "  for ($try = 0; $try -lt 60 -and (Test-Path -LiteralPath $path); $try++) {".to_owned(),
         "    Remove-Item -LiteralPath $path -Recurse -Force".to_owned(),
@@ -959,10 +972,22 @@ mod tests {
 
     #[test]
     fn the_step_waits_for_westplay_then_removes_each_path_quoted() {
-        let script = after_exit_script(4242, &[PathBuf::from(r"C:\Users\O'Brien\WestPlay")]);
+        let script = after_exit_script(4242, &[PathBuf::from(r"C:\Users\O'Brien\WestPlay")], None);
         assert!(script.contains("Get-Process -Id 4242"));
         assert!(script.contains("WaitForExit"));
         assert!(script.contains(r"@('C:\Users\O''Brien\WestPlay')"));
+        assert!(!script.contains("Start-Process"));
+    }
+
+    /// The uninstaller runs first, in its own folder, waited for: before anything else is removed.
+    #[test]
+    fn the_uninstaller_runs_first_and_is_waited_for() {
+        let uninstaller = PathBuf::from(r"C:\Users\O'Brien\AppData\Local\MaxDevMod\uninstall.exe");
+        let script = after_exit_script(4242, &[PathBuf::from(r"C:\Data")], Some(&uninstaller));
+        let run = script.find("Start-Process").unwrap();
+        assert!(run > script.find("WaitForExit").unwrap());
+        assert!(run < script.find("foreach").unwrap());
+        assert!(script.contains(r"-ArgumentList '/S _?=C:\Users\O''Brien\AppData\Local\MaxDevMod' -Wait"));
     }
 
     /// The real step, hidden: it waits for a process still running (a short ping) to end, then removes a folder.
@@ -981,7 +1006,7 @@ mod tests {
             .spawn()
             .unwrap();
         let started = std::time::Instant::now();
-        let script = after_exit_script(waiting.id(), std::slice::from_ref(&folder));
+        let script = after_exit_script(waiting.id(), std::slice::from_ref(&folder), None);
         let status = std::process::Command::new("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden"])
             .args(["-EncodedCommand", &encoded_command(&script)])

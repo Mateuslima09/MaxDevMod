@@ -12,7 +12,8 @@ use std::sync::{Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use webview2_com::Microsoft::Web::WebView2::Win32::{
-    COREWEBVIEW2_COLOR, COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW, COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS,
+    COREWEBVIEW2_COLOR, COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW, COREWEBVIEW2_PERMISSION_KIND,
+    COREWEBVIEW2_PERMISSION_KIND_CAMERA, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_STATE_DENY, COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS,
     COREWEBVIEW2_MOUSE_EVENT_KIND, COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS, COREWEBVIEW2_PROCESS_FAILED_KIND,
     COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED, COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE, CreateCoreWebView2EnvironmentWithOptions,
@@ -23,7 +24,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
 use webview2_com::{
     AddScriptToExecuteOnDocumentCreatedCompletedHandler, CoTaskMemPWSTR, CoreWebView2EnvironmentOptions,
     CreateCoreWebView2CompositionControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
-    ProcessFailedEventHandler, WebMessageReceivedEventHandler,
+    PermissionRequestedEventHandler, ProcessFailedEventHandler, WebMessageReceivedEventHandler,
 };
 use windows::System::DispatcherQueueController;
 use windows::UI::Composition::{Compositor, ContainerVisual, Visual};
@@ -346,6 +347,30 @@ impl OffscreenWebView {
         let mut token = 0;
         // SAFETY: the handler and the token are locals for the call; WebView2 keeps its own reference to the handler.
         unsafe { webview.add_WebMessageReceived(&handler, &mut token)? };
+
+        // The camera and the microphone, asked for by a site in a screen (owner 2026-11-21: MaxDevMod asked for the
+        // camera when a part of the screen was pressed): refused at once, never asked of the player, who can't
+        // answer a browser's question on a truck's screen and has no camera there to give.
+        let handler = PermissionRequestedEventHandler::create(Box::new(move |_webview, args| {
+            if let Some(args) = args {
+                let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                // SAFETY: `args` is the event's, alive through the callback; `kind` and `uri` are locals it writes.
+                unsafe {
+                    args.PermissionKind(&mut kind)?;
+                    if kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA || kind == COREWEBVIEW2_PERMISSION_KIND_MICROPHONE {
+                        args.SetState(COREWEBVIEW2_PERMISSION_STATE_DENY)?;
+                        let mut uri = PWSTR::null();
+                        let site = if args.Uri(&mut uri).is_ok() { CoTaskMemPWSTR::from(uri).to_string() } else { String::new() };
+                        let what = if kind == COREWEBVIEW2_PERMISSION_KIND_CAMERA { "the camera" } else { "the microphone" };
+                        log!("webview: {what} refused to {}", site.split('?').next().unwrap_or_default());
+                    }
+                }
+            }
+            Ok(())
+        }));
+        let mut token = 0;
+        // SAFETY: the handler and the token are locals for the call; WebView2 keeps its own reference to the handler.
+        unsafe { webview.add_PermissionRequested(&handler, &mut token)? };
 
         let failure = Rc::new(Cell::new(None));
         let failed = failure.clone();

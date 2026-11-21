@@ -296,3 +296,48 @@ desligada, como a tela do próprio caminhão, e o mouse também não vai para el
 - [ ] (2.4.2, pedido do dono: a tela fica, a imagem apaga) Desligar o caminhão de vez: a moldura fica e a imagem
       fica **preta**. Ignição ligada com o motor desligado: continua acesa. Religando: aparece o MaxDevMod e depois a
       tela, como a do caminhão.
+
+## Não aparecia no Actros antigo, ETS2 1.62 (2026-11-21)
+
+O que o log mostrou: a cabine era achada em todos os quadros, mas a tela nunca era desenhada. Logo depois de
+carregar o jogo houve um erro "Parâmetro incorreto" (0x80070057) ao desenhar, e a tela desistia até fechar o
+jogo. Por isso os botões de Mover também não pareciam fazer nada.
+
+Correção: depois de um erro, a tela tenta de novo (em 1 s, depois esperando mais a cada falha, até meio
+minuto). O log agora diz em qual passo deu o erro (`tela flutuante: not drawn (N): <passo>: ...`) e
+`tela flutuante: drawn again` quando volta. Só o plugin mudou: reinicie o jogo.
+
+- [ ] No Actros antigo, ligue a tela no app Tela: ela aparece na cabine.
+- [ ] Os botões de Mover e Tamanho mexem nela.
+- [ ] Se não aparecer, mande o `plugin.log`: procure por `not drawn` (diz o passo) e `drawn again`.
+
+Voltar: `westplay.dll.antes-tela-tenta-de-novo` (em `%LOCALAPPDATA%\MaxDevMod` e nas pastas de plugins dos jogos).
+
+## Pedido de câmera, ré preta e tela sumindo com o motor desligado (2026-11-21)
+
+- **Pedido de câmera:** um site aberto numa tela do MaxDevMod no jogo pedia acesso à câmera. Agora o app recusa
+  câmera e microfone sozinho, sem perguntar, e anota no `app.log` qual site pediu (`webview: the camera refused to ...`).
+- **Tela some ao desligar o motor:** o log mostra o erro "Parâmetro incorreto" exatamente ao desligar a ignição.
+  A tela tenta de novo e volta sozinha ao religar. O plugin agora anota em qual passo falha
+  (`tela flutuante: failed at <passo>`), para a correção de verdade.
+- **Ré preta:** ainda não sei a causa. Neste Actros a tela do próprio caminhão não é do MaxDevMod, então a câmera
+  de ré só aparece na tela flutuante.
+
+Testes (reinicie o jogo):
+- [ ] Aperte a parte da tela que pedia a câmera: não aparece mais a pergunta.
+- [ ] Com a tela flutuante ligada, desligue o motor (ou a ignição) e religue. Mande o `plugin.log`.
+- [ ] Engate a ré e veja a tela flutuante. Mande o `plugin.log` também.
+
+## A moldura fica sempre (2026-11-21)
+
+O dono: a tela flutuante só some quando é desligada no app. Com o caminhão desligado, ela fica lá, preta.
+
+O erro "Parâmetro incorreto" ao desligar a ignição era o passo que pinta a imagem de preto (a textura não dizia
+o formato). Corrigido: com a ignição desligada a moldura fica e a imagem fica preta; ao religar, a imagem volta.
+Sem imagem do app (app fechado ou abrindo), a moldura também fica, preta.
+
+- [ ] Tela ligada no app, desligue o motor e a ignição: a moldura continua, com a imagem preta.
+- [ ] Religue: a imagem do MaxDevMod volta.
+- [ ] Desligue a tela no app: aí sim ela some.
+
+Voltar: `westplay.dll.antes-moldura-sempre`.

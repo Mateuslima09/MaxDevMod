@@ -3,6 +3,18 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.4 (beta, 2026-11-21)
+- Virtual mirrors: with one side chosen, only that one shows again (on ETS2 1.62 both showed).
+
+## 2.4.3 (beta, 2026-11-21)
+- The floating screen shows MaxDevMod in any truck, also where the truck's own screen isn't WestPlay's (it stayed
+  black there), and its frame stays in the cab until it's switched off in the app.
+- With MaxDevMod hidden on the truck's screen, the game's own map shows there again (it went black with the sharper
+  screen on).
+- A site in a screen asking for the camera or the microphone is refused, never asked of the player.
+- Uninstalling from the app runs the uninstaller first and waits for it, so a new installer started right after
+  no longer stops with "couldn't install".
+
 ## 2.4.2 (beta, 2026-11-21)
 - The floating screen stays with the truck switched off, its picture black; it lights up again as the truck's own
   screen does (MaxDevMod first), and with the ignition on it stays on.

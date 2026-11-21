@@ -33,7 +33,8 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_CONSTANT_BUFFER, D3D11_BLEND_DESC, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD,
     D3D11_BUFFER_DESC, D3D11_COLOR_WRITE_ENABLE_ALL, D3D11_CREATE_DEVICE_SINGLETHREADED, D3D11_CULL_NONE,
     D3D11_DEVICE_CONTEXT_IMMEDIATE, D3D11_FILL_SOLID, D3D11_FILTER_ANISOTROPIC, D3D11_MAP_WRITE_NO_OVERWRITE,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_RASTERIZER_DESC, D3D11_RENDER_TARGET_BLEND_DESC, D3D11_SAMPLER_DESC,
+    D3D11_MAPPED_SUBRESOURCE, D3D11_RASTERIZER_DESC, D3D11_RENDER_TARGET_BLEND_DESC, D3D11_RENDER_TARGET_VIEW_DESC,
+    D3D11_RENDER_TARGET_VIEW_DESC_0, D3D11_RTV_DIMENSION_TEXTURE2D, D3D11_TEX2D_RTV, D3D11_SAMPLER_DESC,
     D3D11_SDK_VERSION, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_TEX2D_SRV,
     D3D11_TEXTURE_ADDRESS_CLAMP, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11_VIEWPORT, ID3D11BlendState,
     ID3D11Buffer, ID3D11Device, ID3D11Device1, ID3D11DeviceContext, ID3D11DeviceContext1, ID3D11PixelShader,
@@ -969,6 +970,13 @@ struct Drawing {
 unsafe impl Send for Drawing {}
 
 static DRAWING: Mutex<Option<Result<Drawing, ()>>> = Mutex::new(None);
+/// After a failed draw, the present it's tried again at (owner 2026-11-21, ETS2 1.62, old Actros: one "invalid
+/// parameter" as the game came back from loading, and the screen never drawn again that session).
+static RETRY_AT: AtomicU64 = AtomicU64::new(0);
+/// Failed draws in a row, for the log and how long to wait.
+static FAILURES: AtomicU64 = AtomicU64::new(0);
+/// The failures said in the log (then quiet).
+const FAILURES_SAID: u64 = 5;
 
 /// At each of the game's presents: this frame's cab taken, and the screen drawn in it while it's on.
 ///
@@ -1008,6 +1016,10 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         if matches!(&*drawing, Some(Ok(made)) if made.device != device) {
             *drawing = None;
         }
+        // Failed before: made anew once its wait is over (a second up to half a minute, longer the more it fails).
+        if matches!(&*drawing, Some(Err(()))) && presents >= RETRY_AT.load(Ordering::Relaxed) {
+            *drawing = None;
+        }
         if drawing.is_none() {
             *drawing = Some(Drawing::new(&device).map_err(|e| log!("tela flutuante: can't be drawn: {e}")));
         }
@@ -1015,9 +1027,24 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         // The truck's electrics off: the frame stays, its picture black (owner 2026-11-21: "not the screen gone,
         // the picture on it: black with the truck off, and on again as our screen comes on, MaxDevMod first").
         match made.draw(swapchain, &mvp, !powered()) {
-            Ok(drawn) => STATS.lock().unwrap_or_else(|e| e.into_inner()).drawn += u64::from(drawn),
+            Ok(drawn) => {
+                if drawn && FAILURES.swap(0, Ordering::Relaxed) > 0 {
+                    log!("tela flutuante: drawn again");
+                }
+                STATS.lock().unwrap_or_else(|e| e.into_inner()).drawn += u64::from(drawn);
+                // Drawn in the cab: the app's told the screen's in view, so it sends its frames (owner 2026-11-21, old
+                // Actros: its own screen isn't WestPlay's, the app sent none and the floating screen stayed black).
+                if drawn && let Some(bridge) = bridge::get() {
+                    let plugin = &bridge.plugin;
+                    plugin.cab_frame.store(plugin.heartbeat.load(Ordering::Relaxed), Ordering::Release);
+                }
+            }
             Err(e) => {
-                log!("tela flutuante: not drawn: {e}");
+                let failures = FAILURES.fetch_add(1, Ordering::Relaxed) + 1;
+                if failures <= FAILURES_SAID {
+                    log!("tela flutuante: not drawn ({failures}): {e}; tried again in a moment");
+                }
+                RETRY_AT.store(presents + (60 * failures).min(1800), Ordering::Relaxed);
                 *drawing = Some(Err(()));
             }
         }
@@ -1157,14 +1184,22 @@ impl Drawing {
         // swapped back as it was before this returns.
         unsafe {
             let context = self.device.GetImmediateContext()?;
-            let Some((frame, version)) = self.frames.update(&self.device, &context) else { return Ok(false) };
-            let back: ID3D11Texture2D = swapchain.GetBuffer(0)?;
+            // No picture from the app (closed, starting): the frame still there, black (owner 2026-11-21: it's gone
+            // only when switched off in the app).
+            let latest = self.frames.update(&self.device, &context);
+            let black = black || latest.is_none();
+            let back: ID3D11Texture2D = swapchain.GetBuffer(0).map_err(|e| step(e, "the back buffer"))?;
             let mut back_desc = D3D11_TEXTURE2D_DESC::default();
             back.GetDesc(&mut back_desc);
             let format = crate::handset::view_format(back_desc.Format);
-            let mut frame_desc = D3D11_TEXTURE2D_DESC::default();
-            frame.GetDesc(&mut frame_desc);
-            let size = (frame_desc.Width, frame_desc.Height);
+            let size = match &latest {
+                Some((frame, _)) => {
+                    let mut frame_desc = D3D11_TEXTURE2D_DESC::default();
+                    frame.GetDesc(&mut frame_desc);
+                    (frame_desc.Width, frame_desc.Height)
+                }
+                None => self.view.as_ref().map_or((SCREEN_WIDTH, SCREEN_HEIGHT), |(size, ..)| *size),
+            };
             if !matches!(&self.view, Some((made_size, made, ..)) if *made_size == size && *made == format) {
                 let mut texture = None;
                 self.device.CreateTexture2D(
@@ -1184,7 +1219,8 @@ impl Drawing {
                     },
                     None,
                     Some(&mut texture),
-                )?;
+                )
+                .map_err(|e| step(e, "the picture's texture"))?;
                 let texture = texture.ok_or_else(windows::core::Error::empty)?;
                 let mut view = None;
                 self.device.CreateShaderResourceView(
@@ -1197,31 +1233,51 @@ impl Drawing {
                         },
                     }),
                     Some(&mut view),
-                )?;
+                )
+                .map_err(|e| step(e, "the picture's view"))?;
                 self.view = Some((size, format, texture, view.ok_or_else(windows::core::Error::empty)?, u64::MAX));
                 log!("tela flutuante: the picture kept with its mipmaps ({}x{})", size.0, size.1);
             }
             // In reverse, the picture composed with the reversing camera (owner 2026-11-20: only the guide lines showed,
             // on black): the one the truck's screen shows (`mirror::composed`), the same size as the frame.
-            crate::mirror::note_frame_if_none(&frame);
-            let (source, version) = match crate::mirror::composed() {
-                Some((composed, count)) => (composed, COMPOSED_VERSION | count),
-                None => (frame, version),
-            };
+            let source = latest.map(|(frame, version)| {
+                crate::mirror::note_frame_if_none(&frame);
+                match crate::mirror::composed() {
+                    Some((composed, count)) => (composed, COMPOSED_VERSION | count),
+                    None => (frame, version),
+                }
+            });
             if let Some((_, _, texture, view, held)) = &mut self.view {
                 if black {
                     // The picture black (once), its smaller sizes with it.
                     if *held != BLACK_VERSION {
+                        // Typeless: its view says the format (without one, "invalid parameter" at every ignition off,
+                        // and the frame gone with the truck off: owner 2026-11-21).
                         let mut target = None;
-                        self.device.CreateRenderTargetView(&*texture, None, Some(&mut target))?;
+                        self.device
+                            .CreateRenderTargetView(
+                                &*texture,
+                                Some(&D3D11_RENDER_TARGET_VIEW_DESC {
+                                    Format: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
+                                    ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+                                    Anonymous: D3D11_RENDER_TARGET_VIEW_DESC_0 {
+                                        Texture2D: D3D11_TEX2D_RTV { MipSlice: 0 },
+                                    },
+                                }),
+                                Some(&mut target),
+                            )
+                            .map_err(|e| step(e, "the black picture's target"))?;
                         if let Some(target) = target {
                             context.ClearRenderTargetView(&target, &[0.0, 0.0, 0.0, 1.0]);
                         }
                         context.GenerateMips(&*view);
                         *held = BLACK_VERSION;
                     }
-                } else if *held != version {
-                    context.CopySubresourceRegion(&*texture, 0, 0, 0, 0, &source, 0, None);
+                } else if let Some((source, version)) = &source
+                    && *held != *version
+                {
+                    let version = *version;
+                    context.CopySubresourceRegion(&*texture, 0, 0, 0, 0, source, 0, None);
                     context.GenerateMips(&*view);
                     *held = version;
                 }
@@ -1238,13 +1294,14 @@ impl Drawing {
                         },
                     }),
                     Some(&mut view),
-                )?;
+                )
+                .map_err(|e| step(e, "the logo's view"))?;
                 self.logo_view = Some((format, view.ok_or_else(windows::core::Error::empty)?));
             }
             let Some((_, _, _, view, _)) = &self.view else { return Ok(false) };
             let Some((_, logo_view)) = &self.logo_view else { return Ok(false) };
             let mut target = None;
-            self.device.CreateRenderTargetView(&back, None, Some(&mut target))?;
+            self.device.CreateRenderTargetView(&back, None, Some(&mut target)).map_err(|e| step(e, "the back buffer's target"))?;
             let target = target.ok_or_else(windows::core::Error::empty)?;
             self.render(&context, &target, back_desc.Width as f32, back_desc.Height as f32, mvp, view, logo_view)?;
             Ok(true)
@@ -1277,7 +1334,7 @@ impl Drawing {
             }
             place[16..28].copy_from_slice(&frame_layout(height));
             context.UpdateSubresource(&self.place, 0, None, place.as_ptr().cast(), 0, 0);
-            let context1: ID3D11DeviceContext1 = context.cast()?;
+            let context1: ID3D11DeviceContext1 = context.cast().map_err(|e| step(e, "the context"))?;
             let mut game = None;
             context1.SwapDeviceContextState(&self.state, Some(&mut game));
             context.OMSetRenderTargets(Some(&[Some(target.clone())]), None);
@@ -1310,6 +1367,15 @@ impl Drawing {
             Ok(())
         }
     }
+}
+
+/// `e` said with the step it came from (for the log).
+fn step(e: windows::core::Error, what: &str) -> windows::core::Error {
+    // Said here: the error's own text keeps only the system's words, not which step (2026-11-21 log).
+    if FAILURES.load(Ordering::Relaxed) < FAILURES_SAID {
+        log!("tela flutuante: failed at {what}: {e}");
+    }
+    e
 }
 
 /// The frame's layout for the shader, in the screen's own space (metres; the picture `height` tall round the middle):
@@ -1688,6 +1754,22 @@ mod tests {
                 let mut desc = D3D11_TEXTURE2D_DESC::default();
                 mipped.GetDesc(&mut desc);
                 assert!(desc.MipLevels > 8, "{}", desc.MipLevels);
+                // Made black (the truck off): a typeless texture's target needs its format said.
+                let mut bare = None;
+                assert!(device.CreateRenderTargetView(&mipped, None, Some(&mut bare)).is_err());
+                let mut target = None;
+                device
+                    .CreateRenderTargetView(
+                        &mipped,
+                        Some(&D3D11_RENDER_TARGET_VIEW_DESC {
+                            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                            ViewDimension: D3D11_RTV_DIMENSION_TEXTURE2D,
+                            Anonymous: D3D11_RENDER_TARGET_VIEW_DESC_0 { Texture2D: D3D11_TEX2D_RTV { MipSlice: 0 } },
+                        }),
+                        Some(&mut target),
+                    )
+                    .unwrap();
+                context.ClearRenderTargetView(target.as_ref().unwrap(), &[0.0, 0.0, 0.0, 1.0]);
             }
         }
     }
