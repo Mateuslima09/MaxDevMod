@@ -58,6 +58,12 @@ pub struct Settings {
     /// (`auto_suspension`). Off at first.
     #[serde(deserialize_with = "lenient")]
     pub suspension_auto: bool,
+    /// Brake fade (owner 2026-11-21, brake_fade.rs): the brakes heat up and, overheated, lose force. On at first.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_fade: Shown,
+    /// How soon it comes on: `light`, `realistic` or `hard`.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_fade_level: crate::brake_fade::Level,
 }
 
 /// How big the mouse's dot is (`Settings::cursor_size`), times the one drawn at first.

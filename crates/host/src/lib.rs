@@ -966,8 +966,13 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         {
             let job = bridge.bridge().plugin.job.read().filter(|job| job.active && job.cargo_loaded);
             let cargo = job.map_or(0.0, |job| job.cargo_mass);
-            let level = brake_fade::Level::Realistic;
+            let fade_settings = config.settings.get();
+            let level = fade_settings.brake_fade_level;
             let fade = brake_fade.tick(level, last_telemetry.as_ref(), cargo, last_weather.as_ref(), Instant::now());
+            let strength = if fade_settings.brake_fade.0 { fade.strength } else { 1.0 };
+            host.brake_strength.store(strength.to_bits(), Ordering::Release);
+            host.brake_temp_truck.store(fade.truck.to_bits(), Ordering::Release);
+            host.brake_temp_trailer.store(fade.trailer.unwrap_or(f32::NAN).to_bits(), Ordering::Release);
             let moving = last_telemetry.as_ref().is_some_and(|t| t.speed.abs() > 0.5 || t.brake > 0.01);
             if moving && brake_fade_logged.is_none_or(|at| at.elapsed() >= Duration::from_secs(2)) {
                 brake_fade_logged = Some(Instant::now());
@@ -1400,6 +1405,31 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
                         log!("[handset] the suspension by itself: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // Brake fade, on or off and how soon (owner 2026-11-21).
+                Some(PageMessage::BrakeFade { on }) => {
+                    let mut settings = config.settings.get();
+                    if settings.brake_fade.0 != on {
+                        settings.brake_fade = settings::Shown(on);
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] brake fade: {}", if on { "on" } else { "off" });
+                    }
+                }
+                Some(PageMessage::BrakeFadeLevel { which }) => {
+                    let level = match which.as_str() {
+                        "light" => Some(brake_fade::Level::Light),
+                        "realistic" => Some(brake_fade::Level::Realistic),
+                        "hard" => Some(brake_fade::Level::Hard),
+                        _ => None,
+                    };
+                    let mut settings = config.settings.get();
+                    if let Some(level) = level.filter(|&level| level != settings.brake_fade_level) {
+                        settings.brake_fade_level = level;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] brake fade: {level:?}");
                     }
                 }
                 // How big the mouse's dot is, from a phone's Settings (owner 2026-11-19).
@@ -2931,6 +2961,8 @@ fn settings_message(settings: &settings::Settings) -> String {
         "suspensionDamping": settings.suspension_damping,
         "cursorSize": settings.cursor_size,
         "suspensionAuto": settings.suspension_auto,
+        "brakeFade": settings.brake_fade.0,
+        "brakeFadeLevel": settings.brake_fade_level,
     })
     .to_string()
 }
@@ -3021,6 +3053,9 @@ enum PageMessage {
     SuspensionDamping { which: String },
     CursorSize { which: String },
     SuspensionAuto { on: bool },
+    /// Brake fade (owner 2026-11-21): on or off, and how soon (`light`, `realistic`, `hard`).
+    BrakeFade { on: bool },
+    BrakeFadeLevel { which: String },
     /// Where the reversing camera shows the game's rear-view mirrors (the page see-through there), in the frame's
     /// pixels; a width of 0 while it doesn't (`HostBlock::mirror_rect`).
     MirrorCamera { x: f64, y: f64, width: f64, height: f64 },
@@ -3516,6 +3551,8 @@ mod tests {
                 "suspensionDamping": "normal",
                 "cursorSize": "normal",
                 "suspensionAuto": false,
+                "brakeFade": true,
+                "brakeFadeLevel": "realistic",
             })
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;

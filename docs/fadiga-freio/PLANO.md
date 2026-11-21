@@ -92,7 +92,20 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   **fica tocando em loop** (o recorte de 1,4 s repetido, uns 0,3 s de pausa entre um e outro), freando ou não; **para
   assim que a força sobe um pouco** (o disco esfriou: `strength > LEAST + 0,01`). Volume e liga/desliga próprios.
 
-**Próximo passo:**
+- **Fase C feita (21/11, 2.4.6, ponte 55):**
+  - `shared/src/lib.rs` `HostBlock`: `brake_strength`, `brake_temp_truck`, `brake_temp_trailer` (f32 bits).
+  - `host/src/settings.rs`: `brake_fade: Shown` (ligado por padrão) e `brake_fade_level: brake_fade::Level`
+    (serde camelCase). `lib.rs`: mensagens `brakeFade {on}` e `brakeFadeLevel {which}` (liberadas em
+    `remote.rs`), no JSON das configurações (`brakeFade`, `brakeFadeLevel`); o laço grava força e temperaturas
+    na ponte a cada tick (força 1 com a fadiga desligada).
+  - `plugin/src/commands.rs`: `fade_probe()` **removida**; `brake_strength()` e `fade_axis()`
+    (`-(1 - força) × pedal_real`, `pedal_real = input_brake − valor_mandado`, 0 sem pedal; máx. -0,85). O
+    volante do celular: freio × força. Log `brake fade:` agora mostra `strength` e `told`.
+  - Instalada 21/11 18:40 (backup `backups\20261121-183855`), commitada; **não testada no jogo**.
+  - **Falta UI**: o celular ainda não tem a tela das opções (as mensagens já existem no app).
+
+**Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
+em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
 2. Enquanto isso dá para fazer a **Fase D (HUD)** sem depender de nada: pôr na ponte (`HostBlock`, seção 2.5)

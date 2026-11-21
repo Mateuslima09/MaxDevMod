@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 54;
+pub const BRIDGE_VERSION: u32 = 55;
 
 /// Live D3D11 screen sharpness tier in `HostBlock::screen_resolution`: applied immediately by the plugin on the next
 /// frame without restarting the game.
@@ -617,6 +617,13 @@ pub struct HostBlock {
     /// a count of the presses (above the low byte) and the last one ([`FLOAT_TOGGLE`]…). The plugin keeps whether
     /// it's on and each truck's place (crates/plugin float_screen.rs).
     pub float_screen: AtomicU32,
+    /// Brake fade (owner 2026-11-21, host brake_fade.rs): how much of the player's brake is left, an `f32`'s bits,
+    /// 0.15..1; 0 (never set) or 1, all of it. The plugin takes the rest away (plugin/src/commands.rs).
+    pub brake_strength: AtomicU32,
+    /// The truck's and the trailer's disc temperatures (°C, `f32` bits; the trailer's NaN without one), for the
+    /// brakes' HUD and sounds.
+    pub brake_temp_truck: AtomicU32,
+    pub brake_temp_trailer: AtomicU32,
 }
 
 /// [`HostBlock::float_screen`]'s presses: on or off, moved (in the truck's axes: forward, back, up, down, left,

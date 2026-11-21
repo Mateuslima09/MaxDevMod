@@ -3,6 +3,11 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.6 (beta, 2026-11-21)
+- Brake fade: the brakes heat up as you use them and, overheated (from about 250 °C), lose force, down to 15 % at
+  the worst, coming back as they cool; they cool faster in the rain and at night. The trailer's brakes heat on
+  their own, more with a load. Use the engine brake and the retarder down long hills.
+
 ## 2.4.5 (beta, 2026-11-21)
 - Brake fade, first step: the plugin writes the brakes' temperature to its log while driving, and can try taking
   brake away for a test (nothing changes in the game unless that test is switched on).

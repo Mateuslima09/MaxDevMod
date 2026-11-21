@@ -47,3 +47,16 @@ O que eu quero ver: com o arquivo, `effective` perto de **0.60** com `pedal 1.00
 Se ficar em **1.00** → o jogo não aceita, e vamos por outro caminho.
 
 Obs.: com o volante do celular ligado, o teste não age (o volante manda no freio).
+
+## C. A perda de força de verdade (2.4.6, ponte 55) — **reabra o jogo**
+
+Instalado 21/11. A fadiga já vem **ligada** e no nível **realista** (ainda sem tela de opções no celular).
+
+1. Desça uma serra longa com a carreta **só no freio**, uns 3 a 4 minutos, até o freio começar a ficar fraco.
+2. Sinta se o caminhão freia menos. No `plugin.log`, as linhas `brake fade:` mostram `strength` (força que sobrou)
+   e `told` (o quanto o plugin tirou).
+3. Pare uns 3 minutos: o freio deve voltar ao normal aos poucos (`strength 1.00`).
+4. Freio de estacionamento: deve funcionar normal, mesmo com o freio quente.
+5. Se usar o volante do celular: o freio dele também deve enfraquecer.
+
+O que me dizer: se ficou fraco demais, de menos, cedo ou tarde demais. Sons, HUD e opções ainda não estão nesta versão.

@@ -303,32 +303,34 @@ fn toward(target: f32, game: f32) -> f32 {
     if still.abs() < RELATIVE_NEAR { 0.0 } else { (still * RELATIVE_GAIN).clamp(-1.0, 1.0) }
 }
 
-/// Brake fade, step A2 (owner 2026-11-21, docs/fadiga-freio/PLANO.md): whether the plugin can take brake away by
-/// giving the game's `abackward` a negative value. On while a file `fade-probe.txt` is in WestPlay's folder (next
-/// to `logs`), holding the value to give (e.g. `-0.4`; -0.85 at most); read every 2 s. Only with the phone wheel
-/// not driving (it has the axis then). Gone, the axis is let back to 0 once, as the wheel's is.
-fn fade_probe() -> f32 {
-    static PROBE: Mutex<(Option<Instant>, f32)> = Mutex::new((None, 0.0));
-    let mut probe = PROBE.lock().unwrap_or_else(|e| e.into_inner());
-    let now = Instant::now();
-    if probe.0.is_none_or(|at| now.duration_since(at) >= Duration::from_secs(2)) {
-        probe.0 = Some(now);
-        let path = log::log_dir().parent().map(|dir| dir.join("fade-probe.txt"));
-        let value = path
-            .and_then(|path| std::fs::read_to_string(path).ok())
-            .map(|text| text.trim().replace(',', ".").parse::<f32>().unwrap_or(-0.4))
-            .filter(|value| value.is_finite())
-            .map_or(0.0, |value| value.clamp(-0.85, 0.0));
-        if value != probe.1 {
-            log!("brake fade probe: abackward {value:+.2} ({})", if value != 0.0 { "on" } else { "off" });
-            probe.1 = value;
-        }
-    }
-    probe.1
+/// Brake fade (owner 2026-11-21, host brake_fade.rs): how much of the player's brake the app says is left (1 with
+/// no app, or before it said).
+fn brake_strength() -> f32 {
+    let Some(bridge) = bridge::get().filter(|_| bridge::host_alive()) else { return 1.0 };
+    let strength = f32::from_bits(bridge.host.brake_strength.load(Ordering::Acquire));
+    if strength.is_finite() && strength > 0.0 { strength.clamp(0.15, 1.0) } else { 1.0 }
 }
 
-/// Brake fade, step A1: the game's brake temperature, the pedal before and after the game, and the speed, every
-/// second while the truck moves or brakes (with the probe's value), for the owner's test down a hill.
+/// What the game's `abackward` is given to take the faded part of the player's brake away: a negative value, which
+/// the game adds to the pedal (owner's test 2026-11-21: -0.4 with the pedal down gave 0.60). The game's
+/// `truck.input.brake` already has what was given added, so the player's own pedal is it less that; with no pedal
+/// (the sum held at 0) nothing is given, so the next frame reads the pedal as it is. -0.85 at most.
+fn fade_axis() -> f32 {
+    let strength = brake_strength();
+    if strength >= 0.999 {
+        return 0.0;
+    }
+    let Some(t) = bridge::get().and_then(|bridge| bridge.plugin.telemetry.read()) else { return 0.0 };
+    if t.paused || t.input_brake <= 0.001 {
+        return 0.0;
+    }
+    let told = f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed));
+    let pedal = (t.input_brake - told.min(0.0)).clamp(0.0, 1.0);
+    (-(1.0 - strength) * pedal).clamp(-0.85, 0.0)
+}
+
+/// Brake fade: the game's brake temperature, the pedal before and after the game, the speed and the brake left,
+/// every second while the truck moves or brakes (the owner's tests; to be let down to only while fading).
 fn brake_log() {
     static LOGGED: Mutex<Option<Instant>> = Mutex::new(None);
     let mut logged = LOGGED.lock().unwrap_or_else(|e| e.into_inner());
@@ -343,12 +345,13 @@ fn brake_log() {
         return;
     }
     log!(
-        "brake fade: temp {:.1} C, pedal {:.2}, effective {:.2}, speed {:.0} km/h, probe {:+.2}",
+        "brake fade: temp {:.1} C, pedal {:.2}, effective {:.2}, speed {:.0} km/h, strength {:.2}, told {:+.2}",
         t.brake_temperature,
         t.input_brake,
         t.brake,
         t.speed * 3.6,
-        fade_probe()
+        brake_strength(),
+        f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed))
     );
 }
 
@@ -364,7 +367,11 @@ fn next_axis(event: Option<&mut InputEvent>, flags: u32) -> ScsResult {
         AXES_TOLD.store(0, Ordering::Relaxed);
     }
     brake_log();
-    let wanted = wheel_values().unwrap_or_else(|| [0.0, 0.0, fade_probe()]);
+    let wanted = match wheel_values() {
+        // The phone wheel's brake, faded as the player's own is.
+        Some([steering, throttle, brake]) => [steering, throttle, brake * brake_strength()],
+        None => [0.0, 0.0, fade_axis()],
+    };
     let told = AXES_TOLD.load(Ordering::Relaxed);
     let Some(axis) = (0..AXES.len()).find(|&axis| {
         told & (1 << axis) == 0

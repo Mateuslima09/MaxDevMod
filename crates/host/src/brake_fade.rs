@@ -41,9 +41,9 @@ const RECOVER: f32 = 0.02;
 const LONGEST_TICK: Duration = Duration::from_millis(500);
 
 /// How hard the fade is (the player's choice): its temperatures moved up or down. Light and Hard come with the
-/// settings (phase E).
-#[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// settings (`Settings::brake_fade_level`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Level {
     Light,
     #[default]
