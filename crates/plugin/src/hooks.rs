@@ -120,3 +120,17 @@ mod tests {
         assert!(ran);
     }
 }
+
+/// Switches on one hook made with [`hook`] after [`enable_all`] (the original stored first).
+///
+/// # Safety
+/// As [`hook_now`].
+pub unsafe fn enable(target: usize) -> Result<(), String> {
+    // SAFETY: a hook made as `hook` requires (the caller's contract).
+    unsafe { MinHook::enable_hook(target as *mut c_void) }.map_err(|e| format!("enable_hook: {e:?}"))
+}
+
+/// Whether this thread is in the plugin's own code now (inside `guarded`): its own D3D calls land in the hooks too.
+pub fn in_westplay() -> bool {
+    IN_WESTPLAY.with(|flag| flag.get())
+}

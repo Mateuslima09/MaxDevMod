@@ -92,6 +92,16 @@ const ICON_RADIUS: Record<LaunchOrigin, string> = { home: '31px', sidebar: '17px
 let running: ViewTransition | null = null
 
 /**
+ * Whether screen changes animate (View Transitions). Not inside a frame (the companion's screen, cabin.html?demo
+ * in its iframe): WebView2 158 (November 2026) crashes the whole page (STATUS_BREAKPOINT) on a View Transition
+ * with a named element in an iframe, so opening an app there killed the companion's Contas and Mapa pages. The
+ * cab in the game is a page of its own and keeps them.
+ */
+function canAnimate(): boolean {
+  return typeof document.startViewTransition === 'function' && window.self === window.top
+}
+
+/**
  * Calls `next` once no screen change is animating any more: a running one is finished at once (it jumps to
  * its end), and `next` runs after its navigation has been applied, so it sees the current screen. Several
  * calls run in order.
@@ -120,7 +130,7 @@ export function whenTransitionEnds(next: () => void): void {
  * it begins from the current screen.
  */
 export function animateNavigation(launch: Launch | null, update: () => void): void {
-  if (typeof document.startViewTransition !== 'function') {
+  if (!canAnimate()) {
     update()
     return
   }
@@ -173,7 +183,7 @@ function intoSidebar(root: HTMLElement): void {
  */
 export function animateAppearance(update: () => void): void {
   const root = document.documentElement
-  if (typeof document.startViewTransition !== 'function' || (running && root.dataset.transition !== 'appearance')) {
+  if (!canAnimate() || (running && root.dataset.transition !== 'appearance')) {
     update()
     return
   }

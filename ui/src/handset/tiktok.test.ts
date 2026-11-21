@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PhoneNotification } from '../shared/host'
+import type { TikTokNotification } from '../shared/host'
 import type { AppId } from './icons'
 import { notificationText, waitingWith } from './notificationText'
 import { TIKTOK_WORDS } from './tiktokWords'
@@ -21,7 +21,7 @@ describe('TikTok app', () => {
 })
 
 describe("the phone's notifications", () => {
-  const notification = (change: Partial<PhoneNotification>): PhoneNotification => ({
+  const notification = (change: Partial<TikTokNotification>): TikTokNotification => ({
     app: 'tiktok',
     kind: 'follow',
     user: 'Mateus',

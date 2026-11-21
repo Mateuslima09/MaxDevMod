@@ -33,6 +33,9 @@ pub fn paused() -> bool {
 pub struct Truck {
     pub position: [f64; 3],
     pub heading: f32,
+    /// Its pitch and roll (turns), as the SDK says.
+    pub pitch: f32,
+    pub roll: f32,
     pub speed: f32,
     pub parking_brake: bool,
     pub multiplayer: bool,
@@ -47,11 +50,21 @@ pub fn truck() -> Truck {
     Truck {
         position: [s.x, s.y, s.z],
         heading: s.heading,
+        pitch: s.pitch,
+        roll: s.roll,
         speed: s.speed,
         parking_brake: s.parking_brake,
         multiplayer: s.multiplayer_time_offset != 0,
         head: [cx + hx + s.head_x, cy + hy + s.head_y, cz + hz + s.head_z],
     }
+}
+
+/// Where the driver's head is by default in the truck (its own space: the cab's position plus the head's default,
+/// not where it's looking now): the floating screen's own place is worked out from it (`float_screen`).
+pub fn head_default() -> [f32; 3] {
+    let [hx, hy, hz] = *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
+    let [cx, cy, cz] = *CABIN.lock().unwrap_or_else(|e| e.into_inner());
+    [cx + hx, cy + hy, cz + hz]
 }
 
 /// The trailer the SDK tells of (the job's, or the player's own), for the cargo's papers and coupling by hand
@@ -64,11 +77,14 @@ pub struct Trailer {
     pub placed: bool,
     pub position: [f64; 3],
     pub heading: f32,
+    /// Its pitch and roll (turns), as the SDK says: the reversing camera on its back tilts with it.
+    pub pitch: f32,
+    pub roll: f32,
     pub hook: Option<[f32; 3]>,
 }
 
 static TRAILER: Mutex<Trailer> =
-    Mutex::new(Trailer { connected: false, placed: false, position: [0.0; 3], heading: 0.0, hook: None });
+    Mutex::new(Trailer { connected: false, placed: false, position: [0.0; 3], heading: 0.0, pitch: 0.0, roll: 0.0, hook: None });
 
 /// The trailer as the SDK last said (any thread).
 pub fn trailer() -> Trailer {
@@ -80,6 +96,23 @@ static TRUCK_HOOK: Mutex<Option<[f32; 3]>> = Mutex::new(None);
 
 pub fn truck_hook() -> Option<[f32; 3]> {
     *TRUCK_HOOK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The fuel in the truck's tank (litres), as the SDK last said (any thread).
+pub fn fuel() -> f32 {
+    SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner()).fuel
+}
+
+/// Whether the truck's engine runs.
+pub fn engine_on() -> bool {
+    SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner()).engine_enabled
+}
+
+/// The tank's size (litres: the "truck" configuration's `fuel.capacity`), 0 until the SDK has said.
+static FUEL_CAPACITY: Mutex<f32> = Mutex::new(0.0);
+
+pub fn fuel_capacity() -> f32 {
+    *FUEL_CAPACITY.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// The player's job as the SDK last configured it (`active` false: none).
@@ -136,6 +169,39 @@ static SNAPSHOT: Mutex<Telemetry> = Mutex::new(Telemetry {
     cabin_z: 0.0,
     steering: 0.0,
     multiplayer_time_offset: 0,
+    wheel_steering: 0.0,
+    front_axle_z: 0.0,
+    rear_axle_z: 0.0,
+    hook_z: 0.0,
+    rear_z: 0.0,
+    half_width: 0.0,
+    trailer_connected: false,
+    trailer_x: 0.0,
+    trailer_y: 0.0,
+    trailer_z: 0.0,
+    trailer_heading: 0.0,
+    trailer_hook_z: 0.0,
+    trailer_axle_z: 0.0,
+    trailer_rear_z: 0.0,
+    trailer_half_width: 0.0,
+    ray_sensors: [-1.0; 4],
+    rays: 0,
+    mirror: false,
+    suspension: [-1.0; 3],
+    brake: 0.0,
+    camera_ready: false,
+    wear: [0.0; 5],
+    fuel_warning: false,
+    rest_stop: 0,
+    rest_known: false,
+    camera_back: 0.0,
+    camera_up: 0.0,
+    camera_tilt: 0.0,
+    camera_turn: 0.0,
+    camera_wide: 0.0,
+    float_on: false,
+    float_seen: false,
+    float_pose: [0.0; 6],
 });
 
 /// Where the driver's head is by default in the truck's cab (the "truck" configuration's `head.position`).
@@ -172,10 +238,23 @@ enum Field {
     RightBlinker,
     HeadOffset,
     Steering,
+    Brake,
     MultiplayerTimeOffset,
     TrailerConnected,
     TrailerPlacement,
+    /// One of `Telemetry::wear`.
+    Wear(usize),
+    FuelWarning,
+    RestStop,
 }
+
+/// The context `truck.wheel.steering` is registered with for its wheel 0 (its index added): apart from the
+/// [`CHANNELS`]' indices.
+const WHEEL_CONTEXT: usize = 0x1000;
+/// The contexts `truck.wheel.suspension.deflection` and `trailer.wheel.suspension.deflection` are registered with
+/// for their wheel 0 (the phone's Suspensão app).
+const SUSPENSION_CONTEXT: usize = 0x2000;
+const TRAILER_SUSPENSION_CONTEXT: usize = 0x3000;
 
 const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::Placement),
@@ -201,9 +280,18 @@ const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.light.rblinker", SCS_VALUE_TYPE_BOOL, Field::RightBlinker),
     ("truck.head.offset", SCS_VALUE_TYPE_FPLACEMENT, Field::HeadOffset),
     ("truck.effective.steering", SCS_VALUE_TYPE_FLOAT, Field::Steering),
+    ("truck.effective.brake", SCS_VALUE_TYPE_FLOAT, Field::Brake),
     ("multiplayer.time.offset", SCS_VALUE_TYPE_S32, Field::MultiplayerTimeOffset),
     ("trailer.connected", SCS_VALUE_TYPE_BOOL, Field::TrailerConnected),
     ("trailer.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::TrailerPlacement),
+    // The phone's notifications (owner 2026-11-20): the truck's damage, its fuel warning, the driver's rest.
+    ("truck.wear.engine", SCS_VALUE_TYPE_FLOAT, Field::Wear(0)),
+    ("truck.wear.transmission", SCS_VALUE_TYPE_FLOAT, Field::Wear(1)),
+    ("truck.wear.cabin", SCS_VALUE_TYPE_FLOAT, Field::Wear(2)),
+    ("truck.wear.chassis", SCS_VALUE_TYPE_FLOAT, Field::Wear(3)),
+    ("truck.wear.wheels", SCS_VALUE_TYPE_FLOAT, Field::Wear(4)),
+    ("truck.fuel.warning", SCS_VALUE_TYPE_BOOL, Field::FuelWarning),
+    ("rest.stop", SCS_VALUE_TYPE_S32, Field::RestStop),
 ];
 
 /// Registers the telemetry channels and events. Called from `scs_telemetry_init`.
@@ -243,6 +331,31 @@ pub unsafe fn register(params: &TelemetryInitParamsV100) {
             }
         }
         log!("telemetry: {registered}/{} channels registered", CHANNELS.len());
+        // How far each wheel is turned, for the reversing camera's lines (only the steered ones are read).
+        let Ok(c_name) = CString::new("truck.wheel.steering") else { return };
+        let wheels = (0..crate::reversing::MOST_WHEELS)
+            .filter(|&wheel| {
+                let context = (WHEEL_CONTEXT + wheel) as *mut c_void;
+                register_channel(c_name.as_ptr(), wheel as u32, SCS_VALUE_TYPE_FLOAT, 0, on_channel, context)
+                    == SCS_RESULT_OK
+            })
+            .count();
+        log!("telemetry: the steering of {wheels} wheels registered");
+        // How far each wheel's spring is pressed in, the truck's and the trailer's (the phone's Suspensão app).
+        for (channel, base) in [
+            ("truck.wheel.suspension.deflection", SUSPENSION_CONTEXT),
+            ("trailer.wheel.suspension.deflection", TRAILER_SUSPENSION_CONTEXT),
+        ] {
+            let Ok(c_name) = CString::new(channel) else { continue };
+            let wheels = (0..crate::reversing::MOST_WHEELS)
+                .filter(|&wheel| {
+                    let context = (base + wheel) as *mut c_void;
+                    register_channel(c_name.as_ptr(), wheel as u32, SCS_VALUE_TYPE_FLOAT, 0, on_channel, context)
+                        == SCS_RESULT_OK
+                })
+                .count();
+            log!("telemetry: {channel} of {wheels} wheels registered");
+        }
     }
 }
 
@@ -299,6 +412,16 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                 if let Some(bridge) = bridge::get() {
                     let [x, y, z] = *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner());
                     let [cabin_x, cabin_y, cabin_z] = *CABIN.lock().unwrap_or_else(|e| e.into_inner());
+                    let vehicles = crate::reversing::VEHICLES.lock().unwrap_or_else(|e| e.into_inner());
+                    let (truck_layout, trailer_layout) = (vehicles.truck, vehicles.trailer);
+                    let wheel_steering = vehicles.wheel_steering();
+                    // The trailer for the reversing camera: where it is once coupled (kept apart, `TRAILER`).
+                    let trailer = trailer();
+                    let coupled = trailer.connected && trailer.placed;
+                    let suspension = vehicles.suspension(coupled);
+                    drop(vehicles);
+                    let [trailer_x, trailer_y, trailer_z] = if coupled { trailer.position } else { [0.0; 3] };
+                    let trailer_heading = if coupled { trailer.heading } else { 0.0 };
                     let camera = crate::camera::position();
                     let [camera_x, camera_y, camera_z] = camera.unwrap_or_default();
                     let published = Telemetry {
@@ -312,8 +435,32 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                         cabin_x,
                         cabin_y,
                         cabin_z,
+                        wheel_steering,
+                        front_axle_z: truck_layout.front_axle_z,
+                        rear_axle_z: truck_layout.rear_axle_z,
+                        hook_z: truck_layout.hook_z,
+                        rear_z: truck_layout.rear_z,
+                        half_width: truck_layout.half_width,
+                        trailer_connected: coupled,
+                        trailer_x,
+                        trailer_y,
+                        trailer_z,
+                        trailer_heading,
+                        trailer_hook_z: trailer_layout.hook_z,
+                        trailer_axle_z: trailer_layout.rear_axle_z,
+                        trailer_rear_z: trailer_layout.rear_z,
+                        trailer_half_width: trailer_layout.half_width,
+                        suspension,
                         ..*snapshot
                     };
+                    // The parking sensors through the game's physics: this frame's rays asked for, the last read.
+                    let mut published = published;
+                    crate::ray::frame(&mut published);
+                    published.mirror = crate::mirror::seen();
+                    published.camera_ready = crate::rear_camera::ready();
+                    [published.camera_back, published.camera_up, published.camera_tilt, published.camera_turn, published.camera_wide] =
+                        crate::rear_camera::nudged(&published);
+                    (published.float_on, published.float_seen, published.float_pose) = crate::float_screen::published(&published);
                     bridge.plugin.telemetry.write(&published);
                 }
                 let (speed, paused) = (snapshot.speed, snapshot.paused);
@@ -355,6 +502,9 @@ unsafe fn on_configuration(configuration: &ConfigurationEvent) {
                     log!("trailer: its coupling pin at {hook:?}");
                     trailer.hook = hook;
                 }
+                drop(trailer);
+                // Its wheels and length, for the reversing camera.
+                on_trailer(configuration);
             }
             _ => {}
         }
@@ -370,8 +520,15 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         let mut head = [0.0; 3];
         let mut cabin = [0.0; 3];
         let mut hook = None;
+        let mut fuel_capacity = 0.0;
+        let mut configured = crate::reversing::Configured::default();
         for attribute in configuration.attributes() {
+            configured.take(attribute);
             match CStr::from_ptr(attribute.name).to_bytes() {
+                b"fuel.capacity" => {
+                    fuel_capacity = attribute.value.float();
+                    continue;
+                }
                 b"hook.position" => {
                     hook = attribute.value.fvector();
                     continue;
@@ -399,7 +556,7 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         }
         truck.head = head;
         log!(
-            "truck: {} {} ({}, {}), plate {:?} ({}), head at {head:?}, cab turning at {cabin:?}",
+            "truck: {} {} ({}, {}), plate {:?} ({}), head at {head:?}, cab turning at {cabin:?}, fifth wheel at {hook:?}",
             truck.brand.as_str(),
             truck.name.as_str(),
             truck.brand_id.as_str(),
@@ -410,10 +567,27 @@ unsafe fn on_truck(configuration: &ConfigurationEvent) {
         *HEAD_DEFAULT.lock().unwrap_or_else(|e| e.into_inner()) = head;
         *CABIN.lock().unwrap_or_else(|e| e.into_inner()) = cabin;
         *TRUCK_HOOK.lock().unwrap_or_else(|e| e.into_inner()) = hook;
+        *FUEL_CAPACITY.lock().unwrap_or_else(|e| e.into_inner()) = fuel_capacity;
+        crate::reversing::truck_configured(&configured);
         if let Some(bridge) = bridge::get() {
             bridge.plugin.truck.write(&truck);
         }
         crate::screens::truck_changed(truck.id.as_str());
+    }
+}
+
+/// The first trailer's layout, for the reversing camera (no attributes: no trailer).
+///
+/// # Safety
+/// As [`on_configuration`].
+unsafe fn on_trailer(configuration: &ConfigurationEvent) {
+    // SAFETY: the attributes are the SDK's, alive through the call (this function's contract).
+    unsafe {
+        let mut configured = crate::reversing::Configured::default();
+        for attribute in configuration.attributes() {
+            configured.take(attribute);
+        }
+        crate::reversing::trailer_configured(&configured);
     }
 }
 
@@ -474,6 +648,28 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
     // SAFETY: `value` is the SDK's, of the type the channel was registered with (each `Field` reads its own),
     // or null.
     unsafe {
+        // A wheel's suspension, the truck's or the trailer's (`register`): metres pressed in.
+        let at = context as usize;
+        if (SUSPENSION_CONTEXT..TRAILER_SUSPENSION_CONTEXT + crate::reversing::MOST_WHEELS).contains(&at) {
+            let deflection = value.as_ref().map_or(0.0, ScsValue::float);
+            let mut vehicles = crate::reversing::VEHICLES.lock().unwrap_or_else(|e| e.into_inner());
+            if at >= TRAILER_SUSPENSION_CONTEXT {
+                if let Some(slot) = vehicles.trailer_deflection.get_mut(at - TRAILER_SUSPENSION_CONTEXT) {
+                    *slot = deflection;
+                }
+            } else if let Some(slot) = vehicles.deflection.get_mut(at - SUSPENSION_CONTEXT) {
+                *slot = deflection;
+            }
+            return;
+        }
+        // A wheel's steering (`register`): its turns, none without a value.
+        if let Some(wheel) = (context as usize).checked_sub(WHEEL_CONTEXT) {
+            let mut vehicles = crate::reversing::VEHICLES.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(steering) = vehicles.steering.get_mut(wheel) {
+                *steering = value.as_ref().map_or(0.0, ScsValue::float);
+            }
+            return;
+        }
         let Some(&(_, _, field)) = CHANNELS.get(context as usize) else { return };
         // The trailer's are kept apart (`TRAILER`): none of the pages'.
         if matches!(field, Field::TrailerConnected | Field::TrailerPlacement) {
@@ -484,6 +680,7 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
                     let p = value.dplacement();
                     trailer.position = [p.x, p.y, p.z];
                     trailer.heading = p.heading;
+                    (trailer.pitch, trailer.roll) = (p.pitch, p.roll);
                     // Before a trailer is there, the SDK says the world's origin.
                     trailer.placed = p.x != 0.0 || p.z != 0.0;
                 }
@@ -529,7 +726,11 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
                 (s.head_heading, s.head_pitch) = (p.heading, p.pitch);
             }
             Field::Steering => s.steering = value.float(),
+            Field::Brake => s.brake = value.float(),
             Field::MultiplayerTimeOffset => s.multiplayer_time_offset = value.s32(),
+            Field::Wear(part) => s.wear[part] = value.float(),
+            Field::FuelWarning => s.fuel_warning = value.bool(),
+            Field::RestStop => (s.rest_stop, s.rest_known) = (value.s32(), true),
             Field::TrailerConnected | Field::TrailerPlacement => {}
         }
     }
@@ -567,7 +768,11 @@ fn reset(s: &mut Telemetry, field: Field) {
             (s.head_heading, s.head_pitch) = (d.head_heading, d.head_pitch);
         }
         Field::Steering => s.steering = d.steering,
+        Field::Brake => s.brake = d.brake,
         Field::MultiplayerTimeOffset => s.multiplayer_time_offset = d.multiplayer_time_offset,
+        Field::Wear(part) => s.wear[part] = d.wear[part],
+        Field::FuelWarning => s.fuel_warning = d.fuel_warning,
+        Field::RestStop => (s.rest_stop, s.rest_known) = (d.rest_stop, d.rest_known),
         Field::TrailerConnected | Field::TrailerPlacement => {}
     }
 }

@@ -303,6 +303,9 @@ pub fn export(
         })
         .collect();
     let counts = export.counts;
+    // Each pump's own point (x, z in metres, to the decimetre): where the truck stands to refuel.
+    let pumps: Vec<[f32; 2]> =
+        std::mem::take(&mut export.pumps).iter().map(|p| [(p[0] * 10.0).round() / 10.0, (p[1] * 10.0).round() / 10.0]).collect();
     drop(map);
     drop(export.sea);
     tell(Stage::Tiles, 0.6);
@@ -352,10 +355,12 @@ pub fn export(
         "labels": labels,
         "places": format!("{folder}/places.json"),
         "countries": format!("{folder}/countries.json"),
+        "pumps": format!("{folder}/pumps.json"),
         "source": options.source,
     });
     std::fs::write(tiles_dir.join("places.json"), serde_json::to_vec(&places).map_err(std::io::Error::other)?)?;
     std::fs::write(tiles_dir.join("countries.json"), countries.to_json().to_string())?;
+    std::fs::write(tiles_dir.join("pumps.json"), serde_json::to_vec(&pumps).map_err(std::io::Error::other)?)?;
     let mut written = std::io::BufWriter::new(std::fs::File::create(tiles_dir.join(routing::FILE))?);
     graph.write(&mut written)?;
     std::io::Write::flush(&mut written)?;

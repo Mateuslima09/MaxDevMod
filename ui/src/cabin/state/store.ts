@@ -4,6 +4,7 @@ import { applyPhoneFit, fitKey, readFit, useShownFit } from './screenFit'
 import {
   type Equalizer,
   FLAT,
+  type FuelBill,
   type HostMessage,
   type PhoneNotification,
   type GameWeather,
@@ -16,10 +17,15 @@ import {
   isInHost,
   isPhonePage,
   postToHost,
+  type ScreenResolution,
   subscribeHostMessages,
   type Telemetry,
   toEqualizer,
   type TruckInfo,
+  type VirtualMirrors,
+  type LowFront,
+  type CursorSize,
+  type Damping,
 } from '../../shared/host'
 import type { Maneuver, TurnKind } from '../maps/guidance'
 import {
@@ -114,6 +120,14 @@ interface CabinState {
   setOemMode(mode: OemMode): void
   /** The player's choice, in Settings: applied, and kept with WestPlay's settings. */
   chooseOemMode(mode: OemMode): void
+  /** Live D3D11 screen sharpness tier (`gameDefault`, `standard`, `high`, `ultra`). */
+  screenResolution: ScreenResolution
+  setScreenResolution(resolution: ScreenResolution): void
+  chooseScreenResolution(resolution: ScreenResolution): void
+  /** Keep the in-cabin screen powered on even when the truck's electrics/engine are off. */
+  keepScreenOn: boolean
+  setKeepScreenOn(on: boolean): void
+  chooseKeepScreenOn(on: boolean): void
   powerEvent(event: PowerEvent): void
   setTruckScreen(shown: boolean): void
 }
@@ -167,6 +181,35 @@ export const useCabin = create<CabinState>()(
       chooseOemMode: (oemMode) => {
         set({ oemMode })
         if (isInHost()) postToHost({ type: 'truckStrip', strip: oemMode })
+      },
+      screenResolution: 'high',
+      setScreenResolution: (screenResolution) => set({ screenResolution }),
+      chooseScreenResolution: (screenResolution) => {
+        set({ screenResolution })
+        if (isInHost()) postToHost({ type: 'screenResolution', resolution: screenResolution })
+      },
+      keepScreenOn: false,
+      setKeepScreenOn: (keepScreenOn) => {
+        const was = useCabin.getState().keepScreenOn
+        set({ keepScreenOn })
+        if (was !== keepScreenOn) {
+          const telemetry = useLive.getState().telemetry
+          if (telemetry) {
+            const truckScreen = useLive.getState().screenLayout !== 'tablet'
+            useCabin
+              .getState()
+              .powerEvent({
+                type: 'electrics',
+                on: telemetry.electricEnabled || keepScreenOn,
+                at: performance.now(),
+                truckScreen,
+              })
+          }
+        }
+      },
+      chooseKeepScreenOn: (keepScreenOn) => {
+        useCabin.getState().setKeepScreenOn(keepScreenOn)
+        if (isInHost()) postToHost({ type: 'keepScreenOn', on: keepScreenOn })
       },
       powerEvent: (event) =>
         set((state) => {
@@ -321,9 +364,39 @@ export interface Nearby {
 
 /** The Modo Personagem, for the phone in the game: who walks (the settings', `null` until they come), and the
  * phone's last ask to open one of its apps (its keybind: `count` changes with every ask). Not kept. */
-export const useCharacter = create<{ person: number | null; opened: { app: string; count: number } | null }>()(
-  () => ({ person: null, opened: null }),
-)
+export const useCharacter = create<{ person: number | null; opened: { app: string; count: number } | null }>()(() => ({
+  person: null,
+  opened: null,
+}))
+
+/** The Modo Personagem's switches as the app's settings have them (the companion's Personagem page, the phones'
+ * Settings): on until the host says. */
+export const useCharacterSwitches = create<{
+  freightPapers: boolean
+  manualRefuel: boolean
+  payAttendant: boolean
+  virtualMirrors: VirtualMirrors
+  suspensionAutoReset: boolean
+  suspensionAuto: boolean
+  suspensionLowFront: LowFront
+  suspensionDamping: Damping
+  cursorSize: CursorSize
+  /** Whether the auto reset is in the games' options as chosen (`null`: not said yet). */
+  suspensionApplied: boolean | null
+  keepScreenOn: boolean
+}>()(() => ({
+  freightPapers: true,
+  manualRefuel: true,
+  payAttendant: true,
+  virtualMirrors: 'right',
+  suspensionAutoReset: true,
+  suspensionAuto: false,
+  suspensionLowFront: 'normal',
+  suspensionDamping: 'normal',
+  cursorSize: 'normal',
+  suspensionApplied: null,
+  keepScreenOn: false,
+}))
 
 /** TikTok under the phone in the game's page (crates/host tiktok.rs), as the host last said: whether it's signed
  * in (`null`: not known yet) and as whom, its sign-in window open, the account's LIVE on. Not kept. */
@@ -340,7 +413,11 @@ export const usePhoneNotification = create<{ latest: PhoneNotification | null; c
 
 /** The cargo's paper the phone in the game's page shows in place of the phone (handset/Paper.tsx), as the host
  * last said: `null`, none. Not kept. */
-export const usePaper = create<{ stage: 'pickup' | 'delivery' | null }>()(() => ({ stage: null }))
+export const usePaper = create<{ stage: 'pickup' | 'delivery' | 'lockPull' | 'lockPush' | 'legsUp' | 'legsDown' | null }>()(() => ({ stage: null }))
+
+/** The fuel's bill the phone in the game's page shows to pay (handset/FuelBill.tsx), as the host last said: `null`,
+ * none. Not kept. */
+export const useFuelBill = create<{ bill: FuelBill | null }>()(() => ({ bill: null }))
 
 export const useLive = create<LiveState>()(() => ({
   telemetry: null,
@@ -409,18 +486,41 @@ export function connectHost(now: () => number = () => performance.now()): () => 
   }
 }
 
+/** How long the electrics must stay off before the screen goes off (ms): a key turned off and straight back to the
+ * electrics (the phone's "engine off only", owner 2026-11-18) isn't a power off. What the screen was last told, and the
+ * off waiting. */
+const POWER_OFF_GRACE_MS = 1500
+let poweredTold: boolean | undefined
+let poweringOff: ReturnType<typeof setTimeout> | undefined
+
 function receiveHostMessage(now: () => number): (message: HostMessage) => void {
   return (message) => {
     switch (message.type) {
       case 'telemetry': {
         const previous = useLive.getState().telemetry
         useLive.setState({ telemetry: message.data })
-        if (previous?.electricEnabled !== message.data.electricEnabled) {
-          // The tablet isn't the truck's screen: no brand as it starts.
+        const keepOn = useCabin.getState().keepScreenOn
+        const nowOn = message.data.electricEnabled || keepOn
+        // The tablet isn't the truck's screen: no brand as it starts.
+        const tell = (on: boolean) => {
+          poweredTold = on
           const truckScreen = useLive.getState().screenLayout !== 'tablet'
-          useCabin
-            .getState()
-            .powerEvent({ type: 'electrics', on: message.data.electricEnabled, at: now(), truckScreen })
+          useCabin.getState().powerEvent({ type: 'electrics', on, at: now(), truckScreen })
+        }
+        if (nowOn) {
+          // Back within the moment: the electrics never went off as far as the screen goes.
+          clearTimeout(poweringOff)
+          poweringOff = undefined
+          if (poweredTold !== true) tell(true)
+        } else if (poweredTold === undefined || !previous) {
+          tell(false)
+        } else if (poweredTold && poweringOff === undefined) {
+          // Off only if they stay off a moment (owner 2026-11-18: "engine off only" turns the key off and back to
+          // the electrics at once, and the screen went off and started again).
+          poweringOff = setTimeout(() => {
+            poweringOff = undefined
+            if (!(useLive.getState().telemetry?.electricEnabled ?? false)) tell(false)
+          }, POWER_OFF_GRACE_MS)
         }
         break
       }
@@ -523,6 +623,13 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         cabin.setOemMode(message.truckStrip === 'off' ? 'off' : 'auto')
         const split = message.split
         useCabin.setState({ split: split === 'mapLeft' || split === 'mapRight' ? split : 'off' })
+        const res = message.screenResolution
+        if (res === 'gameDefault' || res === 'standard' || res === 'high' || res === 'ultra') {
+          cabin.setScreenResolution(res)
+        }
+        if (typeof message.keepScreenOn === 'boolean') {
+          cabin.setKeepScreenOn(message.keepScreenOn)
+        }
         if (message.wallpaper) useCabin.setState({ wallpaperId: message.wallpaper })
         // Chosen here before WestPlay kept it with its settings: kept now.
         else if (cabin.wallpaperId !== DEFAULT_WALLPAPER_ID) postToHost({ type: 'wallpaper', id: cabin.wallpaperId })
@@ -535,6 +642,18 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           iconStyle: isIconStyle(message.iconStyle) ? message.iconStyle : 'auto',
         })
         if (typeof message.characterPerson === 'number') useCharacter.setState({ person: message.characterPerson })
+        useCharacterSwitches.setState((was) => ({
+          freightPapers: message.freightPapers ?? was.freightPapers,
+          manualRefuel: message.manualRefuel ?? was.manualRefuel,
+          payAttendant: message.payAttendant ?? was.payAttendant,
+          virtualMirrors: message.virtualMirrors ?? was.virtualMirrors,
+          suspensionAutoReset: message.suspensionAutoReset ?? was.suspensionAutoReset,
+          suspensionAuto: message.suspensionAuto ?? was.suspensionAuto,
+          suspensionLowFront: message.suspensionLowFront ?? was.suspensionLowFront,
+          suspensionDamping: message.suspensionDamping ?? was.suspensionDamping,
+          cursorSize: message.cursorSize ?? was.cursorSize,
+          keepScreenOn: message.keepScreenOn ?? was.keepScreenOn,
+        }))
         break
       }
       case 'tiktok':
@@ -545,11 +664,27 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           live: message.live,
         })
         break
+      case 'fuelBill':
+        useFuelBill.setState({ bill: message.bill ?? null })
+        break
+      case 'suspensionOption':
+        useCharacterSwitches.setState({ suspensionApplied: message.applied })
+        break
       case 'paper':
-        usePaper.setState({ stage: message.stage === 'pickup' || message.stage === 'delivery' ? message.stage : null })
+        usePaper.setState({
+          stage:
+            message.stage === 'pickup' ||
+            message.stage === 'delivery' ||
+            message.stage === 'lockPull' ||
+            message.stage === 'lockPush' ||
+            message.stage === 'legsUp' ||
+            message.stage === 'legsDown'
+              ? message.stage
+              : null,
+        })
         break
       case 'phoneNotification':
-        if (typeof message.user === 'string' && message.user) {
+        if (message.app !== 'tiktok' || (typeof message.user === 'string' && message.user)) {
           const { type: _type, ...notification } = message
           usePhoneNotification.setState((state) => ({ latest: notification, count: state.count + 1 }))
         }
@@ -609,6 +744,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         // the next game's first telemetry powers it on afresh.
         if (!message.running) {
           useLive.setState({ telemetry: null })
+          clearTimeout(poweringOff)
+          poweringOff = undefined
+          poweredTold = false
           useCabin.getState().powerEvent({ type: 'electrics', on: false, at: now() })
         }
         break

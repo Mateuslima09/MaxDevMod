@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react'
 import { postToHost, type WalletEntry } from '../shared/host'
 import { useLive } from '../cabin/state/store'
+import { OFFENCES } from './offences'
 import { formatMoney, type Prefs, shownCurrency } from './prefs'
 
 /**
@@ -187,6 +188,9 @@ const KIND_GLYPHS: Record<WalletEntry['kind'], ReactNode> = {
       fillRule="evenodd"
     />
   ),
+  fuel: (
+    <path d="M5 3h8a1 1 0 0 1 1 1v7h1a2 2 0 0 1 2 2v4a1 1 0 0 0 2 0V9l-2-2 1.4-1.4L21 8.2V17a3 3 0 0 1-6 0v-4h-1v8H4V4a1 1 0 0 1 1-1Zm1 2v5h6V5Z" />
+  ),
   other: (
     <path d="M4 6h16v12H4Zm0 4h16M7 14h4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
   ),
@@ -216,28 +220,14 @@ const WORDS = {
       toll: 'Toll',
       ferry: 'Ferry',
       train: 'Train',
+      fuel: 'Fuel station',
     },
     otherOut: 'Other expenses',
     otherIn: 'Other income',
     otherOutDetail: 'Fuel, repairs, purchases (seen at the save)',
     otherInDetail: 'Seen at the save',
     tollDetail: 'Toll gate',
-    offences: {
-      crash: 'Crash',
-      avoid_sleeping: 'Driving tired',
-      wrong_way: 'Wrong way',
-      speeding_camera: 'Speed camera',
-      no_lights: 'No lights',
-      red_signal: 'Red light',
-      speeding: 'Speeding',
-      avoid_weighing: 'Skipped the weigh station',
-      illegal_trailer: 'Illegal trailer',
-      avoid_inspection: 'Skipped the inspection',
-      illegal_border_crossing: 'Illegal border crossing',
-      hard_shoulder_violation: 'Hard shoulder',
-      damaged_vehicle_usage: 'Damaged vehicle',
-      generic: 'Offence',
-    },
+    offences: OFFENCES.en,
     foot: 'Balance from the game’s latest save, plus what happened since. Fuel, repairs and purchases show at the next save.',
     converted: 'Converted from the game’s currency at a fixed, approximate rate.',
   },
@@ -264,28 +254,14 @@ const WORDS = {
       toll: 'Pedágio',
       ferry: 'Balsa',
       train: 'Trem',
+      fuel: 'Posto de combustível',
     },
     otherOut: 'Outros gastos',
     otherIn: 'Outras entradas',
     otherOutDetail: 'Diesel, oficina, compras (visto no save)',
     otherInDetail: 'Visto no save',
     tollDetail: 'Praça de pedágio',
-    offences: {
-      crash: 'Batida',
-      avoid_sleeping: 'Dirigir com sono',
-      wrong_way: 'Contramão',
-      speeding_camera: 'Radar',
-      no_lights: 'Sem faróis',
-      red_signal: 'Sinal vermelho',
-      speeding: 'Excesso de velocidade',
-      avoid_weighing: 'Fugiu da balança',
-      illegal_trailer: 'Carreta irregular',
-      avoid_inspection: 'Fugiu da inspeção',
-      illegal_border_crossing: 'Fronteira ilegal',
-      hard_shoulder_violation: 'Acostamento',
-      damaged_vehicle_usage: 'Veículo danificado',
-      generic: 'Infração',
-    },
+    offences: OFFENCES.pt,
     foot: 'Saldo do último save do jogo, mais o que aconteceu depois. Diesel, oficina e compras aparecem no próximo save.',
     converted: 'Convertido da moeda do jogo por um câmbio fixo e aproximado.',
   },

@@ -27,6 +27,9 @@ export function Character({ settings: state, cw, status }: PageProps) {
     person: CHARACTER_PEOPLE.default,
     hints: true,
     hintsKey: 0,
+    papers: true,
+    refuel: true,
+    payAttendant: true,
   }
   const keyName = useKeyName(character.key, words)
   const [listening, setListening] = useState<'walk' | 'hints' | null>(null)
@@ -133,6 +136,21 @@ export function Character({ settings: state, cw, status }: PageProps) {
               )
             }
           />
+          {/* The ways of playing on foot (owner 2026-11-13: a switch for each, here and on the phone). */}
+          {(['papers', 'refuel', 'payAttendant'] as const).map((which) => (
+            <Row
+              key={which}
+              title={w[which]}
+              detail={w[`${which}Detail`]}
+              accessory={
+                <Switch
+                  on={character[which] !== false}
+                  label={w[which]}
+                  change={(on) => update({ ...settings, character: { ...character, [which]: on } })}
+                />
+              }
+            />
+          ))}
           <PercentRow
             saved={character.sensitivity}
             label={w.speed}
@@ -150,6 +168,7 @@ export function Character({ settings: state, cw, status }: PageProps) {
           </p>
           <div className="ob-people ob-in" style={n(6)}>
             {CHARACTER_PEOPLE.people.map((person, place) => {
+              if ('off' in person && person.off) return null
               const chosen = character.person === place
               return (
                 <button
@@ -185,9 +204,12 @@ export function Character({ settings: state, cw, status }: PageProps) {
   )
 }
 
-/** A person's name under their picture: "Man 1", "Woman 1"… each kind numbered from 1, in the page's language. */
+/** A person's name under their picture, in the page's language: their own ("Madam", "Farmer"…), or else "Man 1",
+ * "Woman 1"… each kind numbered from 1. */
 function personName(w: PageProps['cw']['character'], place: number): string {
   const people = CHARACTER_PEOPLE.people
+  const name = people[place]?.name
+  if (name && w.names?.[name]) return w.names[name]
   const kind = people[place]?.kind ?? 'man'
   const n = people.slice(0, place + 1).filter((person) => person.kind === kind).length
   return (kind === 'man' ? w.man : w.woman).replaceAll('{n}', String(n))

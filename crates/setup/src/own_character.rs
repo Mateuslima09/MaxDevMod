@@ -21,12 +21,14 @@ pub struct Person {
     pub body: &'static str,
     pub phone: &'static str,
     pub phone_body: &'static str,
+    /// The headless body holding the pump's nozzle, for filling the tank on foot (`fuel`; owner 2026-11-12).
+    pub nozzle_body: &'static str,
     pub prefix: &'static str,
 }
 
 /// WestPlay's own people, in the order the player chooses among them (`westplay_shared::CHARACTER_PEOPLE`: each
 /// one's walking mover, `<prefix>_walk`).
-pub const PEOPLE: [Person; 3] = [
+pub const PEOPLE: [Person; 6] = [
     // The tattooed man (owner 2026-11-06, in place of the first man, `wp`).
     Person {
         dir: "model/westplay/tatuado",
@@ -34,6 +36,7 @@ pub const PEOPLE: [Person; 3] = [
         body: "wt_body.pmd",
         phone: "wt_phone.pmd",
         phone_body: "wt_phbody.pmd",
+        nozzle_body: "wt_nzbody.pmd",
         prefix: "wt",
     },
     Person {
@@ -42,6 +45,7 @@ pub const PEOPLE: [Person; 3] = [
         body: "wm_body.pmd",
         phone: "wm_phone.pmd",
         phone_body: "wm_phbody.pmd",
+        nozzle_body: "wm_nzbody.pmd",
         prefix: "wm",
     },
     // The cowboy (owner 2026-11-06, the third: his own Mixamo rig, the tattooed man's animations).
@@ -51,7 +55,40 @@ pub const PEOPLE: [Person; 3] = [
         body: "wc_body.pmd",
         phone: "wc_phone.pmd",
         phone_body: "wc_phbody.pmd",
+        nozzle_body: "wc_nzbody.pmd",
         prefix: "wc",
+    },
+    // The man in black with the wide hat (owner 2026-11-14, the sixth model: his own Mixamo rig, the tattooed man's
+    // animations, as the cowboy).
+    Person {
+        dir: "model/westplay/chapeu",
+        model: "wh_player.pmd",
+        body: "wh_body.pmd",
+        phone: "wh_phone.pmd",
+        phone_body: "wh_phbody.pmd",
+        nozzle_body: "wh_nzbody.pmd",
+        prefix: "wh",
+    },
+    // The stout man with the beard and the denim jacket (owner 2026-11-14, the fifth model): made as the man in black.
+    Person {
+        dir: "model/westplay/gordinho",
+        model: "wg_player.pmd",
+        body: "wg_body.pmd",
+        phone: "wg_phone.pmd",
+        phone_body: "wg_phbody.pmd",
+        nozzle_body: "wg_nzbody.pmd",
+        prefix: "wg",
+    },
+    // The woman in the hard hat and safety vest (owner 2026-11-20, the seventh model: her own Mixamo rig, "2 Chain
+    // Fingers" as the woman's, with the woman's animations).
+    Person {
+        dir: "model/westplay/obra",
+        model: "wo_player.pmd",
+        body: "wo_body.pmd",
+        phone: "wo_phone.pmd",
+        phone_body: "wo_phbody.pmd",
+        nozzle_body: "wo_nzbody.pmd",
+        prefix: "wo",
     },
 ];
 
@@ -62,8 +99,10 @@ const MATERIALS: &str = "automat";
 /// (the woman's: owner 2026-11-05); and
 /// walking into standing, one piece for each eighth of the walk's cycle (`tools/personagem/transicao_parar.py`:
 /// owner 2026-11-06, "no sudden change to standing").
-const ANIMATIONS: [&str; 12] = [
-    "walk", "idle", "run", "stop", "text", "txwalk", "jumprun", "crouch", "settle", "cwalk", "cstart", "csettle",
+const ANIMATIONS: [&str; 14] = [
+    "walk", "idle", "run", "stop", "text", "txwalk", "jumprun", "crouch", "settle", "cwalk", "cstart", "csettle", "work",
+    // Filling the tank on foot, the nozzle in the hand (`tools/personagem/abastecer.py`): seen in first person.
+    "fuel",
 ];
 /// The phone's animations: standing with it and walking with it.
 const PHONE_ANIMATIONS: [&str; 2] = ["text", "txwalk"];
@@ -130,6 +169,7 @@ fn files_in(dir: &Path) -> Vec<(String, Vec<u8>)> {
                     if there(person.phone) { person.phone } else { person.model },
                     if there(person.phone_body) { person.phone_body } else { person.body },
                 ),
+                false if name == "fuel" && there(person.nozzle_body) => (person.model, person.nozzle_body),
                 false => (person.model, person.body),
             };
             text += &mover(person.dir, model, person.prefix, name);
@@ -196,7 +236,7 @@ mod tests {
                 })
             })
             .collect();
-        units.extend([crate::flashlight::MOVER.to_owned(), crate::flashlight::LIGHT.to_owned()]);
+        units.extend([crate::flashlight::MOVER.to_owned(), crate::flashlight::LIGHT.to_owned(), crate::nozzle::MOVER.to_owned()]);
         units.extend(westplay_shared::CHARACTER_PEOPLE.iter().map(|name| format!("mover.{name}")));
         for unit in &units {
             assert!(readable(unit), "{unit}");
@@ -216,7 +256,7 @@ mod tests {
     fn each_persons_converted_files_and_a_mover_per_animation() {
         let dir = std::env::temp_dir().join("westplay_own_character_some");
         let _ = std::fs::remove_dir_all(&dir);
-        let [man, woman, _cowboy] = &PEOPLE;
+        let [man, woman, _cowboy, _hat, _stout, _builder] = &PEOPLE;
         for person in [man, woman] {
             std::fs::create_dir_all(dir.join(person.dir).join("anim")).unwrap();
             std::fs::write(dir.join(person.dir).join(person.model), b"pmd").unwrap();

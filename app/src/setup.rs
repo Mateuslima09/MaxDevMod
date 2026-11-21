@@ -207,16 +207,30 @@ pub async fn setup_state(store: State<'_, SetupStore>) -> Result<SetupState, Str
         let record = inner.record();
         let found = game::find();
         let game = record.game.as_deref().and_then(Game::recognise);
+        let others_games: Vec<Game> =
+            record.other_games.iter().filter_map(|other| Game::recognise(&other.game)).collect();
+        let plugin_differs = !cfg!(debug_assertions)
+            && inner.plugin.as_deref().is_some_and(|ours| {
+                game.as_ref()
+                    .into_iter()
+                    .chain(others_games.iter())
+                    .any(|g| !matches!(plugin::state(g, ours), Ok(plugin::State::Current)))
+            });
+        // Pick whichever configured game actually needs its plugin updated if the primary one is already current.
+        let target_game = if let Some(ours) = inner.plugin.as_deref()
+            && game.as_ref().is_some_and(|g| matches!(plugin::state(g, ours), Ok(plugin::State::Current)))
+            && let Some(outdated_other) =
+                others_games.iter().find(|g| !matches!(plugin::state(g, ours), Ok(plugin::State::Current)))
+        {
+            Some(GameInfo::from(outdated_other))
+        } else {
+            game.as_ref().map(GameInfo::from)
+        };
         Ok(SetupState {
             finished: record.finished,
-            updated: game.is_some() && record.finished && is_update(record.version.as_deref()),
-            game: game.as_ref().map(GameInfo::from),
-            others: record
-                .other_games
-                .iter()
-                .filter_map(|other| Game::recognise(&other.game))
-                .map(|game| GameInfo::from(&game))
-                .collect(),
+            updated: target_game.is_some() && record.finished && (is_update(record.version.as_deref()) || plugin_differs),
+            game: target_game,
+            others: others_games.iter().map(GameInfo::from).collect(),
             found: found.iter().map(GameInfo::from).collect(),
             game_running: game::running(),
             language: onboarding_language(),
@@ -419,7 +433,10 @@ type ModsStamp = (
     usize,
     Vec<(PathBuf, u64, Option<SystemTime>)>,
     game_mod::Split,
+    game_mod::ScreenResolution,
     Vec<(PathBuf, u64, Option<SystemTime>)>,
+    westplay_setup::low_suspension::Level,
+    westplay_setup::low_suspension::Damping,
 );
 
 /// Keeps WestPlay's mod as the installed mods want it: the tablet in every truck with its slots, the game's and its
@@ -445,11 +462,15 @@ pub fn watch_installed_mods(store: &SetupStore) {
 fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
     let record = inner.record();
     let Some(game) = record.game.as_deref().and_then(Game::recognise).filter(|_| record.finished) else { return };
+    let _working = WorkingWith::new(game.kind);
     let Some(ours) = places::westplay_documents().map(|dir| dir.join(game_mod::FILE_NAME)) else { return };
-    // Not set up yet (setup makes it), or the game has it open.
-    if !ours.is_file() || game::running() {
+    // Not set up yet (setup makes it).
+    if !ours.is_file() {
         return;
     }
+    // While the game runs (it has the mod open) it's made all the same, beside it (`game_mod::install`), the plugin
+    // putting it in place as the game starts; and it's the one waiting that's checked.
+    let ours = ours.parent().map_or(ours.clone(), game_mod::upcoming);
     let mods = installed_mod_files(&game);
     let mut stamps: Vec<_> = mods
         .iter()
@@ -466,7 +487,10 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
         game.dlcs.len(),
         stamps,
         game_mod::split(),
+        game_mod::resolution(),
         westplay_setup::own_character::stamp(),
+        westplay_setup::low_suspension::level(),
+        westplay_setup::low_suspension::damping(),
     );
     if looked.as_ref() == Some(&stamp) {
         return;
@@ -475,6 +499,20 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
         Ok(files) => files,
         Err(error) => return log!("setup: the installed mods: the game can't be read: {error}"),
     };
+    // The front lower than the game's (the Suspensão app): its archive beside the mod, as the level now wants it.
+    let version = game.version.map(|version| version.to_string()).unwrap_or_default();
+    if let Some(dir) = ours.parent()
+        && !westplay_setup::low_suspension::current(dir, &version)
+    {
+        match westplay_setup::low_suspension::make(&files, dir, &version) {
+            Ok(count) => log!(
+                "setup: the low suspension archive made ({:?}, dampers {:?}: {count} chassis), for the next start",
+                westplay_setup::low_suspension::level(),
+                westplay_setup::low_suspension::damping()
+            ),
+            Err(error) => log!("setup: the low suspension archive not made: {error}"),
+        }
+    }
     let (mod_trucks, apart) = tablet::mod_trucks_and_marks(&mods);
     // The vehicles the tablet shows nothing in, as the installed mods have them now (the plugin reads them as the
     // truck changes).
@@ -498,11 +536,22 @@ fn look_at_mods(inner: &Inner, looked: &mut Option<ModsStamp>) {
     let layouts_current = game_mod::layouts_current(&ours);
     let found = mod_screens::find(&files, &mods);
     let found_current = mod_screens::current(&found, &ours);
-    // The split screen switched on or off, or to the other side (the companion): the game's map as it wants.
+    // The split screen or resolution switched (the companion): rebuild the mod as it wants.
     let split_current = game_mod::split_current(&ours);
-    if wanted != present || !screens_current || !marks_current || !layouts_current || !found_current || !split_current {
+    let res_current = game_mod::resolution_current(&ours);
+    if wanted != present
+        || !screens_current
+        || !marks_current
+        || !layouts_current
+        || !found_current
+        || !split_current
+        || !res_current
+    {
         if !split_current {
             log!("setup: WestPlay's mod made again for the split screen: {:?}", game_mod::split());
+        }
+        if !res_current {
+            log!("setup: WestPlay's mod made again for screen resolution: {:?}", game_mod::resolution());
         }
         let made =
             game_mod::build_with(&files, &mod_trucks, &screen_mods, &marks, &found).map_err(|error| error.to_string());
@@ -594,10 +643,28 @@ pub async fn install_into_game(
         // Its mod in its own folder, built from its mods.
         let working = WorkingWith::new(game.kind);
         let mod_error = install_mod(&game).err();
-        let plugin = match inner.plugin.as_deref() {
+        let mut plugin = match inner.plugin.as_deref() {
             None => PluginOutcome::Failed { error: "noPlugin".into() },
             Some(ours) => install_plugin(&game, ours, administrator),
         };
+        // Also keep any other configured game's plugin and mod in sync when updating.
+        if matches!(plugin, PluginOutcome::Installed)
+            && let Some(ours) = inner.plugin.as_deref()
+        {
+            for other in inner.record().other_games {
+                if let Some(other_game) = Game::recognise(&other.game) {
+                    let _other_working = WorkingWith::new(other_game.kind);
+                    let _ = install_mod(&other_game);
+                    if !matches!(plugin::state(&other_game, ours), Ok(plugin::State::Current)) {
+                        let outcome = install_plugin(&other_game, ours, administrator);
+                        if !matches!(outcome, PluginOutcome::Installed) {
+                            plugin = outcome;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         let done = mod_error.is_none() && matches!(plugin, PluginOutcome::Installed);
         drop(working);
         if done {

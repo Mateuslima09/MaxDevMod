@@ -14,6 +14,9 @@ export type AppId =
   | 'services'
   | 'character'
   | 'tiktok'
+  | 'suspension'
+  | 'camera'
+  | 'floatScreen'
 
 /**
  * The apps that are the cab's too: their real icons (owner 2026-11-03: "the apps' real logos"), the cab's light
@@ -69,6 +72,47 @@ const STROKE = {
 } as const
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  // The reversing camera (owner 2026-11-20: "make an app for it"): a camera, and the reverse arrow under it.
+  // MaxDevMod's floating screen in the cab (owner 2026-11-20): a screen on a stand, its picture in red.
+  floatScreen: (
+    <>
+      <rect x="3" y="4.5" width="18" height="11" rx="2" fill="none" stroke="#ffffff" strokeWidth={1.8} />
+      <rect x="5.5" y="7" width="13" height="6" rx="1" fill="#ff453a" />
+      <path d="M12 15.5v3.5M8 19.5h8" {...STROKE} stroke="#ffffff" strokeWidth={1.8} />
+    </>
+  ),
+  camera: (
+    <>
+      <rect x="3" y="5.5" width="13" height="9" rx="2" fill="none" stroke="#ffffff" strokeWidth={1.8} />
+      <path d="M16 8.5 21 6v8l-5-2.5Z" fill="#ffffff" />
+      <circle cx="9.5" cy="10" r="2.2" fill="#ffd60a" />
+      <path d="M17 19.5H7m0 0 2.5-2.3M7 19.5l2.5 2.3" {...STROKE} stroke="#ffd60a" strokeWidth={1.8} />
+    </>
+  ),
+  // A coilover (owner 2026-11-19: "a real suspension, with the spring red"): the shock in grey, its spring around it
+  // in red, the coils behind it darker.
+  suspension: (
+    <>
+      <circle cx="12" cy="2.9" r="1.5" fill="none" stroke="#d1d1d6" strokeWidth={1.2} />
+      <circle cx="12" cy="21.1" r="1.5" fill="none" stroke="#d1d1d6" strokeWidth={1.2} />
+      <rect x="11.2" y="4.2" width="1.6" height="7" fill="#e5e5ea" />
+      <rect x="9.7" y="10.4" width="4.6" height="9.4" rx="1.1" fill="#8e8e93" />
+      <path
+        d="M16.5 7.95 7.5 9.3M16.5 10.65 7.5 12M16.5 13.35 7.5 14.7M16.5 16.05 7.5 17.4"
+        {...STROKE}
+        stroke="#a3171f"
+        strokeWidth={1.5}
+      />
+      <path
+        d="M7.5 6.6 16.5 7.95M7.5 9.3 16.5 10.65M7.5 12 16.5 13.35M7.5 14.7 16.5 16.05"
+        {...STROKE}
+        stroke="#ff3b30"
+        strokeWidth={1.7}
+      />
+      <rect x="6.2" y="4.6" width="11.6" height="1.5" rx="0.6" fill="#d1d1d6" />
+      <rect x="6.2" y="17.8" width="11.6" height="1.5" rx="0.6" fill="#d1d1d6" />
+    </>
+  ),
   tiktok: (
     <path d="M19.3 6.4a4.8 4.8 0 0 1-3.5-4v-.4h-3.4v13.7a2.9 2.9 0 1 1-3.9-2.7c.3 0 .7.1 1 .2v-3.5a6.4 6.4 0 0 0-1-.1 6.3 6.3 0 0 0-6.3 6.3c0 3.5 2.8 6.3 6.3 6.3a6.3 6.3 0 0 0 6.3-6.3V9a8.2 8.2 0 0 0 4.8 1.5V7a4.8 4.8 0 0 1-.3-.6Z" />
   ),

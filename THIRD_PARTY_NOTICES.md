@@ -234,3 +234,14 @@ game's model format and turned landscape (`tools/dev/tablet_model.py`); its grou
 picture left out; its parts coloured from one small texture; WestPlay's screen shown on its glass, and a stand
 and a hanging bar added (`crates/setup/src/tablet.rs`). The tablet's model descriptor is laid out as Kedi739's
 tablet mod's was, used with his permission.
+
+## The coupling's sounds
+
+The sounds of the fifth wheel's lock and of the trailer legs' crank (`ui/public/sounds`), chosen by the owner
+(2026-11-19):
+
+- `desengate.mp3`: "Pin popping a balloon, sudden sharp burst", made with ElevenLabs' sound effects
+  (<https://elevenlabs.io>), under the terms of the owner's ElevenLabs plan. Only its pop is played.
+- `catraca.mp3`: "close the utility knife blade" by spinopel, from Pixabay
+  (<https://pixabay.com/sound-effects/close-the-utility-knife-blade-345734/>), under the Pixabay Content License
+  (<https://pixabay.com/service/license-summary/>). Played a click at a time, as a ratchet.

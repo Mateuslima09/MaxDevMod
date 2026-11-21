@@ -234,6 +234,9 @@ pub struct OffscreenWebView {
     pub version: String,
     /// Also given every message posted to the page (`set_mirror`): the cab's, for the player's phones.
     mirror: RefCell<Option<Box<dyn Fn(&str)>>>,
+    /// Whether it's to show (`show`), and whether it's put away meanwhile (`cover`): shown only if both say so.
+    wanted: Cell<bool>,
+    covered: Cell<bool>,
 }
 
 impl OffscreenWebView {
@@ -373,6 +376,8 @@ impl OffscreenWebView {
             failure,
             version,
             mirror: RefCell::new(None),
+            wanted: Cell::new(true),
+            covered: Cell::new(false),
         })
     }
 
@@ -552,7 +557,18 @@ impl OffscreenWebView {
 
     /// Whether the WebView shows on the stage (hidden, its page runs on: a video still plays its sound).
     pub fn show(&self, shown: bool) -> windows::core::Result<()> {
-        self.root.SetIsVisible(shown)
+        self.wanted.set(shown);
+        self.root.SetIsVisible(shown && !self.covered.get())
+    }
+
+    /// Put away while `covered`, whatever it was told to (`show`), and as it was told after: a video's picture
+    /// under the page while the reversing camera shows (owner 2026-11-18: with YouTube playing, the camera showed
+    /// its guide lines only, the video's picture over it).
+    pub fn cover(&self, covered: bool) -> windows::core::Result<()> {
+        if self.covered.replace(covered) == covered {
+            return Ok(());
+        }
+        self.root.SetIsVisible(self.wanted.get() && !covered)
     }
 
     /// What shows where the page draws nothing, in place of nothing at all (the game's picture through it): a

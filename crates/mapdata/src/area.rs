@@ -123,6 +123,9 @@ pub struct Export {
     pub labels: Vec<Label>,
     pub destinations: Vec<Destination>,
     pub counts: Counts,
+    /// Every fuel pump: where the game fills the tank (its green icon), shown on the map or not (for refuelling
+    /// by hand, beside the tiles as `pumps.json`).
+    pub pumps: Vec<Point>,
     /// Every shown junction whose drawn road splits at a point inside it ([`CentreFork`]): its model's
     /// path and where (an audit of how junctions are drawn).
     pub centre_forks: Vec<(String, Point)>,
@@ -221,6 +224,7 @@ pub fn export(
     // The places overlays mark, and those prefabs do (an overlay may mark one a prefab already has).
     let mut overlay_places: Vec<(Place, Point)> = Vec::new();
     let mut prefab_places_at: Vec<(Place, Point)> = Vec::new();
+    let mut pumps: Vec<Point> = Vec::new();
     // Rest areas made of roads and models, marked only by their rest triggers: each trigger's middle.
     let mut rest_triggers: Vec<Point> = Vec::new();
     // Where the player can be routed: each place as found (its kind, name, where, and the junction it's
@@ -429,6 +433,14 @@ pub fn export(
                                 counts.prefab_areas += 1;
                             }
                         }
+                        // Every pump of its own, hidden or not: the game fills the tank there all the same.
+                        pumps.extend(
+                            prefab
+                                .spawn_points
+                                .iter()
+                                .filter(|point| point.kind == SpawnKind::Fuel)
+                                .map(|point| placement.place(point.position)),
+                        );
                         if shown {
                             let path = definitions.prefab_paths.get(model).map_or("", String::as_str);
                             for (place, at) in prefab_places(prefab, is_hotel(path)) {
@@ -776,7 +788,7 @@ pub fn export(
     let destinations = one_each(destinations);
     progress(1.0);
     counts.destinations = destinations.len();
-    Some(Export { features, labels, destinations, counts, centre_forks, water_area, sea: grid })
+    Some(Export { features, labels, destinations, counts, pumps, centre_forks, water_area, sea: grid })
 }
 
 /// A point with its height: x, height (the game's y), z.

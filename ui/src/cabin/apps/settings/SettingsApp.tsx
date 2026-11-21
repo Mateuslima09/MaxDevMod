@@ -6,7 +6,14 @@ import { useWallpapers } from '../../state/looks'
 import { pickVariant, prepareWallpaper } from '../../wallpapers'
 import { type Appearance, resolveAppearance } from '../../state/appearance'
 import { useLook, useScreenFit, useScreenProfile } from '../../state/hooks'
-import { type FitEdge, FIT_LIMITS, isFitted, useScreenFits } from '../../state/screenFit'
+import {
+  activeFitPreset,
+  type FitEdge,
+  FIT_LIMITS,
+  isFitted,
+  SCREEN_FIT_PRESETS,
+  useScreenFits,
+} from '../../state/screenFit'
 import { DASHBOARD_WIDGETS, type DashboardWidget, useCabin, useLive } from '../../state/store'
 import { useText } from '../../state/text'
 import { TEXT_SIZES } from '../../state/textSize'
@@ -16,13 +23,24 @@ import {
   ChevronGlyph,
   DashboardGlyph,
   NowPlayingGlyph,
+  ReversingGlyph,
   ScreenFitGlyph,
   SoundGlyph,
   WallpaperGlyph,
 } from './glyphs'
 import { type SettingsPage, useSettings } from './settings'
+import { beeper } from '../../reversing/beeper'
+import { BEEP_VOLUMES, useReversingSettings } from '../../reversing/settings'
 import './settings.css'
-import { cabClock, EQUALIZER_BANDS, EQUALIZER_MOST, type Equalizer, isInHost, postToHost } from '../../../shared/host'
+import {
+  cabClock,
+  EQUALIZER_BANDS,
+  EQUALIZER_MOST,
+  type Equalizer,
+  isInHost,
+  postToHost,
+  type ScreenResolution,
+} from '../../../shared/host'
 
 /**
  * The Settings app, in iOS 26's Settings look: a large title, inset grouped cards, coloured tiles, chevrons
@@ -66,6 +84,8 @@ function PageContent({ page }: { page: SettingsPage }) {
       return <TextSizePage />
     case 'screenFit':
       return <ScreenFitPage />
+    case 'reversing':
+      return <ReversingPage />
   }
 }
 
@@ -120,6 +140,12 @@ function ListPage() {
           label={text.settings.sound}
           onOpen={() => open('sound')}
         />
+        <NavRow
+          tile="var(--apple-orange)"
+          icon={<ReversingGlyph />}
+          label={text.reversing.title}
+          onOpen={() => open('reversing')}
+        />
       </Group>
       <Group>
         <NavRow
@@ -142,10 +168,33 @@ function ScreenFitPage() {
   const { key, fit } = useScreenFit()
   const change = useScreenFits((state) => state.change)
   const reset = useScreenFits((state) => state.reset)
+  const resolution = useCabin((state) => state.screenResolution)
+  const chooseResolution = useCabin((state) => state.chooseScreenResolution)
   const words = text.settings
+  const resolutionTiers: readonly ScreenResolution[] = ['high', 'ultra', 'standard', 'gameDefault']
+  const resolutionGroup = (
+    <Group header={words.resolution.title} footer={words.resolution.footer}>
+      {resolutionTiers.map((tier) => {
+        const on = resolution === tier
+        return (
+          <button
+            key={tier}
+            type="button"
+            className="settings-row"
+            aria-pressed={on}
+            onClick={() => chooseResolution(tier)}
+          >
+            <span className="settings-label">{words.resolution[tier]}</span>
+            <span className={on ? 'settings-radio on' : 'settings-radio'}>{on && <CheckGlyph />}</span>
+          </button>
+        )
+      })}
+    </Group>
+  )
   if (key === null) {
     return (
       <Page title={words.screenFit}>
+        {resolutionGroup}
         <p className="text-size-about">{words.screenFitNone}</p>
       </Page>
     )
@@ -157,8 +206,27 @@ function ScreenFitPage() {
     ['right', words.edgeRight],
   ]
   const percent = (value: number) => `${Math.round(value * 1000) / 10}%`
+  const activePreset = activeFitPreset(fit)
   return (
     <Page title={words.screenFit}>
+      {resolutionGroup}
+      <Group header={words.fitPresets.title} footer={words.fitPresets.footer}>
+        {SCREEN_FIT_PRESETS.map((preset) => {
+          const on = activePreset === preset.id
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              className="settings-row"
+              aria-pressed={on}
+              onClick={() => (preset.id === 'auto' ? reset(key) : change(key, preset.fit))}
+            >
+              <span className="settings-label">{words.fitPresets[preset.id]}</span>
+              <span className={on ? 'settings-radio on' : 'settings-radio'}>{on && <CheckGlyph />}</span>
+            </button>
+          )
+        })}
+      </Group>
       <Group header={words.edges} footer={words.screenFitFooter}>
         {edges.map(([edge, label]) => (
           <FitSlider
@@ -476,6 +544,102 @@ function DashboardPage() {
         ))}
       </Group>
     </Page>
+  )
+}
+
+/** The reversing camera (cabin/reversing): shown when reversing, its sensors' beeps, its guide lines. */
+function ReversingPage() {
+  const text = useText()
+  const words = text.reversing
+  const { camera, beeps, guides, set } = useReversingSettings()
+  return (
+    <Page title={words.title}>
+      <Group footer={words.showCameraNote}>
+        <SwitchRow label={words.showCamera} on={camera} onToggle={(on) => set({ camera: on })} />
+      </Group>
+      <Group>
+        <SwitchRow label={words.beeps} on={beeps} onToggle={(on) => set({ beeps: on })} />
+        {beeps && <BeepVolumeSlider />}
+        <SwitchRow label={words.guides} on={guides} onToggle={(on) => set({ guides: on })} />
+      </Group>
+    </Page>
+  )
+}
+
+/** The beeps' volume (owner 2026-11-14): Text Size's slider, a speaker at each end, a beep played at each step. */
+function BeepVolumeSlider() {
+  const text = useText()
+  const step = useReversingSettings((state) => state.beepVolume)
+  const set = useReversingSettings((state) => state.set)
+  const track = useRef<HTMLDivElement>(null)
+  const [held, setHeld] = useState<number | null>(null)
+  const last = BEEP_VOLUMES.length - 1
+  const choose = (next: number) => {
+    if (next === step) return
+    set({ beepVolume: next })
+    beeper.setVolume(BEEP_VOLUMES[next])
+    beeper.sample()
+  }
+  const follow = (event: PointerEvent) => {
+    const box = track.current?.getBoundingClientRect()
+    if (!box || box.width === 0) return
+    const along = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width))
+    setHeld(along)
+    choose(Math.round(along * last))
+  }
+  const at = (index: number) => `${(index / last) * 100}%`
+  return (
+    <div className="text-size-row beep-volume-row">
+      <span className="text-size-a small" aria-hidden>
+        <VolumeGlyph loud={false} />
+      </span>
+      <div
+        ref={track}
+        className={held === null ? 'text-size-track' : 'text-size-track dragging'}
+        data-own-drag
+        role="slider"
+        aria-label={text.reversing.beepVolume}
+        aria-valuemin={0}
+        aria-valuemax={last}
+        aria-valuenow={step}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId)
+          follow(event)
+        }}
+        onPointerMove={(event) => held !== null && follow(event)}
+        onPointerUp={() => setHeld(null)}
+        onPointerCancel={() => setHeld(null)}
+      >
+        <span className="text-size-line" />
+        {BEEP_VOLUMES.map((_, index) => (
+          <span key={index} className="text-size-tick" style={{ left: at(index) }} />
+        ))}
+        <span className="text-size-thumb" style={{ left: held === null ? at(step) : `${held * 100}%` }} />
+      </div>
+      <span className="text-size-a large" aria-hidden>
+        <VolumeGlyph loud />
+      </span>
+    </div>
+  )
+}
+
+function VolumeGlyph({ loud }: { loud: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={loud ? 24 : 18}
+      height={loud ? 24 : 18}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4Z" fill="currentColor" strokeLinejoin="round" />
+      {loud ? (
+        <path d="M15.5 9a4.2 4.2 0 0 1 0 6m2.6-8.6a8 8 0 0 1 0 11.2" strokeLinecap="round" />
+      ) : (
+        <path d="M15.5 10a2.8 2.8 0 0 1 0 4" strokeLinecap="round" />
+      )}
+    </svg>
   )
 }
 

@@ -1,6 +1,6 @@
 /**
  * The phone pages on the player's home screen (owner 2026-11-03): their web app manifest, served by the host with
- * the key (crates/host remote.rs `manifest`), so the app opens connected, with WestPlay's W (public/icons/app) and
+ * the key (crates/host remote.rs `manifest`), so the app opens connected, with MaxDevMod's W (public/icons/app) and
  * a name telling the panel from the phone in the game. The page's words in English, Portuguese and Turkish, as the
  * companion's QR codes are (companion/pages/ScreenPage.tsx PHONE_WORDS).
  */
@@ -8,9 +8,9 @@
 type Page = 'phone' | 'handset'
 
 const NAMES: Record<'en' | 'pt' | 'tr', Record<Page, { name: string; short: string }>> = {
-  en: { phone: { name: 'WestPlay Panel', short: 'Panel' }, handset: { name: 'WestPlay Phone', short: 'Phone' } },
-  pt: { phone: { name: 'Painel WestPlay', short: 'Painel' }, handset: { name: 'Celular WestPlay', short: 'Celular' } },
-  tr: { phone: { name: 'WestPlay Panel', short: 'Panel' }, handset: { name: 'WestPlay Telefon', short: 'Telefon' } },
+  en: { phone: { name: 'MaxDevMod Panel', short: 'Panel' }, handset: { name: 'MaxDevMod Phone', short: 'Phone' } },
+  pt: { phone: { name: 'Painel MaxDevMod', short: 'Painel' }, handset: { name: 'Celular MaxDevMod', short: 'Celular' } },
+  tr: { phone: { name: 'MaxDevMod Panel', short: 'Panel' }, handset: { name: 'MaxDevMod Telefon', short: 'Telefon' } },
 }
 
 /** Puts the page's manifest and home-screen name in place, once the key is known. */

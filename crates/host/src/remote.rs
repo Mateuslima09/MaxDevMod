@@ -16,9 +16,13 @@
 //! WebSocket is refused without it. The key is kept in WestPlay's data folder, so a phone that saved the page
 //! goes on working. The UI and the maps are served to anyone on the network who asks: neither is the player's
 //! own data.
+//!
+//! The wheel page (`wheel.html`, owner 2026-11-19: the player's phone as a steering wheel, wheel.rs) is served at
+//! [`TLS_PORT`] too, over HTTPS (a browser gives the gyroscope to HTTPS pages only); its WebSocket
+//! (`/ws?k=…&wheel=1`) is heard alone, written straight to the bridge, and sent none of the cab's messages.
 
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
@@ -26,10 +30,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tungstenite::Message;
+use westplay_shared::BridgeMapping;
+
+use crate::wheel::{self, Wheel};
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
 
 /// The port the phone page is served at: fixed, so the address the phone saved stays the same.
 pub const PORT: u16 = 47800;
+/// The port the same pages are served at over HTTPS (the wheel page's, for the gyroscope).
+pub const TLS_PORT: u16 = 47801;
 
 /// Host messages the phone isn't sent: the cab's screen, its cursor, its keyboard and the player's keybinds (the
 /// cab page acts on those; the phone acting too would act twice), the companion's switch, and the Equalizer's
@@ -57,6 +66,21 @@ const PAGE_MESSAGES: &[&str] = &[
     "screenFit",
     "walletClear",
     "characterPerson",
+    // The phones' Settings switches (owner 2026-11-18: the virtual mirrors' choice didn't change; the Modo
+    // Personagem's switches weren't let through either).
+    "freightPapers",
+    "manualRefuel",
+    "payAttendant",
+    "virtualMirrors",
+    "suspensionAutoReset",
+    "suspensionLowFront",
+    "suspensionDamping",
+    "cursorSize",
+    "suspensionAuto",
+    // The reversing camera moved by hand, from the phones too (owner 2026-11-20).
+    "cameraNudge",
+    // MaxDevMod's floating screen in the cab, switched and moved from the phones (owner 2026-11-20).
+    "floatScreen",
 ];
 /// Messages the host only passes on to the pages, the cab's and the phones' (mirrored): Adjust Screen's, a phone's
 /// change for the cab's page, and the cab's fit for the phones (owner 2026-11-02: the screen fitted from the phone
@@ -79,16 +103,27 @@ pub struct Remote {
     /// address and QR code as the panel's.
     pub handset_url: Option<String>,
     pub handset_qr: Option<String>,
+    /// The wheel page (owner 2026-11-19: the player's phone as a steering wheel), over HTTPS, as the panel's.
+    pub wheel_url: Option<String>,
+    pub wheel_qr: Option<String>,
 }
 
 impl Remote {
     /// Starts serving: the phone page from `ui` (the cabin's built UI folder; `None`: none, so no page) and the
     /// maps from `maps`, the key kept in `data_dir`. A port in use or no network leaves it off (logged).
-    pub fn start(ui: Option<PathBuf>, maps: PathBuf, data_dir: &Path) -> Self {
+    pub fn start(ui: Option<PathBuf>, maps: PathBuf, data_dir: &Path, bridge: Arc<BridgeMapping>) -> Self {
         let phones = Arc::new(Mutex::new(Vec::new()));
         let incoming = Arc::new(Mutex::new(VecDeque::new()));
-        let off =
-            |phones, incoming| Self { phones, incoming, url: None, qr: None, handset_url: None, handset_qr: None };
+        let off = |phones, incoming| Self {
+            phones,
+            incoming,
+            url: None,
+            qr: None,
+            handset_url: None,
+            handset_qr: None,
+            wheel_url: None,
+            wheel_qr: None,
+        };
         let key = key(data_dir);
         let listener = match TcpListener::bind(("0.0.0.0", PORT)) {
             Ok(listener) => listener,
@@ -97,7 +132,41 @@ impl Remote {
                 return off(phones, incoming);
             }
         };
-        let served = Served { ui, maps, key: key.clone(), phones: phones.clone(), incoming: incoming.clone() };
+        let served = Served {
+            ui,
+            maps,
+            key: key.clone(),
+            phones: phones.clone(),
+            incoming: incoming.clone(),
+            wheel: Some(Wheel::start(bridge)),
+            authority: None,
+        };
+        let address = local_address();
+        // The same pages over HTTPS, for the wheel page's gyroscope (wheel.rs).
+        let tls = address.and_then(|address| wheel::tls_config(data_dir, address));
+        let tls_served = Served { authority: wheel::authority(data_dir), ..served.clone() };
+        let served = Served { authority: tls_served.authority.clone(), ..served };
+        let tls_listening = tls.and_then(|tls| match TcpListener::bind(("0.0.0.0", TLS_PORT)) {
+            Ok(listener) => Some((listener, tls)),
+            Err(error) => {
+                log!("[phone] couldn't serve HTTPS at port {TLS_PORT}: {error}");
+                None
+            }
+        });
+        let tls_on = tls_listening.is_some();
+        if let Some((listener, tls)) = tls_listening {
+            let served = tls_served;
+            let _ = std::thread::Builder::new().name("westplay-phone-tls".into()).spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    let (served, tls) = (served.clone(), tls.clone());
+                    let _ = std::thread::Builder::new().name("westplay-phone-client".into()).spawn(move || {
+                        if let Err(error) = served.answer_tls(stream, tls) {
+                            log!("[phone] https: {error}");
+                        }
+                    });
+                }
+            });
+        }
         let started = std::thread::Builder::new().name("westplay-phone".into()).spawn(move || {
             for stream in listener.incoming().flatten() {
                 let served = served.clone();
@@ -112,16 +181,22 @@ impl Remote {
             log!("[phone] couldn't start serving: {error}");
             return off(phones, incoming);
         }
-        let Some(address) = local_address() else {
+        let Some(address) = address else {
             log!("[phone] serving at port {PORT}, but the PC's network address isn't known");
             return off(phones, incoming);
         };
         let url = format!("http://{address}:{PORT}/phone.html#{key}");
         log!("[phone] serving at http://{address}:{PORT}/phone.html");
         let handset_url = format!("http://{address}:{PORT}/handset.html#{key}");
+        let wheel_url = tls_on.then(|| format!("https://{address}:{TLS_PORT}/wheel.html#{key}"));
+        if tls_on {
+            log!("[phone] the wheel page at https://{address}:{TLS_PORT}/wheel.html");
+        }
         Self {
             phones,
             incoming,
+            wheel_qr: wheel_url.as_deref().and_then(qr_of),
+            wheel_url,
             qr: qr_of(&url),
             url: Some(url),
             handset_qr: qr_of(&handset_url),
@@ -163,6 +238,62 @@ struct Served {
     key: String,
     phones: Arc<Mutex<Vec<Sender<Arc<str>>>>>,
     incoming: Arc<Mutex<VecDeque<String>>>,
+    /// The phone wheel (wheel.rs); `None` in tests.
+    wheel: Option<Arc<Wheel>>,
+    /// The HTTPS certificate's authority (DER), for a phone to install (`/volante.cer`).
+    authority: Option<Vec<u8>>,
+}
+
+/// A connection: plain, or HTTPS, with the TCP stream under it (for its timeouts and its peer).
+trait Connection: Read + Write {
+    fn tcp(&self) -> &TcpStream;
+}
+
+impl Connection for TcpStream {
+    fn tcp(&self) -> &TcpStream {
+        self
+    }
+}
+
+type Tls = rustls::StreamOwned<rustls::ServerConnection, TcpStream>;
+
+/// An HTTPS connection whose request head was read already (to tell a WebSocket from a file), given again first.
+struct Replayed {
+    head: Vec<u8>,
+    at: usize,
+    tls: Tls,
+}
+
+impl Read for Replayed {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.at < self.head.len() {
+            let n = buf.len().min(self.head.len() - self.at);
+            buf[..n].copy_from_slice(&self.head[self.at..self.at + n]);
+            self.at += n;
+            return Ok(n);
+        }
+        self.tls.read(buf)
+    }
+}
+
+impl Write for Replayed {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.tls.write(buf)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.tls.flush()
+    }
+}
+
+impl Connection for Replayed {
+    fn tcp(&self) -> &TcpStream {
+        &self.tls.sock
+    }
+}
+
+/// Whether a request's target is a WebSocket's (`/ws`).
+fn is_socket(head: &[u8]) -> bool {
+    String::from_utf8_lossy(head).split_whitespace().nth(1).unwrap_or("/").starts_with("/ws")
 }
 
 impl Served {
@@ -171,17 +302,40 @@ impl Served {
         stream.set_read_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
         let mut head = [0u8; 512];
         let peeked = stream.peek(&mut head).map_err(|e| e.to_string())?;
-        let first = String::from_utf8_lossy(&head[..peeked]);
-        let path = first.split_whitespace().nth(1).unwrap_or("/").to_owned();
-        if path.starts_with("/ws") { self.phone(stream) } else { self.file(stream) }
+        if is_socket(&head[..peeked]) { self.phone(stream) } else { self.file(stream) }
     }
 
-    /// A phone's WebSocket: refused without the key; then the host's messages out to it, and its own in.
-    fn phone(&self, stream: TcpStream) -> Result<(), String> {
+    /// Answers one HTTPS connection (`TLS_PORT`): as [`Served::answer`], once the TLS is through.
+    fn answer_tls(&self, stream: TcpStream, tls: Arc<rustls::ServerConfig>) -> Result<(), String> {
+        stream.set_read_timeout(Some(Duration::from_secs(10))).map_err(|e| e.to_string())?;
+        let _ = stream.set_nodelay(true);
+        let connection = rustls::ServerConnection::new(tls).map_err(|e| e.to_string())?;
+        let mut tls = rustls::StreamOwned::new(connection, stream);
+        // The request's head, up to its blank line (a phone's browser refusing the certificate ends here).
+        let mut head = Vec::with_capacity(1024);
+        let mut chunk = [0u8; 1024];
+        while !head.windows(4).any(|end| end == b"\r\n\r\n") && head.len() < 16 * 1024 {
+            match tls.read(&mut chunk) {
+                Ok(0) => return Ok(()),
+                Ok(n) => head.extend_from_slice(&chunk[..n]),
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        let socket = is_socket(&head);
+        let replayed = Replayed { head, at: 0, tls };
+        if socket { self.phone(replayed) } else { self.file(replayed) }
+    }
+
+    /// A phone's WebSocket: refused without the key; then the host's messages out to it, and its own in. The wheel
+    /// page's (`wheel=1`) is the wheel's alone ([`Served::wheel`]).
+    fn phone<S: Connection>(&self, stream: S) -> Result<(), String> {
         let key = self.key.clone();
+        let wheel_page = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let is_wheel = wheel_page.clone();
         let check = move |request: &Request, response: Response| -> Result<Response, ErrorResponse> {
             let query = request.uri().query().unwrap_or_default();
             if query.split('&').any(|pair| pair == format!("k={key}")) {
+                is_wheel.store(query.split('&').any(|pair| pair == "wheel=1"), std::sync::atomic::Ordering::Relaxed);
                 Ok(response)
             } else {
                 let mut refused = ErrorResponse::new(Some("wrong key".into()));
@@ -190,9 +344,14 @@ impl Served {
             }
         };
         let mut socket = tungstenite::accept_hdr(stream, check).map_err(|e| format!("a phone refused: {e}"))?;
-        let peer = socket.get_ref().peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
+        let peer = socket.get_ref().tcp().peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
+        if wheel_page.load(std::sync::atomic::Ordering::Relaxed)
+            && let Some(wheel) = &self.wheel
+        {
+            return self.wheel(socket, wheel, &peer);
+        }
         log!("[phone] {peer} connected");
-        socket.get_ref().set_read_timeout(Some(Duration::from_millis(20))).map_err(|e| e.to_string())?;
+        socket.get_ref().tcp().set_read_timeout(Some(Duration::from_millis(20))).map_err(|e| e.to_string())?;
         let (to_phone, outgoing): (Sender<Arc<str>>, Receiver<Arc<str>>) = channel();
         self.phones.lock().map_err(|_| "poisoned")?.push(to_phone);
         let result = loop {
@@ -232,9 +391,66 @@ impl Served {
         Ok(())
     }
 
+    /// The wheel page's WebSocket: each value it sends written to the bridge as it comes (`w …`, wheel.rs), and its
+    /// pings (`p …`) answered at once (`P …`: how long the way there and back takes, for the page to show).
+    fn wheel<S: Connection>(
+        &self,
+        mut socket: tungstenite::WebSocket<S>,
+        wheel: &Wheel,
+        peer: &str,
+    ) -> Result<(), String> {
+        let _ = socket.get_ref().tcp().set_nodelay(true);
+        socket.get_ref().tcp().set_read_timeout(Some(Duration::from_millis(50))).map_err(|e| e.to_string())?;
+        let me = wheel.connection();
+        log!("[wheel] {peer} connected");
+        let mut told: Option<(String, std::time::Instant)> = None;
+        let result = loop {
+            // The truck's state for its buttons (the engine, the gear): when it changes, and once a second anyway.
+            if let Some(state) = wheel.state()
+                && told.as_ref().is_none_or(|(said, at)| *said != state || at.elapsed() >= Duration::from_secs(1))
+            {
+                if let Err(error) = socket.send(Message::text(state.clone())) {
+                    break Err(error);
+                }
+                told = Some((state, std::time::Instant::now()));
+            }
+            match socket.read() {
+                Ok(Message::Text(text)) => {
+                    let text = text.as_str();
+                    if let Some((values, absolute)) = wheel::parse(text) {
+                        wheel.set(me, values, absolute);
+                    } else if let Some(ping) = text.strip_prefix("p ") {
+                        let pong: String = ping.chars().take(32).collect();
+                        if let Err(error) = socket.send(Message::text(format!("P {pong}"))) {
+                            break Err(error);
+                        }
+                    } else if text == "0" {
+                        wheel.gone(me);
+                    } else if message_type(text) == "truckCommand" && allowed(text) {
+                        // Its buttons' (the engine, the gears): as the phones' Commands app's.
+                        if let Ok(mut incoming) = self.incoming.lock() {
+                            if incoming.len() >= MOST_WAITING {
+                                incoming.pop_front();
+                            }
+                            incoming.push_back(text.to_owned());
+                        }
+                    }
+                }
+                Ok(Message::Close(_)) => break Ok(()),
+                Ok(_) => {}
+                Err(tungstenite::Error::Io(error))
+                    if matches!(error.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                Err(error) => break Err(error),
+            }
+        };
+        wheel.gone(me);
+        log!("[wheel] {peer} gone{}", result.err().map(|e| format!(": {e}")).unwrap_or_default());
+        Ok(())
+    }
+
     /// A file: the phone page and its UI (`/`, `/phone.html`, `/assets/…`), or a map's (`/maps/…`).
-    fn file(&self, mut stream: TcpStream) -> Result<(), String> {
-        let mut reader = BufReader::new(stream.try_clone().map_err(|e| e.to_string())?);
+    fn file<S: Read + Write>(&self, stream: S) -> Result<(), String> {
+        let mut reader = BufReader::new(stream);
         let mut line = String::new();
         reader.read_line(&mut line).map_err(|e| e.to_string())?;
         // The rest of the request's head, read and dropped.
@@ -250,6 +466,8 @@ impl Served {
             None
         } else if path == "/app.webmanifest" {
             self.manifest(query).map(|json| ("application/manifest+json", json.into_bytes()))
+        } else if path == "/volante.cer" {
+            self.authority.clone().map(|der| ("application/x-x509-ca-cert", der))
         } else {
             let found = if let Some(rest) = path.strip_prefix("/maps/") {
                 inside(&self.maps, rest)
@@ -270,10 +488,12 @@ impl Served {
             ),
             None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned(),
         };
+        let stream = reader.get_mut();
         stream.write_all(head.as_bytes()).map_err(|e| e.to_string())?;
         if let Some((_, bytes)) = body {
             stream.write_all(&bytes).map_err(|e| e.to_string())?;
         }
+        stream.flush().map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -283,11 +503,11 @@ impl Served {
     fn manifest(&self, query: &str) -> Option<String> {
         let given =
             |name: &str| query.split('&').find_map(|pair| pair.strip_prefix(name)?.strip_prefix('=')).map(decode);
-        let page = given("page").filter(|page| page == "phone" || page == "handset")?;
+        let page = given("page").filter(|page| page == "phone" || page == "handset" || page == "wheel")?;
         if given("k").as_deref() != Some(self.key.as_str()) {
             return None;
         }
-        let name: String = given("name").unwrap_or_else(|| "WestPlay".into()).chars().take(40).collect();
+        let name: String = given("name").unwrap_or_else(|| "MaxDevMod".into()).chars().take(40).collect();
         let short: String = given("short").unwrap_or_else(|| name.clone()).chars().take(12).collect();
         Some(
             serde_json::json!({
@@ -296,13 +516,15 @@ impl Served {
                 "short_name": short,
                 "start_url": format!("/{page}.html#{}", self.key),
                 "scope": format!("/{page}.html"),
-                "display": "standalone",
+                // The wheel's in full screen, sideways (owner 2026-11-19: "preencher a tela").
+                "display": if page == "wheel" { "fullscreen" } else { "standalone" },
+                "orientation": if page == "wheel" { "landscape" } else { "any" },
                 "background_color": "#000000",
                 "theme_color": "#000000",
                 "icons": [
-                    { "src": "/icons/app/icon-192.png", "sizes": "192x192", "type": "image/png" },
-                    { "src": "/icons/app/icon-512.png", "sizes": "512x512", "type": "image/png" },
-                    { "src": "/icons/app/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+                    { "src": "/icons/app/maxdevmod-192.png", "sizes": "192x192", "type": "image/png" },
+                    { "src": "/icons/app/maxdevmod-512.png", "sizes": "512x512", "type": "image/png" },
+                    { "src": "/icons/app/maxdevmod-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
                 ],
             })
             .to_string(),
@@ -325,7 +547,7 @@ fn qr_of(url: &str) -> Option<String> {
     })
 }
 
-/// WestPlay's W (assets/logo-flat.svg) on a white tile in the middle of a QR code's SVG: a quarter of its side
+/// MaxDevMod's M emblem (assets/logo-flat.svg) on a white tile in the middle of a QR code's SVG: a quarter of its side
 /// at most, so the code's corner marks stay clear and its error correction covers what the tile hides.
 fn with_logo(svg: &str) -> String {
     let size = svg
@@ -339,9 +561,12 @@ fn with_logo(svg: &str) -> String {
     format!(
         concat!(
             r##"{head}<rect x="{tile_at:.1}" y="{tile_at:.1}" width="{tile:.1}" height="{tile:.1}" rx="{round:.1}" fill="#ffffff"/>"##,
-            r##"<svg x="{logo_at:.1}" y="{logo_at:.1}" width="{logo:.1}" height="{logo:.1}" viewBox="48 48 927 927" shape-rendering="geometricPrecision">"##,
-            r##"<rect x="48" y="48" width="927" height="927" rx="220" fill="#232323"/>"##,
-            r##"<polyline points="250,330 380,700 512,470 645,700 775,330" fill="none" stroke="#3fc066" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"/>"##,
+            r##"<svg x="{logo_at:.1}" y="{logo_at:.1}" width="{logo:.1}" height="{logo:.1}" viewBox="48 48 928 928" shape-rendering="geometricPrecision">"##,
+            r##"<rect x="48" y="48" width="928" height="928" rx="212" fill="#101010"/>"##,
+            r##"<path d="M292,500 L264,462 L294,410 L342,418 A206,206 0 0,1 384,380 L374,332 L430,308 L462,346 A206,206 0 0,1 516,338 L536,292 L596,304 L600,354 A206,206 0 0,1 650,382 L694,358 L734,404 L708,448" fill="none" stroke="#AEB4BA" stroke-width="38" stroke-linejoin="round" stroke-linecap="round"/>"##,
+            r##"<path d="M580,316 C750,278 852,326 710,456" fill="none" stroke="#D71920" stroke-width="34" stroke-linecap="round"/>"##,
+            r##"<polygon points="244,664 388,412 496,412 522,542 666,412 770,412 626,664 532,664 612,520 478,642 440,642 420,518 338,664" fill="#FFFFFF"/>"##,
+            r##"<polygon points="666,412 770,412 626,664 532,664" fill="#D71920"/>"##,
             "</svg></svg>",
         ),
         head = &svg[..end],
@@ -454,6 +679,8 @@ mod tests {
     #[test]
     fn a_phone_may_use_the_music_apps_and_maps_but_not_sign_in_nor_youtubes_videos() {
         assert!(allowed(r#"{"type":"ready"}"#));
+        assert!(allowed(r#"{"type":"virtualMirrors","which":"left"}"#));
+        assert!(allowed(r#"{"type":"freightPapers","on":false}"#));
         assert!(allowed(r#"{"type":"spotify","command":{"action":"next"}}"#));
         assert!(allowed(r#"{"type":"youtubeMusic","command":{"action":"volume","percent":40}}"#));
         assert!(allowed(r#"{"type":"appleMusic","command":{"action":"ask","id":1000000001}}"#));
@@ -461,6 +688,7 @@ mod tests {
         assert!(allowed(r#"{"type":"volumeShown","volume":0.4}"#));
         assert!(allowed(r#"{"type":"youtube","command":{"action":"pause"}}"#));
         assert!(allowed(r#"{"type":"walletClear"}"#));
+        assert!(allowed(r#"{"type":"cameraNudge","action":"back"}"#));
         assert!(!allowed(r#"{"type":"spotify","command":{"action":"signOut"}}"#));
         assert!(!allowed(r#"{"type":"youtubeMusic","command":{"action":"show","x":0}}"#));
         assert!(!allowed(r#"{"type":"youtube","command":{"action":"load","video":"x"}}"#));
@@ -509,10 +737,10 @@ mod tests {
     }
 
     #[test]
-    fn its_qr_codes_carry_the_w_in_their_middle() {
+    fn its_qr_codes_carry_the_m_in_their_middle() {
         let svg = qr_of("http://192.168.0.10:39217/#0123456789abcdef0123456789abcdef").unwrap();
         assert!(svg.ends_with("</svg></svg>"));
-        assert!(svg.contains(r##"stroke="#3fc066""##));
+        assert!(svg.contains(r##"fill="#D71920""##));
         assert_eq!(with_logo("not an svg"), "not an svg");
     }
 
@@ -524,13 +752,19 @@ mod tests {
             key: "k3y".into(),
             phones: Default::default(),
             incoming: Default::default(),
+            wheel: None,
+            authority: None,
         };
-        let manifest = served.manifest("page=handset&k=k3y&name=Celular%20WestPlay&short=Celular").unwrap();
+        let manifest = served.manifest("page=handset&k=k3y&name=Celular%20MaxDevMod&short=Celular").unwrap();
         let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
         assert_eq!(manifest["start_url"], "/handset.html#k3y");
-        assert_eq!(manifest["name"], "Celular WestPlay");
+        assert_eq!(manifest["name"], "Celular MaxDevMod");
         assert_eq!(manifest["short_name"], "Celular");
-        assert_eq!(manifest["icons"][0]["src"], "/icons/app/icon-192.png");
+        assert_eq!(manifest["icons"][0]["src"], "/icons/app/maxdevmod-192.png");
+        let wheel: serde_json::Value = serde_json::from_str(&served.manifest("page=wheel&k=k3y").unwrap()).unwrap();
+        assert_eq!(wheel["display"], "fullscreen");
+        assert_eq!(wheel["orientation"], "landscape");
+        assert_eq!(manifest["display"], "standalone");
         assert!(served.manifest("page=handset&k=wrong").is_none());
         assert!(served.manifest("page=index&k=k3y").is_none());
     }

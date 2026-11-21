@@ -87,6 +87,19 @@ export function SoundGlyph() {
   )
 }
 
+/** Reversing Camera: a camera, its lens, and the light on top. */
+export function ReversingGlyph() {
+  return (
+    <TileGlyph>
+      <path
+        d="M4.6 7.4h3l1.3-2.1a1 1 0 0 1 .85-.48h4.5a1 1 0 0 1 .85.48l1.3 2.1h3a1.6 1.6 0 0 1 1.6 1.6v8.6a1.6 1.6 0 0 1-1.6 1.6H4.6A1.6 1.6 0 0 1 3 17.6V9a1.6 1.6 0 0 1 1.6-1.6Zm7.4 2.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Z"
+        fillRule="evenodd"
+      />
+      <circle cx="12" cy="13.4" r="1.7" />
+    </TileGlyph>
+  )
+}
+
 /** The chevron after a row that opens a page. */
 export function ChevronGlyph({ back = false }: { back?: boolean }) {
   return (

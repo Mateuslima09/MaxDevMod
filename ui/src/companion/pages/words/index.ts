@@ -1,21 +1,24 @@
 /**
  * The companion's own words, past the onboarding: its sections, their pages, the tutorial and the uninstall,
  * in each of the game's 43 languages (by the game's codes, as the onboarding's words), in the game's language
- * as WestPlay speaks it in the cab; English for a language the game doesn't have. Each language says "you"
+ * as MaxDevMod speaks it in the cab; English for a language the game doesn't have. Each language says "you"
  * as its onboarding does (informally or not) and names things as it does (the truck, the game's Mod Manager).
  * What the onboarding already says (the keys, the sign-ins, the map's stages, the game's summary) is the
  * onboarding's words.
  *
  * The translations other than English and Turkish were written without a native speaker's review yet.
  */
+/** MaxDevMod's own people, by who they are (their cards' names). */
+export type PersonName = 'tattooed' | 'madam' | 'farmer' | 'gunslinger' | 'stout' | 'builder'
+
 export interface CompanionWords {
   sections: Record<SectionId, string>
-  /** The list's line under WestPlay's name: where WestPlay is now. */
+  /** The list's line under MaxDevMod's name: where MaxDevMod is now. */
   state: {
     starting: string
     stopped: string
     noGame: string
-    /** The player's truck isn't one WestPlay shows in. */
+    /** The player's truck isn't one MaxDevMod shows in. */
     unsupported: string
     notInCab: string
     live: string
@@ -64,17 +67,17 @@ export interface CompanionWords {
     truckScreen: string
     /** `{fps}` */
     screenLive: string
-    /** The truck screen's row, in a truck WestPlay doesn't show in. */
+    /** The truck screen's row, in a truck MaxDevMod doesn't show in. */
     screenUnsupported: string
     screenNotInView: string
-    /** The graphics card the screen is drawn on (its group is titled with `about.gpu`): WestPlay's pick, or
+    /** The graphics card the screen is drawn on (its group is titled with `about.gpu`): MaxDevMod's pick, or
      * one the player chose. */
     gpuAuto: string
     gpuAutoDetail: string
     gpuInUse: string
     gpuNote: string
-    /** The game runs as administrator: WestPlay can't read its route, guidance or weather (owner 2026-10-28:
-     * WestPlay doesn't reach into an elevated game; the player is told). */
+    /** The game runs as administrator: MaxDevMod can't read its route, guidance or weather (owner 2026-10-28:
+     * MaxDevMod doesn't reach into an elevated game; the player is told). */
     elevated: { title: string; text: string }
     banners: {
       live: { title: string; text: string }
@@ -133,6 +136,8 @@ export interface CompanionWords {
     person: string
     man: string
     woman: string
+    /** Each of MaxDevMod's own people's name on their card (`CHARACTER_PEOPLE`'s `name`; owner 2026-11-14). */
+    names: Record<PersonName, string>
     personNote: string
     /** The person changed with the game open: it applies once the game is restarted (owner 2026-11-06). */
     restartNote: string
@@ -141,6 +146,12 @@ export interface CompanionWords {
     hintsDetail: string
     hintsKey: string
     hintsKeyDetail: string
+    papers: string
+    papersDetail: string
+    refuel: string
+    refuelDetail: string
+    payAttendant: string
+    payAttendantDetail: string
     noKey: string
   }
   accounts: {
@@ -177,7 +188,7 @@ export interface CompanionWords {
     closeGame: { title: string; text: string }
     checking: { title: string; text: string }
     checked: { title: string; text: string }
-    /** The other games found, WestPlay set up in each or not (owner 2026-11-02: WestPlay in ETS2 as in ATS); a
+    /** The other games found, MaxDevMod set up in each or not (owner 2026-11-02: MaxDevMod in ETS2 as in ATS); a
      * language without these has English's. */
     otherGames?: { title: string; footer: string; install: string; setUp: string }
   }
@@ -198,7 +209,7 @@ export interface CompanionWords {
     webview: string
     waitingForGame: string
     log: string
-    /** The app's own log (app.log), with where it is: Documents, or WestPlay's folder where Documents refused it. */
+    /** The app's own log (app.log), with where it is: Documents, or MaxDevMod's folder where Documents refused it. */
     appLog: string
     copy: string
     copied: { title: string; text: string }
@@ -230,7 +241,7 @@ export interface CompanionWords {
     nothingAdded: string
     problems: { notAnImage: string; tooLarge: string; unknownName: string; twice: string; unreadable: string }
   }
-  /** WestPlay's updates: the About page's row, the list's note, the sheet offering one, and finishing one
+  /** MaxDevMod's updates: the About page's row, the list's note, the sheet offering one, and finishing one
    * (its plugin and mod into the game). `{version}`: the update's. */
   update: {
     row: string
@@ -249,7 +260,7 @@ export interface CompanionWords {
     banners: { updating: { title: string; text: string }; updated: { title: string; text: string } }
     finish: { title: string; text: string; button: string }
   }
-  /** Support me: WestPlay's development, supported on its maker's Kreosus page (opened in the browser). */
+  /** Support me: MaxDevMod's development, supported on its maker's Kreosus page (opened in the browser). */
   support: {
     title: string
     sub: string

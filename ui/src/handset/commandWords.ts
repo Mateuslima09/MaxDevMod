@@ -1,5 +1,10 @@
 /** The Commands app's words (CommandsApp.tsx), in English and Portuguese. */
 export interface CommandWords {
+  ignition: string
+  ignitionOn: string
+  ignitionStart: string
+  ignitionOff: string
+  engineOnlyOff: string
   windows: string
   leftDown: string
   leftUp: string
@@ -25,6 +30,11 @@ export interface CommandWords {
 
 export const COMMAND_WORDS: Record<'en' | 'pt', CommandWords> = {
   en: {
+    ignition: 'Ignition',
+    ignitionOn: 'Ignition on',
+    ignitionStart: 'Start (hold)',
+    ignitionOff: 'All off',
+    engineOnlyOff: 'Engine off only',
     windows: 'Windows',
     leftDown: 'Driver down',
     leftUp: 'Driver up',
@@ -48,6 +58,11 @@ export const COMMAND_WORDS: Record<'en' | 'pt', CommandWords> = {
     attach: 'Hook up / drop trailer',
   },
   pt: {
+    ignition: 'Ignição',
+    ignitionOn: 'Ligar a ignição',
+    ignitionStart: 'Dar partida (segure)',
+    ignitionOff: 'Desligar tudo',
+    engineOnlyOff: 'Desligar só o motor',
     windows: 'Vidros',
     leftDown: 'Motorista abrir',
     leftUp: 'Motorista fechar',

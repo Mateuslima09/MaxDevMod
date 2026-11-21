@@ -49,6 +49,11 @@ pub struct Wallet {
     /// The currency the game counts its money in (ISO 4217): ETS2's euros, ATS's dollars. The phone shows it in
     /// the player's choice of dollars, reais or euros (owner 2026-11-02).
     currency: &'static str,
+    /// The entries made since the last `take_fresh`, for the phone's notifications (alerts.rs).
+    fresh: Vec<Entry>,
+    /// Whether a save was read this run: the first one's difference is what happened while the app wasn't
+    /// running, not news.
+    save_read: bool,
 }
 
 impl Wallet {
@@ -60,12 +65,22 @@ impl Wallet {
             None => data_dir.join(FILE),
         };
         let state = std::fs::read(&path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
-        Self { path: Some(path), state, seen: None, currency: currency_of(game) }
+        Self { path: Some(path), state, seen: None, currency: currency_of(game), fresh: Vec::new(), save_read: false }
     }
 
     /// The balance now: the latest save's, and what the game moved since.
     pub fn balance(&self) -> Option<i64> {
         self.state.saved.map(|saved| saved + self.state.since_save)
+    }
+
+    /// The currency the game counts its money in (ISO 4217).
+    pub fn currency(&self) -> &'static str {
+        self.currency
+    }
+
+    /// The entries made since this was last asked (the phone's notifications of money in and out).
+    pub fn take_fresh(&mut self) -> Vec<Entry> {
+        std::mem::take(&mut self.fresh)
     }
 
     /// Takes the plugin's money events not taken yet; whether there were any. The ones already there when the app
@@ -118,11 +133,24 @@ impl Wallet {
                 amount: money - expected,
                 detail: String::new(),
             });
+            if !self.save_read {
+                self.fresh.clear();
+            }
         }
+        self.save_read = true;
         self.state.saved = Some(money);
         self.state.since_save = 0;
         self.keep();
         true
+    }
+
+    /// A sum paid on the phone itself (`kind`: `fuel`, the pump's bill paid at its attendant: owner 2026-11-12), in
+    /// the game's money (an expense negative), about `detail`. The game took it already (as it filled): it's in
+    /// the balance worked out from here, so the next save doesn't show it again as `other`.
+    pub fn paid(&mut self, kind: &str, amount: i64, detail: &str) {
+        self.state.since_save += amount;
+        self.push(Entry { at: now(), game_time: None, kind: kind.to_owned(), amount, detail: detail.to_owned() });
+        self.keep();
     }
 
     /// Lets the history go, the balance kept (owner 2026-11-03: Nupay's "clear the history", should it grow long).
@@ -138,6 +166,7 @@ impl Wallet {
     }
 
     fn push(&mut self, entry: Entry) {
+        self.fresh.push(entry.clone());
         self.state.entries.push(entry);
         let over = self.state.entries.len().saturating_sub(MOST_ENTRIES);
         self.state.entries.drain(..over);
@@ -172,7 +201,14 @@ mod tests {
     use super::*;
 
     fn wallet() -> Wallet {
-        Wallet { path: None, state: State::default(), seen: None, currency: "USD" }
+        Wallet {
+            path: None,
+            state: State::default(),
+            seen: None,
+            currency: "USD",
+            fresh: Vec::new(),
+            save_read: false,
+        }
     }
 
     fn with(events: &[(MoneyKind, i64)]) -> MoneyEvents {
@@ -214,6 +250,24 @@ mod tests {
         assert_eq!(wallet.balance(), Some(25_600));
         // The same save again: nothing new.
         assert!(!wallet.saved(25_600));
+    }
+
+    #[test]
+    fn whats_new_is_taken_once_and_the_first_saves_difference_isnt_news() {
+        let mut wallet = wallet();
+        wallet.state.saved = Some(1_000);
+        // Played without the app: the first save says more, entered but not new.
+        wallet.saved(5_000);
+        assert!(wallet.take_fresh().is_empty());
+        wallet.take(&with(&[]));
+        wallet.take(&with(&[(MoneyKind::Toll, -10)]));
+        wallet.paid("fuel", -400, "200 L");
+        let fresh = wallet.take_fresh();
+        assert_eq!(fresh.iter().map(|entry| entry.kind.as_str()).collect::<Vec<_>>(), ["toll", "fuel"]);
+        assert!(wallet.take_fresh().is_empty());
+        // A later save's difference is news (a repair).
+        wallet.saved(3_590);
+        assert_eq!(wallet.take_fresh()[0].amount, -1_000);
     }
 
     #[test]

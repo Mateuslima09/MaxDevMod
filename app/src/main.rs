@@ -133,8 +133,8 @@ fn apple_music_check(accounts: State<Accounts>) {
     accounts.0.apple_music.request(AccountAction::Check);
 }
 
-/// The maker's Kreosus page, where players support WestPlay's development.
-const SUPPORT_PAGE: &str = "https://kreosus.com/enes-less";
+/// The project's official GitHub repository page ("Meu Git").
+const SUPPORT_PAGE: &str = "https://github.com/Mateuslima09/ETS-ATS-CarPlay";
 
 /// Opens the support page (Support me) in the player's browser. The address is fixed here, so the companion
 /// can't open any other.
@@ -169,6 +169,9 @@ fn update_settings(settings: Settings, store: State<SettingsStore>, app: AppHand
     store.file.save(&settings).map_err(|e| format!("Couldn't save the settings: {e}"))?;
     store.shared.set(settings.clone());
     westplay_setup::game_mod::set_split(settings.screen.split);
+    westplay_setup::game_mod::set_resolution(settings.screen.resolution);
+    westplay_setup::low_suspension::set_level(settings.suspension_low_front.level());
+    westplay_setup::low_suspension::set_damping(settings.suspension_damping.level());
     if settings.character.enabled {
         developer_mode();
     }
@@ -291,8 +294,11 @@ fn main() {
             let config_dir = app.path().app_config_dir()?;
             let file = SettingsFile::in_dir(&config_dir);
             let loaded = file.load();
-            // The split screen WestPlay's mod is made with (from the next look at it, the game closed).
+            // The split screen and resolution tier WestPlay's mod is made with (from the next look at it).
             westplay_setup::game_mod::set_split(loaded.screen.split);
+            westplay_setup::game_mod::set_resolution(loaded.screen.resolution);
+            westplay_setup::low_suspension::set_level(loaded.suspension_low_front.level());
+            westplay_setup::low_suspension::set_damping(loaded.suspension_damping.level());
             let shared = Arc::new(SharedSettings::new(loaded));
             // The packed people where the mod is made from, before it's made (a fresh PC: none there yet).
             let people = people::install();
@@ -408,6 +414,9 @@ fn start_host(
                     }),
                     // The cab's own Settings changed one (its wallpaper): kept, and the companion told.
                     on_settings: Box::new(move |settings| {
+                        westplay_setup::game_mod::set_resolution(settings.screen.resolution);
+                        westplay_setup::low_suspension::set_level(settings.suspension_low_front.level());
+                        westplay_setup::low_suspension::set_damping(settings.suspension_damping.level());
                         if let Err(error) = SettingsFile::in_dir(&settings_dir).save(settings) {
                             westplay_host::log!("[settings] couldn't save the cab's change: {error}");
                         }

@@ -151,6 +151,11 @@ pub unsafe fn install() -> Result<(), String> {
             &ORIG_OM_SET_RENDER_TARGETS_AND_UAVS,
             "OMSetRenderTargetsAndUnorderedAccessViews",
         )?;
+        // The mirrors' camera probe's calls (`mirror_camera_probe`).
+        // Its context is an ID3D11DeviceContext1 too on Windows 8 and later (the plugin needs Windows 10).
+        let context1 = true;
+        crate::mirror_camera_probe::install(context_vtbl, context1);
+        crate::query_probe::install(device_vtbl, context_vtbl)?;
         Ok(())
     }
 }
@@ -269,7 +274,9 @@ unsafe extern "system" fn create_texture2d_hook(
     unsafe {
         let original: CreateTexture2DFn = std::mem::transmute(ORIG_CREATE_TEXTURE2D.load(Ordering::Acquire));
         let result = original(this, desc, initial_data, texture);
-        if let Some(desc) = desc.as_ref() {
+        if !crate::hires::in_blit()
+            && let Some(desc) = desc.as_ref()
+        {
             guarded(|| record_texture(desc, !initial_data.is_null()));
         }
         result
@@ -291,7 +298,7 @@ unsafe extern "system" fn create_shader_resource_view_hook(
         let original: CreateShaderResourceViewFn =
             std::mem::transmute(ORIG_CREATE_SHADER_RESOURCE_VIEW.load(Ordering::Acquire));
         let result = original(this, resource, desc, view);
-        if result.is_ok() && !resource.is_null() && !view.is_null() && !(*view).is_null() {
+        if !crate::hires::in_blit() && result.is_ok() && !resource.is_null() && !view.is_null() && !(*view).is_null() {
             let made = *view;
             guarded(|| screens::on_view_created(resource, made));
         }
@@ -309,12 +316,21 @@ unsafe extern "system" fn ps_set_shader_resources_hook(
 ) {
     // SAFETY: the game's own arguments, looked at before they're bound (`on_set_shader_resources`); then
     // the trampoline was stored before the hooks were switched on (`install`, then `enable_all`), so it's
-    // the original function, called with the game's arguments as they came.
+    // the original function, called with the game's arguments as they came (or with our high-res GPS SRV swapped in).
     unsafe {
-        guarded(|| screens::on_set_shader_resources(this, count, views));
         let original: PSSetShaderResourcesFn =
             std::mem::transmute(ORIG_PS_SET_SHADER_RESOURCES.load(Ordering::Acquire));
-        original(this, start_slot, count, views)
+        if crate::hires::in_blit() {
+            return original(this, start_slot, count, views);
+        }
+        guarded(|| screens::on_set_shader_resources(this, count, views));
+        guarded(|| crate::hide_virtual::on_ps_resources(start_slot, count, views));
+        guarded(|| crate::mirror::on_ps_resources(this, count, views));
+        let mut swapped = [std::ptr::null_mut(); 128];
+        let mut replaced = false;
+        guarded(|| replaced = crate::hires::substitute_views(count, views, &mut swapped));
+        let bound = if replaced { swapped.as_ptr() } else { views };
+        original(this, start_slot, count, bound)
     }
 }
 
@@ -330,8 +346,17 @@ unsafe extern "system" fn om_set_render_targets_hook(
     // the trampoline was stored before the hooks were switched on (`install`, then `enable_all`), so it's
     // the original function, called with the game's arguments as they came.
     unsafe {
-        guarded(|| screens::on_set_render_targets(count, views));
         let original: OMSetRenderTargetsFn = std::mem::transmute(ORIG_OM_SET_RENDER_TARGETS.load(Ordering::Acquire));
+        if crate::hires::in_blit() {
+            return original(this, count, views, depth_stencil);
+        }
+        guarded(|| screens::on_set_render_targets(count, views));
+        guarded(|| crate::mirror_probe::on_set_render_targets(this, count, views));
+        guarded(|| crate::mirror::on_set_render_targets(this, count, views));
+        guarded(|| crate::hide_virtual::on_set_render_targets(this, count, views));
+        guarded(|| crate::mirror_camera_probe::hook_context(this));
+        guarded(|| crate::mirror_camera_probe::on_set_render_targets(this, count, views));
+        guarded(|| crate::float_screen::on_set_render_targets(this, count, views, depth_stencil));
         original(this, count, views, depth_stencil)
     }
 }
@@ -353,12 +378,19 @@ unsafe extern "system" fn om_set_render_targets_and_uavs_hook(
     // the trampoline was stored before the hooks were switched on (`install`, then `enable_all`), so it's
     // the original function, called with the game's arguments as they came.
     unsafe {
+        let original: OMSetRenderTargetsAndUavsFn =
+            std::mem::transmute(ORIG_OM_SET_RENDER_TARGETS_AND_UAVS.load(Ordering::Acquire));
+        if crate::hires::in_blit() {
+            return original(this, rtv_count, views, depth_stencil, uav_start, uav_count, uavs, uav_initial_counts);
+        }
         // D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL leaves the current targets bound.
         if rtv_count != u32::MAX {
             guarded(|| screens::on_set_render_targets(rtv_count, views));
+            guarded(|| crate::mirror_probe::on_set_render_targets(this, rtv_count, views));
+            guarded(|| crate::mirror::on_set_render_targets(this, rtv_count, views));
+            guarded(|| crate::hide_virtual::on_set_render_targets(this, rtv_count, views));
+            guarded(|| crate::float_screen::on_set_render_targets(this, rtv_count, views, depth_stencil));
         }
-        let original: OMSetRenderTargetsAndUavsFn =
-            std::mem::transmute(ORIG_OM_SET_RENDER_TARGETS_AND_UAVS.load(Ordering::Acquire));
         original(this, rtv_count, views, depth_stencil, uav_start, uav_count, uavs, uav_initial_counts)
     }
 }
@@ -434,8 +466,21 @@ unsafe fn on_present(swapchain: *mut c_void) {
         // The interaction key's toggle, then the keybinds (which may need it).
         crate::input::on_frame();
         crate::keybinds::on_frame();
+        // The floating screen under the phone and the hints (they're over the cab, it's in it).
+        crate::float_screen::on_present(swapchain);
         crate::handset::on_present(swapchain);
         crate::hints::on_present(swapchain);
+        crate::fuel_meter::on_present(swapchain);
+        crate::mirror_probe::on_present(swapchain, frame);
+        crate::mirror::on_present(swapchain);
+        crate::hires::on_present(swapchain);
+        // Last, over everything: the screen faded to black and back (run over on foot: `character`).
+        crate::fade::on_present(swapchain);
+        crate::mirror_camera_probe::on_present(frame);
+        crate::rear_camera::on_present(frame);
+        crate::hide_virtual::on_present();
+        crate::virtual_toggle::on_present(frame);
+        crate::query_probe::on_present(frame);
         if let Some(bridge) = bridge::get() {
             bridge.plugin.heartbeat.store(frame, Ordering::Release);
         }

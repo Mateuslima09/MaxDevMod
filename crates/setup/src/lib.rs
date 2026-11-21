@@ -3,9 +3,11 @@
 //! Finding is read-only; building WestPlay's game mod writes only its own file (`game_mod`).
 
 pub mod cab_mark;
+pub mod clerk;
 pub mod developer;
 pub mod dlc;
 pub mod flashlight;
+pub mod nozzle;
 pub mod game;
 pub mod game_mod;
 pub mod map;
@@ -16,6 +18,9 @@ pub mod places;
 pub mod plugin;
 pub mod profiles;
 pub mod record;
+pub mod screen_mesh;
+pub mod suspension;
+pub mod low_suspension;
 pub mod tablet;
 pub mod truckersmp;
 pub mod trucks;

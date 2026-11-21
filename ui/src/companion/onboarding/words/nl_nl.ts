@@ -6,7 +6,7 @@ export const words: Words = {
   continue: 'Ga door',
   welcome: {
     title: 'CarPlay in je cabine',
-    sub: 'WestPlay brengt CarPlay naar het scherm van je truck in American Truck Simulator. Instellen duurt maar een paar minuten.',
+    sub: 'MaxDevMod brengt CarPlay naar het scherm van je truck in American Truck Simulator. Instellen duurt maar een paar minuten.',
     start: 'Aan de slag',
   },
   summary: {
@@ -20,10 +20,10 @@ export const words: Words = {
   game: {
     title: 'Je game',
     titleMissing: 'Waar is je game?',
-    found: 'WestPlay heeft American Truck Simulator op deze pc gevonden.',
+    found: 'MaxDevMod heeft American Truck Simulator op deze pc gevonden.',
     foundMany: 'American Truck Simulator is op meer dan één plek geïnstalleerd. Kies de versie die je speelt.',
     missing:
-      'WestPlay kon American Truck Simulator niet vinden. Kies de map waarin je het hebt geïnstalleerd, die met base.scs erin.',
+      'MaxDevMod kon American Truck Simulator niet vinden. Kies de map waarin je het hebt geïnstalleerd, die met base.scs erin.',
     chooseAnother: 'Andere map gebruiken…',
     chooseFolder: 'Map kiezen…',
     picker: 'Kies je American Truck Simulator-map',
@@ -32,7 +32,7 @@ export const words: Words = {
     gameGone: 'De game staat niet meer in deze map.',
     closeToGoOn: {
       title: 'Sluit de game.',
-      text: 'WestPlay kan zich alleen instellen als American Truck Simulator niet draait.',
+      text: 'MaxDevMod kan zich alleen instellen als American Truck Simulator niet draait.',
     },
   },
   check: {
@@ -43,16 +43,16 @@ export const words: Words = {
     notYet: 'Nog niet ondersteund',
     title: 'Dit is je set-up',
     titleNotYet: 'Nog niet ondersteund',
-    cantInstall: 'WestPlay ondersteunt deze versie van de game nog niet.',
+    cantInstall: 'MaxDevMod ondersteunt deze versie van de game nog niet.',
     version: 'Versie',
     unknown: 'Onbekend',
     dlcs: 'Dlc’s',
     mapDlcs: 'Kaart-dlc’s',
     noMapDlcs: 'Geen',
-    untested: 'WestPlay is gemaakt voor versie 1.61. Die van jou is nog niet getest, maar werkt waarschijnlijk gewoon.',
+    untested: 'MaxDevMod is gemaakt voor versie 1.61. Die van jou is nog niet getest, maar werkt waarschijnlijk gewoon.',
     otherCarPlay: {
       title: 'Verwijder YMN One',
-      text: 'Er staat een andere CarPlay-mod in je spel, YMN One (YamanDriveBridge.dll, in de map plugins). Die neemt het gps-scherm van je truck over: WestPlay kan daar niet verschijnen, en het scherm wordt roze zolang YMN One niet draait. Sluit het spel en verwijder dat bestand.',
+      text: 'Er staat een andere CarPlay-mod in je spel, YMN One (YamanDriveBridge.dll, in de map plugins). Die neemt het gps-scherm van je truck over: MaxDevMod kan daar niet verschijnen, en het scherm wordt roze zolang YMN One niet draait. Sluit het spel en verwijder dat bestand.',
     },
     trucks: 'Trucks',
     truckNotYet: 'Nog niet ondersteund',
@@ -61,11 +61,11 @@ export const words: Words = {
     notInGame: 'Niet in je game',
     scania7: 'Scania S en R – 7"-scherm',
     scaniaSmartDash: 'Scania S en R – Smart Dash',
-    anyTruckTablet: 'Elke vrachtwagen – met de WestPlay-tablet',
+    anyTruckTablet: 'Elke vrachtwagen – met de MaxDevMod-tablet',
     profiles: 'Profielen',
     profileCount: { one: '{n} profiel', other: '{n} profielen' },
     noProfiles: 'Nog geen profielen',
-    noProfilesDetail: 'WestPlay maakt de kaart klaar voor het eerste profiel dat je aanmaakt.',
+    noProfilesDetail: 'MaxDevMod maakt de kaart klaar voor het eerste profiel dat je aanmaakt.',
     baseMap: 'Originele kaart',
     withMods: '{map} met {mods}',
     unreadable: {
@@ -73,20 +73,20 @@ export const words: Words = {
       other: '{n} kaartmods konden niet worden gelezen, dus de wijzigingen daarvan zie je niet',
     },
     mapNote:
-      'WestPlay maakt voor elk van je profielen een kaart klaar, de een na de ander, te beginnen met het profiel dat je het laatst speelde. De kaarten worden klaargemaakt terwijl de game gesloten is.',
+      'MaxDevMod maakt voor elk van je profielen een kaart klaar, de een na de ander, te beginnen met het profiel dat je het laatst speelde. De kaarten worden klaargemaakt terwijl de game gesloten is.',
   },
   install: {
-    title: 'WestPlay installeren',
-    titleDone: 'WestPlay is geïnstalleerd',
-    sub: 'WestPlay voegt een plug-in toe aan je game, die elke keer dat je speelt zelf de truckschermen van WestPlay laadt: je hoeft niets aan te zetten in de Modmanager. De bestanden van de game zelf blijven onaangeroerd, en als je WestPlay verwijdert, gaat alles weg.',
+    title: 'MaxDevMod installeren',
+    titleDone: 'MaxDevMod is geïnstalleerd',
+    sub: 'MaxDevMod voegt een plug-in toe aan je game, die elke keer dat je speelt zelf de truckschermen van MaxDevMod laadt: je hoeft niets aan te zetten in de Modmanager. De bestanden van de game zelf blijven onaangeroerd, en als je MaxDevMod verwijdert, gaat alles weg.',
     install: 'Installeer',
     tryAgain: 'Probeer opnieuw',
     asAdministrator: 'Installeer als beheerder',
     plugin: 'Plug-in',
-    pluginDetail: 'Toont WestPlay op het scherm van je truck',
+    pluginDetail: 'Toont MaxDevMod op het scherm van je truck',
     banners: {
       installing: { title: 'Bezig met installeren…' },
-      done: { title: 'WestPlay is geïnstalleerd', text: 'Je game is klaar' },
+      done: { title: 'MaxDevMod is geïnstalleerd', text: 'Je game is klaar' },
       permission: { title: 'Toestemming nodig', text: 'Windows vraagt het één keer' },
       inUse: { title: 'Sluit de game', text: 'Die gebruikt de plug-in' },
       failed: { title: 'Installatie niet voltooid', text: 'Zie de details links' },
@@ -94,7 +94,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'Sluit de game.',
-      text: 'WestPlay kan niet worden geïnstalleerd terwijl American Truck Simulator draait.',
+      text: 'MaxDevMod kan niet worden geïnstalleerd terwijl American Truck Simulator draait.',
     },
     inUse: {
       title: 'Sluit de game.',
@@ -109,24 +109,24 @@ export const words: Words = {
       text: 'Zonder toestemming kan de plug-in niet worden geïnstalleerd. Probeer het opnieuw en kies ‘Ja’.',
     },
     pluginFailed: 'De plug-in kon niet worden geïnstalleerd.',
-    modFailed: 'De truckschermen van WestPlay konden niet uit je game worden gemaakt.',
-    noPlugin: 'In deze kopie van WestPlay ontbreekt de plug-in. Installeer WestPlay opnieuw.',
+    modFailed: 'De truckschermen van MaxDevMod konden niet uit je game worden gemaakt.',
+    noPlugin: 'In deze kopie van MaxDevMod ontbreekt de plug-in. Installeer MaxDevMod opnieuw.',
     noDocuments: 'Je map Documenten is niet gevonden.',
   },
   map: {
     title: 'Je kaart wordt klaargemaakt…',
     titleReady: 'Je kaart is klaar',
-    sub: 'WestPlay maakt zijn kaart van je eigen game, inclusief je kaart-dlc’s en kaartmods. Dit duurt een minuut of twee.',
+    sub: 'MaxDevMod maakt zijn kaart van je eigen game, inclusief je kaart-dlc’s en kaartmods. Dit duurt een minuut of twee.',
     banners: {
       building: 'Je kaart wordt klaargemaakt',
       ready: { title: 'Je kaart is klaar', text: 'Met je dlc’s en kaartmods' },
       waiting: { title: 'Sluit de game', text: 'De kaart wordt gemaakt als die dicht is' },
-      failed: { title: 'De kaart kon niet worden gemaakt', text: 'WestPlay probeert het later opnieuw' },
+      failed: { title: 'De kaart kon niet worden gemaakt', text: 'MaxDevMod probeert het later opnieuw' },
       getting: 'Bezig met voorbereiden…',
     },
     waiting: {
       title: 'Sluit de game.',
-      text: 'De kaart maken kost veel geheugen, dus WestPlay wacht tot de game niet meer draait.',
+      text: 'De kaart maken kost veel geheugen, dus MaxDevMod wacht tot de game niet meer draait.',
     },
     stages: {
       reading: { now: 'De kaart van je game wordt gelezen', done: 'Kaart uit je game gelezen' },
@@ -149,7 +149,7 @@ export const words: Words = {
   },
   accounts: {
     title: 'Inloggen bij YouTube',
-    sub: 'Optioneel. Log in om je eigen aanbevelingen, abonnementen en geschiedenis op het scherm van de truck te zien. Je logt in bij Google in een apart venster, en WestPlay ziet je account nooit.',
+    sub: 'Optioneel. Log in om je eigen aanbevelingen, abonnementen en geschiedenis op het scherm van de truck te zien. Je logt in bij Google in een apart venster, en MaxDevMod ziet je account nooit.',
     signIn: 'Log in',
     signOut: 'Log uit',
     signedIn: 'Ingelogd',
@@ -160,13 +160,13 @@ export const words: Words = {
   },
   spotify: {
     title: 'Inloggen bij Spotify',
-    sub: 'Optioneel. Log in om op het scherm van de truck naar Spotify te luisteren, met je eigen playlists en bibliotheek. Je logt in bij Spotify in een apart venster, en WestPlay ziet je account nooit.',
+    sub: 'Optioneel. Log in om op het scherm van de truck naar Spotify te luisteren, met je eigen playlists en bibliotheek. Je logt in bij Spotify in een apart venster, en MaxDevMod ziet je account nooit.',
     finishInWindow: 'Rond het inloggen af in het Spotify-venster',
     signingIn: { title: 'Inloggen bij Spotify', text: 'Ga verder in het Spotify-venster' },
   },
   appleMusic: {
     title: 'Inloggen bij Apple Music',
-    sub: 'Optioneel. Log in om op het scherm van de truck naar Apple Music te luisteren, met je eigen playlists en bibliotheek. Je logt in bij Apple Music in een apart venster, en WestPlay ziet je account nooit.',
+    sub: 'Optioneel. Log in om op het scherm van de truck naar Apple Music te luisteren, met je eigen playlists en bibliotheek. Je logt in bij Apple Music in een apart venster, en MaxDevMod ziet je account nooit.',
     finishInWindow: 'Rond het inloggen af in het Apple Music-venster',
     signingIn: { title: 'Inloggen bij Apple Music', text: 'Ga verder in het Apple Music-venster' },
   },
@@ -176,11 +176,11 @@ export const words: Words = {
     steps: [
       {
         title: 'Start de game',
-        text: 'Als die ‘Verzoek om geavanceerde SDK functies te gebruiken gedetecteerd.’ meldt, kies je ‘Oké’. Dat is WestPlay.',
+        text: 'Als die ‘Verzoek om geavanceerde SDK functies te gebruiken gedetecteerd.’ meldt, kies je ‘Oké’. Dat is MaxDevMod.',
       },
       {
         title: 'Stap in je truck',
-        text: 'Zet de elektriciteit aan, en WestPlay verschijnt op het scherm. Houd WestPlay open terwijl je speelt.',
+        text: 'Zet de elektriciteit aan, en MaxDevMod verschijnt op het scherm. Houd MaxDevMod open terwijl je speelt.',
       },
     ],
   },

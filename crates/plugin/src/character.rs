@@ -53,6 +53,7 @@ mod meter;
 mod notice;
 mod person;
 mod probe;
+mod refuel;
 mod steps;
 
 /// The configuration scene starting its walking camera: `mov r8, [rsi+world]; lea rdx, [rsi+placement];
@@ -104,6 +105,10 @@ const RELEASE_SITE: &str = "48 8B 83 ?? ?? ?? ?? 48 8B 93 ?? ?? ?? ?? 48 89 7C 2
 /// it bumps into the truck without damaging it (owner 2026-11-04: "bump, but no damage").
 const BODY_LAYER: u32 = 9;
 const BUMP_LAYER: u32 = 3;
+/// 22: meets the traffic (4) and not the player's truck (6, 7) nor the trailer (8): a third shape on it bumps into
+/// the game's cars (owner 2026-11-19: "the game's cars have no physics; my person goes inside them"), the truck's
+/// listener never told (no damage there).
+const TRAFFIC_LAYER: u32 = 22;
 /// A body whose shapes have layers of their own (what the game's attach writes when they differ).
 const MIXED_LAYERS: u32 = 0x20;
 /// The capsule shape's turn in its body (the start's own: (0.7071, 0.7071, 0, 0)).
@@ -275,9 +280,16 @@ struct Walking {
     /// bumping into the truck.
     body: Option<(*mut u8, *mut u8)>,
     bump: Option<*mut u8>,
+    /// The third shape, bumping into the traffic (`TRAFFIC_LAYER`).
+    traffic: Option<*mut u8>,
     /// The game's person on the player's feet (third person), and whether the camera is behind them.
     person: Option<person::Body>,
     third_person: bool,
+    /// How far out the third-person camera is, of the way to where it would be (0..1): in at once where a thing is
+    /// in the way, back out slowly (`CAMERA_BACK`).
+    camera_reach: f64,
+    /// Climbing in from behind the person: the camera reached their eyes, the body to be hidden.
+    hide_body: bool,
     /// Where the body faces (radians, as the walking camera keeps its heading), and where the player was last
     /// frame (to turn the body where they walk).
     body_yaw: f32,
@@ -313,6 +325,10 @@ struct Walking {
     /// (on the ground), whether it's in the air after a jump, and whether the jump key was down last frame.
     grounded: u32,
     airborne: bool,
+    /// How long the person has been carried off faster than anyone walks (seconds: run over, `RUN_OVER`), and
+    /// whether this walk began after one (it lands by the truck at once, no getting out).
+    pushed_for: f32,
+    skip_descend: bool,
     /// In the air, whether it has been seen coming down yet: at the top of the jump the capsule is still for a
     /// frame or two, which isn't landing (owner's log 2026-11-06: "landed" 0.32 s after leaving, the top, and the
     /// animation sent to its feet down while still up: "all wrong").
@@ -328,6 +344,11 @@ struct Walking {
     descend: Option<climb::Climb>,
     /// The flashlight in the player's hand, while it's on.
     flashlight: Option<person::Person>,
+    /// Filling the tank on foot (`refuel`): the pump's nozzle in the hand at the tank, where it stands, and the view
+    /// as it was before (third person or not), to go back to.
+    nozzle: Option<person::Person>,
+    nozzle_at: Option<Placement>,
+    nozzle_was_third: Option<bool>,
 }
 
 // SAFETY: game objects, used only on its main thread.
@@ -345,17 +366,29 @@ struct State {
     held_since: Option<Instant>,
     /// The cargo's papers and coupling by hand (`freight`), once the game has run a frame with them on.
     freight: Option<freight::Freight>,
+    /// Refuelling by hand (`refuel`), once the game has run a frame with it on.
+    refuel: Option<refuel::Refuel>,
 }
 
 // SAFETY: game objects (the clerk's person), used only on its main thread.
 unsafe impl Send for freight::Freight {}
 
-static STATE: Mutex<State> =
-    Mutex::new(State { game: None, walking: None, switching: None, release: None, held_since: None, freight: None });
+static STATE: Mutex<State> = Mutex::new(State {
+    game: None,
+    walking: None,
+    switching: None,
+    release: None,
+    held_since: None,
+    freight: None,
+    refuel: None,
+});
 /// On foot, held where they stand (signing the cargo's papers, coupling the trailer): the walking keys as let go.
 static HELD_STILL: AtomicBool = AtomicBool::new(false);
 /// On foot, down on a knee whatever the crouch key (coupling the trailer at the fifth wheel).
 static KNEELING: AtomicBool = AtomicBool::new(false);
+/// On foot, working with the hands at something low in front (coupling and uncoupling the trailer by hand): the
+/// person's own `work` animation, where they have one (`person::Body`), else the crouch.
+static WORKING: AtomicBool = AtomicBool::new(false);
 static WAS_DOWN: AtomicBool = AtomicBool::new(false);
 static WAS_SLOWER: AtomicBool = AtomicBool::new(false);
 static WAS_FASTER: AtomicBool = AtomicBool::new(false);
@@ -367,6 +400,44 @@ static WAS_FLASHLIGHT: AtomicBool = AtomicBool::new(false);
 /// The key changing first and third person while walking (the plan's V; the game's diff lock, kept from it while
 /// walking), as a virtual key and a scan code.
 const VIEW_KEY: (u16, u32) = (b'V' as u16, 0x2f);
+/// Run over: carried faster than this (m/s; running is 2.6) for this long (seconds), on the ground.
+const CARRIED_OVER: f64 = 5.0;
+const CARRIED_FOR: f32 = 0.2;
+/// Or carried faster than this (m/s) with no movement key held, for this long (seconds): a slow car pushing.
+const DRIFTED_OVER: f64 = 1.5;
+const DRIFTED_FOR: f32 = 0.5;
+/// The person run over, waiting for the screen to be black to be put back by the truck.
+static RUN_OVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The third-person camera kept out of things (owner 2026-11-19: "when the camera comes near a thing, zoom in on the
+/// person"): a ray through the game's physics from the chest (`pivot`) to where the camera would be (`full`), and the
+/// camera that far along it, less `CAMERA_GAP`, at least `CAMERA_NEAREST` from the chest. In at once (never a frame
+/// inside a thing), back out at `CAMERA_BACK`; starting near the chest, so getting out beside a thing it's never in
+/// it. No rays (none in this game, or off after a close): out as before, at that pace.
+fn pulled_in(walking: &mut Walking, pivot: [f64; 3], full: [f64; 3], dt: f32) -> [f64; 3] {
+    let d = [full[0] - pivot[0], full[1] - pivot[1], full[2] - pivot[2]];
+    let length = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    if length < 0.1 {
+        return full;
+    }
+    crate::ray::camera_ask(pivot, full);
+    let nearest = (CAMERA_NEAREST / length).min(1.0);
+    let allowed = match crate::ray::camera_answer() {
+        Some(Some(hit)) => ((f64::from(hit) - CAMERA_GAP) / length).clamp(nearest, 1.0),
+        _ => 1.0,
+    };
+    let reach = walking.camera_reach.max(nearest);
+    walking.camera_reach = if allowed < reach { allowed } else { (reach + CAMERA_BACK * f64::from(dt) / length).min(allowed) };
+    let r = walking.camera_reach;
+    [pivot[0] + d[0] * r, pivot[1] + d[1] * r, pivot[2] + d[2] * r]
+}
+
+/// How far before a thing the camera stays (metres), how near the chest it may come, and how fast it goes back out
+/// (metres a second).
+const CAMERA_GAP: f64 = 0.3;
+const CAMERA_NEAREST: f64 = 0.6;
+const CAMERA_BACK: f64 = 3.0;
+
 /// L on foot: the flashlight on or off (kept from the game too: its L is the truck's lights).
 const FLASHLIGHT_KEY: (u16, u32) = (b'L' as u16, 0x26);
 /// Whether the flashlight is on offer (L, the key bar). Off since 2026-11-05 (owner: "leave the flashlight for
@@ -456,7 +527,7 @@ fn enabled() -> bool {
 /// walking keys, while walking.
 pub fn takes(key: u32) -> bool {
     // The cargo's papers' keys, in the cab too (`freight`).
-    if freight::takes(key) {
+    if freight::takes(key) || refuel::takes(key) {
         return true;
     }
     if !WALKING.load(Ordering::Acquire) {
@@ -493,13 +564,14 @@ fn virtual_key((vk, scancode): (u16, u32)) -> u16 {
 /// The same for DirectInput's keyboard (a scan code).
 pub fn takes_scancode(scancode: u32) -> bool {
     freight::takes_scancode(scancode)
+        || refuel::takes_scancode(scancode)
         || WALKING.load(Ordering::Acquire)
-        && (CAMERA_SCANCODES.contains(&scancode)
-            || CONTROL_KEYS
-                .iter()
-                .chain([&VIEW_KEY, &FLASHLIGHT_KEY].into_iter().filter(|&&k| FLASHLIGHT_ON || k != FLASHLIGHT_KEY))
-                .any(|&(_, code)| code == scancode)
-            || RIGHT_MODIFIERS.contains(&scancode))
+            && (CAMERA_SCANCODES.contains(&scancode)
+                || CONTROL_KEYS
+                    .iter()
+                    .chain([&VIEW_KEY, &FLASHLIGHT_KEY].into_iter().filter(|&&k| FLASHLIGHT_ON || k != FLASHLIGHT_KEY))
+                    .any(|&(_, code)| code == scancode)
+                || RIGHT_MODIFIERS.contains(&scancode))
 }
 
 /// DirectInput's right Shift and right Ctrl: kept from the game while walking too, as their left ones are.
@@ -544,6 +616,9 @@ pub fn on_frame_end() {
     // The cargo's papers and coupling by hand: in the cab and on foot.
     // SAFETY: on the game's main thread, at the end of a frame.
     unsafe { freight::frame(state) };
+    // Refuelling by hand: the pump's key in the cab, the tank on foot.
+    // SAFETY: on the game's main thread, at the end of a frame.
+    unsafe { refuel::frame(state) };
     publish_hints(state);
     if let Some(bridge) = crate::bridge::get() {
         bridge.plugin.on_foot.store(u32::from(state.walking.is_some()), Ordering::Release);
@@ -563,7 +638,15 @@ pub fn on_frame_end() {
             None
         } else {
             // SAFETY: on the game's main thread, with camera 0 `start` found.
-            match unsafe { climb_frame(walking, false) } {
+            let frame = unsafe { climb_frame(walking, false) };
+            // The camera in the person's eyes: the body hidden now (`climb::Climb::from_behind`).
+            if std::mem::take(&mut walking.hide_body)
+                && let Some(Some(game)) = state.game.as_ref()
+            {
+                // SAFETY: on the game's main thread, `walking` as `start` made it.
+                unsafe { set_third_person(game, walking, false, false) };
+            }
+            match frame {
                 Ok(true) => Some("climbed in"),
                 Ok(false) => None,
                 Err(why) => Some(why),
@@ -584,7 +667,7 @@ pub fn on_frame_end() {
             return;
         }
         // SAFETY: on the game's main thread, with camera 0 `start` found.
-        let done = pressed || !matches!(unsafe { climb_frame(walking, true) }, Ok(false));
+        let done = pressed || walking.skip_descend || !matches!(unsafe { climb_frame(walking, true) }, Ok(false));
         if done {
             // Walking on from where the way ended, looking as it did.
             if let Some((_, yaw, pitch)) = walking.descend.take().and_then(|out| out.end()) {
@@ -615,6 +698,22 @@ pub fn on_frame_end() {
         }
         return;
     }
+    // Run over: once the screen is black, the walk begun again by the truck's door, on the ground at once.
+    if RUN_OVER.load(Ordering::Acquire) && (crate::fade::covered() || state.walking.is_none()) {
+        RUN_OVER.store(false, Ordering::Release);
+        if state.walking.is_some() {
+            stop(state, "run over", false);
+            match try_start(state) {
+                Ok(()) => {
+                    if let Some(walking) = state.walking.as_mut() {
+                        walking.skip_descend = true;
+                    }
+                }
+                Err(why) => log!("character: not put back by the truck: {why}"),
+            }
+        }
+        return;
+    }
     if state.walking.is_some() {
         if slower || faster {
             change_sensitivity(faster);
@@ -641,7 +740,10 @@ pub fn on_frame_end() {
             // SAFETY: on the game's main thread, with the walking camera `start` made and holds.
             unsafe { switch_flashlight(game, walking) };
         }
-        if view_pressed && let (Some(Some(game)), Some(walking)) = (&state.game, &mut state.walking) {
+        if view_pressed
+            && let (Some(Some(game)), Some(walking)) = (&state.game, &mut state.walking)
+            && walking.nozzle_was_third.is_none()
+        {
             let third = !walking.third_person;
             THIRD_PERSON_LAST.store(third, Ordering::Relaxed);
             // SAFETY: on the game's main thread, with the walking camera `start` made and holds.
@@ -664,16 +766,31 @@ pub fn on_frame_end() {
             }
         }
     } else if let Some(frames) = state.switching {
-        // Waiting for camera 0 (F8 again gives up).
-        if pressed {
+        // Waiting for camera 0 (F8 again gives up); not while the virtual mirrors are turned off (that wait is short,
+        // and F8 pressed again as it seemed nothing happened gave it up: owner 2026-11-14, pressed three or four times).
+        if pressed && WAITING_MIRRORS.load(Ordering::Relaxed) {
+            log!("character: F8 again while the virtual mirrors are turned off: still walking once they are");
+        } else if pressed {
             state.switching = None;
             log!("character: not walking: F8 again");
         } else if frames >= 2 {
             match try_start(state) {
-                Ok(()) => state.switching = None,
+                Ok(()) => {
+                    state.switching = None;
+                    WAITING_MIRRORS.store(false, Ordering::Relaxed);
+                }
+                // The mirrors off, camera 0 next, its wait afresh (it had used the mirrors' and gave up: owner
+                // 2026-11-14, F8 pressed twice to get out).
+                Err(NOT_ON_SCREEN) if WAITING_MIRRORS.swap(false, Ordering::Relaxed) => {
+                    CAMERA_0.send(true);
+                    state.release = Some(CAMERA_0);
+                    state.switching = Some(0);
+                }
                 Err(NOT_ON_SCREEN) if frames < SWITCH_FRAMES => state.switching = Some(frames + 1),
+                Err(MIRRORS_ON) if frames < MIRRORS_FRAMES => state.switching = Some(frames + 1),
                 Err(why) => {
                     state.switching = None;
+                    WAITING_MIRRORS.store(false, Ordering::Relaxed);
                     not_walking(state, why);
                 }
             }
@@ -687,6 +804,11 @@ pub fn on_frame_end() {
             Err(NOT_ON_SCREEN) => {
                 CAMERA_0.send(true);
                 state.release = Some(CAMERA_0);
+                state.switching = Some(0);
+            }
+            Err(MIRRORS_ON) => {
+                log!("character: walking once the virtual mirrors are off");
+                WAITING_MIRRORS.store(true, Ordering::Relaxed);
                 state.switching = Some(0);
             }
             Err(why) => not_walking(state, why),
@@ -707,36 +829,38 @@ fn publish_hints(state: &State) {
     let Some(bridge) = crate::bridge::get() else { return };
     let host = &bridge.host;
     let mut hints = Vec::new();
-    let walk = key_name(u32::from(walk_key().0));
+    let walk_vk = u32::from(walk_key().0);
+    let walk = key_name(walk_vk);
     let truck = crate::telemetry::truck();
     let screen_key = match host.interaction_key.load(Ordering::Acquire) {
         0 => westplay_shared::DEFAULT_INTERACTION_KEY,
         key => key,
     };
     match &state.walking {
-        Some(walking) if walking.climb.is_some() => {
+        Some(walking) if walking.climb.is_some() || walking.descend.is_some() => {
             crate::hints::set(hints);
             return;
         }
         Some(walking) => {
             if from_door(walking, &truck).is_some_and(|d| d <= DOOR_REACH) {
-                hints.push(Hint { key: walk, action: Action::GetIn });
+                hints.push(Hint::single(walk, walk_vk, Action::GetIn));
             }
-            // By the clerk, or at the fifth wheel (`freight`): E signs, couples.
-            if let Some(action) = freight::offer(state) {
-                hints.push(Hint { key: key_name(u32::from(virtual_key((b'E' as u16, 0x12)))), action });
+            // By the clerk, at the fifth wheel (`freight`), or at a pump (`refuel`): E interacts.
+            if let Some(action) = freight::offer(state).or_else(|| refuel::offer(state)) {
+                let interact_vk = u32::from(virtual_key((b'E' as u16, 0x12)));
+                hints.push(Hint::single(key_name(interact_vk), interact_vk, action));
             }
             if FLASHLIGHT_ON {
                 let action = if walking.flashlight.is_some() { Action::FlashlightOff } else { Action::Flashlight };
-                hints.push(Hint { key: key_name(u32::from(virtual_key(FLASHLIGHT_KEY))), action });
+                let fl_vk = u32::from(virtual_key(FLASHLIGHT_KEY));
+                hints.push(Hint::single(key_name(fl_vk), fl_vk, action));
             }
-            // The camera: first or third person (owner 2026-11-05: "so they know the camera can change").
-            hints.push(Hint { key: key_name(u32::from(virtual_key(VIEW_KEY))), action: Action::Camera });
-            // Crouching (Ctrl): the plugin's since 2026-11-05 (owner: "put it on the bar too").
-            hints.push(Hint {
-                key: key_name(u32::from(virtual_key(CONTROL_KEYS[CROUCH_CONTROL]))),
-                action: Action::Crouch,
-            });
+            // The camera: first or third person.
+            let view_vk = u32::from(virtual_key(VIEW_KEY));
+            hints.push(Hint::single(key_name(view_vk), view_vk, Action::Camera));
+            // Crouching (Ctrl).
+            let crouch_vk = u32::from(virtual_key(CONTROL_KEYS[CROUCH_CONTROL]));
+            hints.push(Hint::single(key_name(crouch_vk), crouch_vk, Action::Crouch));
         }
         None => {
             let can_get_out = enabled()
@@ -745,30 +869,34 @@ fn publish_hints(state: &State) {
                 && !truck.multiplayer
                 && !crate::truckersmp::loaded();
             if can_get_out {
-                hints.push(Hint { key: walk, action: Action::GetOut });
+                hints.push(Hint::single(walk, walk_vk, Action::GetOut));
             }
             if host.screen_enabled.load(Ordering::Acquire) == 1 {
-                hints.push(Hint { key: key_name(screen_key), action: Action::Screen });
+                hints.push(Hint::single(key_name(screen_key), screen_key, Action::Screen));
             }
         }
     }
-    // The keybinds' own (the app's Controls): the phone, its Personagem app with the mode on, hiding this bar.
-    let keybind = |keybind: westplay_shared::Keybind| {
+    // The keybinds' own (the app's Controls): the phone, its Personagem app with the mode on, hiding this HUD.
+    let keybind = |keybind: westplay_shared::Keybind, action: Action| -> Option<Hint> {
         let value = host.keybinds[keybind as usize].load(Ordering::Acquire);
         westplay_shared::keybind_of(value).map(|(key, with_screen_key)| {
-            if with_screen_key { format!("{} + {}", key_name(screen_key), key_name(key)) } else { key_name(key) }
+            if with_screen_key {
+                Hint::combo(format!("{} + {}", key_name(screen_key), key_name(key)), screen_key, key, action)
+            } else {
+                Hint::single(key_name(key), key, action)
+            }
         })
     };
-    if let Some(key) = keybind(westplay_shared::Keybind::Phone) {
-        hints.push(Hint { key, action: Action::Phone });
+    if let Some(hint) = keybind(westplay_shared::Keybind::Phone, Action::Phone) {
+        hints.push(hint);
     }
     if enabled()
-        && let Some(key) = keybind(westplay_shared::Keybind::Character)
+        && let Some(hint) = keybind(westplay_shared::Keybind::Character, Action::Character)
     {
-        hints.push(Hint { key, action: Action::Character });
+        hints.push(hint);
     }
-    if let Some(key) = keybind(westplay_shared::Keybind::Hints) {
-        hints.push(Hint { key, action: Action::HideBar });
+    if let Some(hint) = keybind(westplay_shared::Keybind::Hints, Action::HideBar) {
+        hints.push(hint);
     }
     crate::hints::set(hints);
 }
@@ -777,6 +905,7 @@ fn publish_hints(state: &State) {
 pub fn shutdown() {
     let mut state = STATE.lock().unwrap_or_else(|e| e.into_inner());
     freight::shutdown(&mut state);
+    refuel::shutdown(&mut state);
     if state.walking.is_some() {
         stop(&mut state, "the plugin is unloaded", false);
     }
@@ -791,6 +920,13 @@ const TRUCKERSMP: &str = "TruckersMP: the test is single player only";
 const MULTIPLAYER: &str = "a multiplayer session (convoy): the test is single player only";
 const NOT_STOPPED: &str = "the truck must be stopped";
 const NO_PARKING_BRAKE: &str = "the truck must be on its parking brake";
+/// Why walking waits: the game's virtual mirrors being turned off first (owner 2026-11-14: getting out as they were
+/// being turned off, one stayed on, shown in the walking mode as the game's test picture; walking, the game takes no
+/// keys, F2 included). Tried again each frame, a while at most.
+const MIRRORS_ON: &str = "the game's virtual mirrors are being turned off first";
+const MIRRORS_FRAMES: u32 = 600;
+/// Whether walking is waiting for the virtual mirrors to be off.
+static WAITING_MIRRORS: AtomicBool = AtomicBool::new(false);
 
 /// The notice for why walking didn't start, if the player is to be told (the mode off says nothing: the key
 /// may be the player's for something else).
@@ -852,6 +988,10 @@ fn try_start(state: &mut State) -> Result<(), &'static str> {
             if truck.parking_brake { "on" } else { "off" }
         );
         return Err(if truck.speed.abs() > STOPPED { NOT_STOPPED } else { NO_PARKING_BRAKE });
+    }
+    if crate::virtual_toggle::mirrors_on() {
+        crate::virtual_toggle::turn_off_first();
+        return Err(MIRRORS_ON);
     }
     let Some(Some(game)) = state.game.as_ref() else { return Err("the game's code isn't the version WestPlay knows") };
     // SAFETY: as above: on the game's main thread, with what `locate` found.
@@ -953,7 +1093,13 @@ unsafe fn start(game: &Game, truck: &crate::telemetry::Truck) -> Result<Walking,
         std::mem::transmute::<usize, Activate>(activate)(camera);
         let body = match game.physics.as_ref() {
             Some(physics) => match no_vehicle_layer(physics, camera) {
-                Ok(body) => Some(body),
+                Ok(body) => {
+                    // Thinner, so it passes where a person would (before the bumping shape, made as it is).
+                    if let Err(why) = thin_capsule(physics, camera, body.0, body.1) {
+                        log!("character: the capsule as the game's (not thinner): {why}");
+                    }
+                    Some(body)
+                }
                 Err(why) => {
                     log!("character: the capsule stays on the game's layer (it can damage the truck): {why}");
                     None
@@ -978,8 +1124,10 @@ unsafe fn start(game: &Game, truck: &crate::telemetry::Truck) -> Result<Walking,
             away: 0,
             body,
             bump: None,
+            traffic: None,
             person: None,
             third_person: false,
+            hide_body: false,
             body_yaw: 0.0,
             last_at: None,
             look_yaw: look.0,
@@ -1005,6 +1153,12 @@ unsafe fn start(game: &Game, truck: &crate::telemetry::Truck) -> Result<Walking,
             climb: None,
             descend: Some(climb::Climb::out(truck)),
             flashlight: None,
+            nozzle: None,
+            nozzle_at: None,
+            nozzle_was_third: None,
+            camera_reach: 0.0,
+            pushed_for: 0.0,
+            skip_descend: false,
         };
         // Bumping into the truck without damaging it, from the start (owner 2026-11-04: on when getting out, off
         // when getting back in, where `stop` lets the shape go).
@@ -1046,6 +1200,63 @@ unsafe fn no_vehicle_layer(physics: &Physics, camera: *mut u8) -> Result<(*mut u
     }
 }
 
+/// The capsule's radius walking (metres; the game's is 0.6, 1.2 m wide: owner 2026-11-19, "he catches on a lot,
+/// between the truck and a thing he gets stuck; make the cylinder thinner"): about a person's shoulders.
+const THIN_RADIUS: f32 = 0.3;
+
+/// The game's capsule swapped for a thinner one (`THIN_RADIUS`), as tall: its straight part longer by what the
+/// radius loses at each end, so the feet and the head stay where they were (`feet_under` reads the same 1.05 m
+/// from the middle to the bottom). The physics is PhysX's under the game's shapes: the sizes the shape keeps are
+/// a copy, so a new shape is made (the game's own `create_shape`, in the same body, as `bump_on` makes its own),
+/// the game's let go (as the camera's destructor does), and the new one put where the camera keeps its shape, for
+/// the destructor to let go later.
+///
+/// # Safety
+/// On the game's main thread, `camera` a walking camera its start made, `body`/`system` as `no_vehicle_layer`
+/// returned them.
+unsafe fn thin_capsule(physics: &Physics, camera: *mut u8, body: *mut u8, system: *mut u8) -> Result<(), &'static str> {
+    // SAFETY: reads guarded; the game's own functions, called as its start and the camera's destructor call them.
+    unsafe {
+        let slot = camera.add(physics.shape).cast::<usize>();
+        let old = slot.read_unaligned();
+        if old == 0 {
+            return Err("no capsule shape");
+        }
+        let straight = read::<f32>(old + 0x1c).ok_or("capsule unreadable")?;
+        let radius = read::<f32>(old + 0x18).ok_or("capsule unreadable")?;
+        if !(0.05..3.0).contains(&straight) || !(0.05..3.0).contains(&radius) {
+            return Err("the capsule's size isn't as known");
+        }
+        if radius <= THIN_RADIUS {
+            return Ok(());
+        }
+        let new_straight = straight + 2.0 * (radius - THIN_RADIUS);
+        let kind = read::<i32>(system as usize + physics.kind).filter(|k| (0..8).contains(k)).ok_or("no kind")?;
+        let margin = read::<f32>(physics.margins + kind as usize * 4).ok_or("no margin")?;
+        let turn = f32::from_bits(SHAPE_TURN);
+        let local = Placement { rotation: [turn, turn, 0.0, 0.0], ..Placement::default() };
+        let thin = (physics.create_shape)(system, body, new_straight, THIN_RADIUS, margin, &local);
+        if thin.is_null() {
+            return Err("the game made no shape");
+        }
+        let shape_vtable = read::<usize>(thin as usize).ok_or("no shape vtable")?;
+        let set: SetShapeLayer = std::mem::transmute(
+            read::<usize>(shape_vtable + physics.shape_layer_slot).ok_or("no shape layer setter")?,
+        );
+        set(thin, BODY_LAYER);
+        let system_vtable = read::<usize>(system as usize).ok_or("no system vtable")?;
+        let destroy: DestroyShape = std::mem::transmute(
+            read::<usize>(system_vtable + physics.destroy_shape_slot).ok_or("no shape destroyer")?,
+        );
+        destroy(system, old as *mut u8);
+        slot.write_unaligned(thin as usize);
+        log!(
+            "character: the capsule thinner: radius {radius:.2} -> {THIN_RADIUS:.2} m, straight part {straight:.2} -> {new_straight:.2} m"
+        );
+        Ok(())
+    }
+}
+
 /// A second shape, like the capsule's, in its body, on the layer that bumps into the truck without damaging it
 /// (kept until walking ends, then let go as the game lets go of the capsule's own: `stop`).
 ///
@@ -1076,6 +1287,11 @@ unsafe fn bump_on(physics: &Physics, walking: &mut Walking) -> Result<(), &'stat
                 if shape.is_null() {
                     return Err("the game made no shape");
                 }
+                // And the one bumping into the traffic, as it.
+                let traffic = (physics.create_shape)(system, body, a, b, margin, &local);
+                if !traffic.is_null() {
+                    walking.traffic = Some(traffic);
+                }
                 shape
             }
         };
@@ -1084,6 +1300,13 @@ unsafe fn bump_on(physics: &Physics, walking: &mut Walking) -> Result<(), &'stat
         let set: SetShapeLayer =
             std::mem::transmute(read::<usize>(vtable + physics.shape_layer_slot).ok_or("no shape layer setter")?);
         set(shape, BUMP_LAYER);
+        if let Some(traffic) = walking.traffic
+            && let Some(vtable) = read::<usize>(traffic as usize)
+            && let Some(setter) = read::<usize>(vtable + physics.shape_layer_slot)
+        {
+            std::mem::transmute::<usize, SetShapeLayer>(setter)(traffic, TRAFFIC_LAYER);
+            log!("character: bumping into the traffic (a shape on layer {TRAFFIC_LAYER})");
+        }
         let field = body.add(physics.layer_field).cast::<u32>();
         field.write_unaligned((field.read_unaligned() & !0xfc0) | MIXED_LAYERS << 6);
         log!("character: bumping on (a shape on layer {BUMP_LAYER}: hits the truck, no damage)");
@@ -1137,8 +1360,8 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
         }
         // Crouching (Ctrl) is the plugin's: the walking camera's own crouch did nothing (owner 2026-11-05, "the
         // crouch doesn't work"): the eyes down (`crouch_depth`), slower, the person's crouch if it has one.
-        let crouch_held = really_down(VIRTUAL_KEY(virtual_key(CONTROL_KEYS[CROUCH_CONTROL])))
-            || KNEELING.load(Ordering::Acquire);
+        let crouch_held =
+            really_down(VIRTUAL_KEY(virtual_key(CONTROL_KEYS[CROUCH_CONTROL]))) || KNEELING.load(Ordering::Acquire);
         // As far down as the person's head goes: on the knee, or walking crouched (higher), a part of their eyes'
         // height (measured in Blender on the woman's: 1.42 m standing, 0.71 on the knee, 1.11 walking crouched).
         let eyes = person::eye_height(CHARACTER_PEOPLE.get(chosen_person()).copied().unwrap_or_default()) as f32;
@@ -1277,21 +1500,26 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
             walking.jump_ground = None;
             ey
         };
+        // At the person's own eye height (the walking camera's eyes are `under` over the feet).
+        let first_person_eyes = {
+            let eyes = person::eye_height(CHARACTER_PEOPLE.get(chosen_person()).copied().unwrap_or_default());
+            let down = under - eyes + f64::from(walking.crouch_depth);
+            Placement { rotation: placement.rotation, ..Placement::at([ex, ey - down, ez], 0.0) }
+        };
         let drawn_from = if walking.third_person {
             let held = Placement { rotation: placement.rotation, ..Placement::at([ex, camera_y, ez], 0.0) };
             let behind = behind(&held, under);
-            let [x, y, z] = behind.world();
+            let [x, y, z] = pulled_in(walking, [ex, camera_y - under + PIVOT_OVER_FEET, ez], behind.world(), dt);
             Placement {
                 rotation: behind.rotation,
                 ..Placement::at([x, y - f64::from(walking.crouch_depth) * 0.5, z], 0.0)
             }
         } else {
-            // At the person's own eye height (the walking camera's eyes are `under` over the feet).
-            let eyes = person::eye_height(CHARACTER_PEOPLE.get(chosen_person()).copied().unwrap_or_default());
-            let [x, y, z] = placement.world();
-            let down = under - eyes + f64::from(walking.crouch_depth);
-            let lowered = Placement { rotation: placement.rotation, ..Placement::at([x, y - down, z], 0.0) };
-            bob(walking, &lowered, dt)
+            if walking.camera_reach != 0.0 {
+                walking.camera_reach = 0.0;
+                crate::ray::camera_stop();
+            }
+            bob(walking, &first_person_eyes, dt)
         };
         (walking.debug.add(PLACEMENT) as *mut Placement).write_unaligned(drawn_from);
         // And camera 0's own angles (it works its turn out of them each frame: heading, then pitch, both
@@ -1326,6 +1554,20 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
             .and_then(|(body, _)| velocity_of(body))
             .map(|velocity| velocity[0].hypot(velocity[2]));
         walking.meter.motion(keys, dt, if dt > 0.0 { (moved / f64::from(dt)) as f32 } else { 0.0 }, physics, moving);
+        // Run over (owner 2026-11-19: "in front of a car, it carries me along till I'm out of its way"): carried
+        // faster than anyone runs, on the ground, a moment; the screen fades and the person is put back by the
+        // truck (`RUN_OVER`, done where the walk can be begun again).
+        // Also a slow car (owner 2026-11-19: "it goes on carrying me"): moving with no movement key held.
+        let speed = if dt > 0.0 { moved / f64::from(dt) } else { 0.0 };
+        let fast = speed > CARRIED_OVER;
+        let drifting = keys == 0 && speed > DRIFTED_OVER;
+        let carried = (fast || drifting) && !walking.airborne;
+        walking.pushed_for = if carried { walking.pushed_for + dt } else { (walking.pushed_for - dt).max(0.0) };
+        let long = if fast { CARRIED_FOR } else { DRIFTED_FOR };
+        if walking.pushed_for >= long && !RUN_OVER.swap(true, Ordering::AcqRel) {
+            log!("character: run over (carried at {:.1} m/s): back by the truck", moved / f64::from(dt));
+            crate::fade::start();
+        }
         // Stopping (gone no more, not yet standing), the last gait: Shift let go with the walk key, running went
         // to walking for that moment before standing, two switches (the owner's test, 2026-11-05).
         if went_on {
@@ -1403,8 +1645,97 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
         {
             person::place_thing(people, flashlight, &in_hand(&placement, walking.look_yaw, walking.look_pitch));
         }
+        nozzle_frame(state.game.as_ref().and_then(Option::as_ref), walking, &first_person_eyes);
     }
     Ok(())
+}
+
+/// Filling the tank on foot (`refuel::nozzle`; owner 2026-11-12: "only the arm holding the nozzle, in first
+/// person"): as it begins, first person without the body, the view turned to the tank and down, and the pump's
+/// nozzle (WestPlay's mod: `westplay_setup::nozzle`) in the hand by it, staying there as the player looks about; as
+/// it ends, the nozzle gone and the view as it was.
+///
+/// # Safety
+/// On the game's main thread, `walking` as `start` made it.
+unsafe fn nozzle_frame(game: Option<&Game>, walking: &mut Walking, eyes: &Placement) {
+    let people = game.and_then(|game| game.people.as_ref());
+    // SAFETY: on the game's main thread, with what `person::locate` found.
+    unsafe {
+        match (refuel::nozzle(), walking.nozzle_was_third) {
+            (Some((yaw, ahead)), None) => {
+                walking.nozzle_was_third = Some(walking.third_person);
+                if let Some(game) = game {
+                    set_third_person(game, walking, false, false);
+                }
+                walking.look_yaw = yaw;
+                walking.look_pitch = -NOZZLE_LOOK_DOWN;
+                // The person's own body holding the nozzle (owner 2026-11-12: "a real arm, not a blocky one"), where
+                // the first-person body stands: a little behind the eyes, facing the tank. Without it in the mod (a
+                // person exported before), the plain nozzle with its own arm.
+                let walk = CHARACTER_PEOPLE.get(chosen_person()).copied().unwrap_or_default();
+                let holding = walk.strip_suffix("_walk").map(|prefix| format!("mover.{prefix}f_fuel"));
+                let back = ahead_of(yaw, -FIRST_PERSON_BACK);
+                let [x, y, z] = eyes.world();
+                let feet = on_feet(&Placement::at([x + back[0], y, z + back[1]], 0.0), yaw, person::eye_height(walk));
+                let shown = holding.as_deref().zip(people).and_then(|(name, people)| {
+                    person::show_thing(people, &feet, name)
+                        .inspect_err(|why| log!("character: no body holding the nozzle ({name}): {why}"))
+                        .ok()
+                });
+                if let Some(body) = shown {
+                    walking.nozzle = Some(body);
+                    walking.nozzle_at = Some(feet);
+                    log!("character: the body holding the nozzle ({})", holding.as_deref().unwrap_or_default());
+                } else {
+                    let at = nozzle_held(eyes, yaw, ahead);
+                    walking.nozzle_at = Some(at);
+                    match people.map(|people| person::show_thing(people, &at, NOZZLE)) {
+                        Some(Ok(nozzle)) => {
+                            walking.nozzle = Some(nozzle);
+                            log!("character: the nozzle in the hand ({ahead:.2} m ahead)");
+                        }
+                        Some(Err(why)) => log!("character: no nozzle ({NOZZLE}, WestPlay's mod): {why}"),
+                        None => {}
+                    }
+                }
+            }
+            (Some(_), Some(_)) => {
+                if let (Some(people), Some(nozzle), Some(at)) = (people, walking.nozzle.as_mut(), walking.nozzle_at) {
+                    person::place_thing(people, nozzle, &at);
+                }
+            }
+            (None, Some(was_third)) => {
+                walking.nozzle_was_third = None;
+                walking.nozzle_at = None;
+                if let (Some(people), Some(nozzle)) = (people, walking.nozzle.take()) {
+                    person::hide_thing(people, nozzle);
+                }
+                if let Some(game) = game {
+                    set_third_person(game, walking, was_third, true);
+                }
+                log!("character: the nozzle put back");
+            }
+            (None, None) => {}
+        }
+    }
+}
+
+/// The pump's nozzle's mover, how far down the view looks filling (radians), and where the nozzle's grip is held
+/// from the eyes: to the right, down (metres); ahead, the tank's say (`refuel::nozzle`). Its spout points a little
+/// down, into the tank.
+const NOZZLE: &str = "mover.wp_nozzle";
+const NOZZLE_LOOK_DOWN: f32 = 0.55;
+const NOZZLE_HELD: [f64; 2] = [0.12, -0.42];
+const NOZZLE_PITCH: f32 = -0.12;
+
+/// The nozzle by the tank: `ahead` metres ahead of the eyes toward it (heading `yaw`), in the right hand.
+fn nozzle_held(eyes: &Placement, yaw: f32, ahead: f64) -> Placement {
+    let [x, y, z] = eyes.world();
+    let ([right, down], turn) = (NOZZLE_HELD, f64::from(yaw));
+    // A heading of θ looks along (-sin θ, -cos θ); its right is (cos θ, -sin θ).
+    let (forward, side) = ([-turn.sin(), -turn.cos()], [turn.cos(), -turn.sin()]);
+    let at = [x + side[0] * right + forward[0] * ahead, y + down, z + side[1] * right + forward[1] * ahead];
+    Placement { rotation: look_rotation(yaw, NOZZLE_PITCH), ..Placement::at(at, 0.0) }
 }
 
 /// A person's pace on foot, walking and running (m/s). The game has no running person (`INVESTIGACAO.md` §7.2):
@@ -1577,6 +1908,11 @@ static LOOK_DY: AtomicI32 = AtomicI32::new(0);
 /// Where a camera keeps its angles: heading and pitch (radians, 0..2π), then roll (`core_camera` + 0x10, read
 /// in the game: camera 0's heading there matched its rotation's).
 const CAMERA_ANGLES: usize = 0x10;
+
+/// Whether the player is out of the cab on foot, from the moment the walk key is pressed (getting out included).
+pub fn walking() -> bool {
+    WALKING.load(Ordering::Acquire)
+}
 
 /// Whether the mouse is the plugin's now (while walking): `input` gives its movement here, none to the game.
 pub fn takes_mouse() -> bool {
@@ -1762,11 +2098,23 @@ unsafe fn begin_climb(state: &mut State, truck: &crate::telemetry::Truck) -> boo
     // SAFETY: as the caller says; camera 0 read guarded.
     unsafe {
         let Some(from) = read::<Placement>(walking.debug as usize + PLACEMENT) else { return false };
-        set_third_person(game, walking, false, false);
+        // In third person, the camera into the person's eyes first, the body hidden only there (owner 2026-11-14:
+        // "first the camera comes close to him, then he disappears"); else as before.
+        let eyes = walking.third_person.then(|| read::<Placement>(walking.camera as usize + PLACEMENT)).flatten();
+        if eyes.is_none() {
+            set_third_person(game, walking, false, false);
+        }
         if walking.flashlight.is_some() {
             switch_flashlight(game, walking);
         }
-        walking.climb = Some(climb::Climb::new(from.world(), walking.look_yaw, walking.look_pitch, truck));
+        if let (Some(people), Some(nozzle)) = (game.people.as_ref(), walking.nozzle.take()) {
+            person::hide_thing(people, nozzle);
+        }
+        walking.nozzle_was_third = None;
+        walking.climb = Some(match eyes {
+            Some(eyes) => climb::Climb::from_behind(from.world(), eyes.world(), walking.look_yaw, walking.look_pitch, truck),
+            None => climb::Climb::new(from.world(), walking.look_yaw, walking.look_pitch, truck),
+        });
         crate::bridge::put_phone_away("climbing into the truck");
     }
     walking.last = Instant::now();
@@ -1792,8 +2140,12 @@ unsafe fn climb_frame(walking: &mut Walking, out: bool) -> Result<bool, &'static
         steps::play(false);
     }
     // Climbing in, at the door on the ground: it opens (the way's second place, `climb::path`).
-    if !out && climb.passed(1, dt) {
+    if !out && climb.passed(climb.door_key(), dt) {
         steps::door(steps::Door::Open, 0.0);
+    }
+    // From behind the person, the camera now in their eyes: the body goes (`climbing`'s caller hides it).
+    if !out && climb.reached_eyes(dt) {
+        walking.hide_body = true;
     }
     let Some((at, yaw, pitch)) = view else { return Ok(true) };
     // SAFETY: camera 0 is the game's own, read guarded before it's written, as `step` writes it.
@@ -1832,12 +2184,19 @@ fn stop(state: &mut State, why: &str, to_cab: bool) {
         if let (Some(flashlight), Some(people)) = (walking.flashlight, game.people.as_ref()) {
             person::hide_thing(people, flashlight);
         }
+        if let (Some(nozzle), Some(people)) = (walking.nozzle, game.people.as_ref()) {
+            person::hide_thing(people, nozzle);
+        }
+        // No more rays for the camera.
+        crate::ray::camera_stop();
         // The bumping shape let go as the camera's destructor lets go of the capsule's own, before the body goes.
-        if let (Some(shape), Some((_, system)), Some(physics)) = (walking.bump, walking.body, game.physics.as_ref())
+        if let (Some((_, system)), Some(physics)) = (walking.body, game.physics.as_ref())
             && let Some(vtable) = read::<usize>(system as usize)
             && let Some(destroy) = read::<usize>(vtable + physics.destroy_shape_slot)
         {
-            std::mem::transmute::<usize, DestroyShape>(destroy)(system, shape);
+            for shape in [walking.bump, walking.traffic].into_iter().flatten() {
+                std::mem::transmute::<usize, DestroyShape>(destroy)(system, shape);
+            }
         }
         let mut held = walking.camera;
         (game.assign)(&mut held, std::ptr::null_mut());
@@ -2127,6 +2486,8 @@ mod tests {
             position: [100.0, 10.0, 200.0],
             heading,
             speed: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
             parking_brake: true,
             multiplayer: false,
             head: [head_x, 2.5, -1.8],
@@ -2207,6 +2568,8 @@ mod tests {
                     position: [100.0, 10.0, 200.0],
                     heading: turn as f32 / 16.0,
                     speed: 0.0,
+                    pitch: 0.0,
+                    roll: 0.0,
                     parking_brake: true,
                     multiplayer: false,
                     head: [side, 2.3, -1.7],

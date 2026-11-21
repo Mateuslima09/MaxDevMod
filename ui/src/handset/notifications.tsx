@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePhoneNotification } from '../cabin/state/store'
 import { type PhoneNotification, postToHost } from '../shared/host'
-import { chime, notificationText, waitingWith } from './notificationText'
+import { AppIcon } from './icons'
+import { chime, isWarning, notificationApp, notificationText, waitingWith } from './notificationText'
+import type { Prefs } from './prefs'
 
 /** How long a notification stays on the screen, and how long it takes to leave it (ms). */
 const SHOWN_FOR = 4200
@@ -13,12 +15,12 @@ const LEAVING_FOR = 320
  * phone put away the host shows only its top meanwhile (crates/host, the plugin's handset.rs), so the banner is
  * what's seen; it's told while one is on the screen.
  */
-export function Notifications({ language }: { language: 'en' | 'pt' }) {
+export function Notifications({ language, currency }: { language: 'en' | 'pt'; currency: Prefs['currency'] }) {
   const { latest, count } = usePhoneNotification()
   const waiting = useRef<PhoneNotification[]>([])
   const [shown, setShown] = useState<{ notification: PhoneNotification; id: number; leaving: boolean } | null>(null)
   const busy = useRef(false)
-  const taken = useRef(0)
+  const taken = useRef(usePhoneNotification.getState().count)
   const next = useRef(0)
 
   // The next one waiting, shown for its time and then let go; none left, the host is told.
@@ -35,7 +37,7 @@ export function Notifications({ language }: { language: 'en' | 'pt' }) {
     const id = ++next.current
     setShown({ notification, id, leaving: false })
     postToHost({ type: 'phoneBanner', showing: true })
-    chime(notification.kind)
+    chime(notification)
     setTimeout(() => setShown((now) => (now?.id === id ? { ...now, leaving: true } : now)), SHOWN_FOR)
     setTimeout(() => showNext.current(), SHOWN_FOR + LEAVING_FOR)
   }
@@ -54,20 +56,26 @@ export function Notifications({ language }: { language: 'en' | 'pt' }) {
   return (
     <div
       key={shown.id}
-      className={`ios-banner ios-banner-${notification.kind}${shown.leaving ? ' leaving' : ''}`}
+      className={`ios-banner ios-banner-${notification.kind}${isWarning(notification) ? ' ios-banner-warning' : ''}${shown.leaving ? ' leaving' : ''}`}
       role="status"
     >
-      <span className="ios-banner-icon ios-icon-tiktok" aria-hidden>
-        <svg viewBox="0 0 24 24">
-          <path d="M19.3 6.4a4.8 4.8 0 0 1-3.5-4v-.4h-3.4v13.7a2.9 2.9 0 1 1-3.9-2.7c.3 0 .7.1 1 .2v-3.5a6.4 6.4 0 0 0-1-.1 6.3 6.3 0 0 0-6.3 6.3c0 3.5 2.8 6.3 6.3 6.3a6.3 6.3 0 0 0 6.3-6.3V9a8.2 8.2 0 0 0 4.8 1.5V7a4.8 4.8 0 0 1-.3-.6Z" />
-        </svg>
-      </span>
+      {notification.app === 'tiktok' ? (
+        <span className="ios-banner-icon ios-icon-tiktok" aria-hidden>
+          <svg viewBox="0 0 24 24">
+            <path d="M19.3 6.4a4.8 4.8 0 0 1-3.5-4v-.4h-3.4v13.7a2.9 2.9 0 1 1-3.9-2.7c.3 0 .7.1 1 .2v-3.5a6.4 6.4 0 0 0-1-.1 6.3 6.3 0 0 0-6.3 6.3c0 3.5 2.8 6.3 6.3 6.3a6.3 6.3 0 0 0 6.3-6.3V9a8.2 8.2 0 0 0 4.8 1.5V7a4.8 4.8 0 0 1-.3-.6Z" />
+          </svg>
+        </span>
+      ) : (
+        <span className="ios-banner-app">
+          <AppIcon id={notification.app} small />
+        </span>
+      )}
       <span className="ios-banner-text">
         <span className="ios-banner-head">
-          <b>TikTok</b>
+          <b>{notificationApp(notification, language)}</b>
           <i>{language === 'pt' ? 'agora' : 'now'}</i>
         </span>
-        <span className="ios-banner-body">{notificationText(notification, language)}</span>
+        <span className="ios-banner-body">{notificationText(notification, language, currency)}</span>
       </span>
     </div>
   )

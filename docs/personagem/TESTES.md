@@ -1,10 +1,19 @@
-# Modo Personagem — relatório de teste (para o dono)
+﻿# Modo Personagem — relatório de teste (para o dono)
 
 O que já está instalado no PC e ainda não foi testado no jogo. Testar no **single player, com o jogo salvo**,
 com o **app WestPlay aberto** (sem o app, a tecla de descer não faz nada: o log diz "the WestPlay app isn't open").
 Marque cada item e anote o que achou; a versão anterior de cada mudança está guardada (ver "Voltar atrás").
 
 Instalado em 2026-11-05 (app, página do app e plugin, ETS2 e ATS). Nada foi para o GitHub.
+
+
+## 49. Entrar no caminhão em terceira pessoa — novo (plugin, 2026-11-14 22:10)
+
+Antes, ao apertar F8 em terceira pessoa, o personagem sumia na hora e a câmera ia devagar, de onde estivesse, até a porta. Agora a câmera vai primeiro, rápido (0,25 a 0,6 s), até os olhos do personagem. Ele só some ao chegar lá, e daí segue o caminho de sempre: porta, degrau, assento (`climb::Climb::from_behind`).
+
+- [ ] Em terceira pessoa, longe do caminhão: F8 leva a câmera até ele antes de ele sumir?
+- [ ] A porta abre no chão, ao lado dela, como antes?
+- [ ] Em primeira pessoa, nada mudou?
 
 ## Antes de começar
 
@@ -788,3 +797,115 @@ celular" (e a sem cabeça, pra 1ª pessoa), usada só nas animações de celular
 
 - Correr com animação de corrida de verdade (o `run_01.pma` do ETS2 não tem definição que o use).
 - Personagem próprio, com editor.
+
+## Homem 3: o de preto com chapéu (`wh`, 2026-11-14, ainda não testado no jogo)
+
+Rig do Mixamo do dono (`pesonagem 6`, "3 Chain Fingers"), todas as animações do tatuado, como o cowboy. Olho esquerdo
+pintado de novo (espelhando o direito) e a aba do chapéu sem a mancha. Cenas em `pesonagem 6/mixamo/chapeu_*.blend`.
+
+- [ ] No app, Personagem: aparece o cartão "Homem 3" com a foto dele, e dá para escolher.
+- [ ] No jogo (reinicie, o plugin mudou): ele anda, corre, para, pula correndo, agacha, anda agachado.
+- [ ] Celular parado e andando: o celular na mão direita, a tela visível (sem a palma por cima).
+- [ ] 1ª pessoa olhando para baixo: o corpo sem cabeça (o chapéu não aparece na frente da câmera).
+- [ ] Engatar a carreta à mão e abastecer com o bico na mão.
+- [ ] O chapéu acompanha a cabeça sem atravessar nada estranho; os olhos estão normais de perto.
+
+## Homem 4: o gordinho de barba e jaqueta jeans (`wg`, 2026-11-14, ainda não testado no jogo)
+
+Feito como o Homem 3: rig do Mixamo do dono ("3 Chain Fingers"), as animações do tatuado, o celular, o bico e o
+engatar dele mesmo. Cenas em `pesonagem 5 gordinho/mixamo/gordinho_*.blend`. Ele é bem mais largo que o tatuado,
+de onde vêm as animações. No primeiro teste (dono, 2026-11-14) os braços entravam na barriga. Às 10:53 do mesmo
+dia todas as animações passaram pelo `bracos_abertos.py`, com os braços abertos só o necessário. Para voltar
+atrás há cópias `.antes-bracos` da cena e das pastas `gordinho`.
+
+- [ ] No app, Personagem: aparece o cartão "Homem 4" com a foto dele, e dá para escolher.
+- [ ] Andar, correr, parar, pular correndo, agachar, andar agachado: os braços passam por fora da barriga, sem
+      ficar abertos demais (caranguejo)?
+- [ ] Parado: as mãos ficam apoiadas no quadril e nas costas, sem sumir dentro do corpo?
+- [ ] Celular parado e andando, engatar e abastecer: as mãos no lugar, nada atravessando o corpo.
+- [ ] 1ª pessoa olhando para baixo: o corpo sem cabeça.
+
+## Mulher 2: a engenheira de capacete e colete (`wo`, 2026-11-20, ainda não testada no jogo)
+
+Modelo do Tripo com os olhos consertados (estavam vesgos) e as sobrancelhas separadas. Rig do Mixamo do dono
+("2 Chain Fingers", como a Madame) e todas as animações da Madame. O engatar, o abastecer e o celular são dela
+mesma (celular com `up` 0,042). Textura de 4096 (as outras pessoas usam 2048), mais nítida de perto. Cenas em
+`DownloadsPesonagem novospesonagem 7 obramixamoobra_*.blend`, pasta do jogo `model/westplay/obra`.
+
+- [ ] No app, Personagem: aparece o cartão "Engenheira" com a foto dela, e dá para escolher.
+- [ ] No celular do jogo, app Personagem: aparece "Mulher 2" com a foto dela, e dá para trocar.
+- [ ] No jogo (reinicie, o plugin mudou): ela anda, corre, para, pula correndo, agacha, anda agachada.
+- [ ] De perto: os olhos olham reto (não vesga) e são duas sobrancelhas separadas.
+- [ ] Celular parada e andando: o celular na mão direita, a tela visível (sem os dedos atravessando).
+- [ ] 1ª pessoa olhando para baixo: o corpo sem cabeça (o capacete não aparece na frente da câmera).
+- [ ] Engatar a carreta à mão e abastecer com o bico na mão.
+- [ ] O capacete e o cabelo acompanham a cabeça sem nada estranho.
+- [ ] Se der problema: escolha outra pessoa em "Quem anda". Para tirá-la de vez, apague a pasta
+      `%LOCALAPPDATA%WestPlaypersonagemmodelwestplayobra` e volte o app e o plugin com os arquivos
+      `.antes-engenheira` (em `%LOCALAPPDATA%MaxDevMod` e na pasta `plugins` de cada jogo).
+
+## Cilindro mais fino (19/11, só o plugin: **reinicie o jogo**)
+
+Pedido do dono: "ele barra em muita coisa; entre o caminhão e um objeto, num vão fino, fica engarranchando".
+
+O jogo faz o boneco andar dentro de uma cápsula de **0,6 m de raio** (1,2 m de largura). Agora, ao descer, o plugin
+troca essa cápsula por uma de **0,3 m de raio** (0,6 m de largura, mais ou menos os ombros de uma pessoa), feita
+pela própria função do jogo. A parte reta ficou mais comprida (0,9 → 1,5 m), então os pés e a cabeça continuam na
+mesma altura. A forma que bate no caminhão (sem dano) também ficou fina. DLL antiga: `westplay.dll.antes-cilindro`.
+
+- [ ] Reinicie o jogo e desça. No plugin.log: `character: the capsule thinner: radius 0.60 -> 0.30 m`.
+- [ ] Passa entre o caminhão e um objeto (poste, bomba, outro caminhão) onde antes enganchava?
+- [ ] Os pés continuam no chão (nem afundado, nem flutuando)? Subir degraus e meio-fio continua igual?
+- [ ] Encostar no caminhão: ele ainda bate e **não** dá dano?
+- [ ] Voltar para o caminhão e descer de novo: tudo normal (sem travar o jogo)?
+- [ ] Ficou fino demais (passa por dentro de coisas, entra na parede)? Ou ainda engancha? Dá para ajustar o número.
+
+## Câmera da 3ª pessoa que não entra nas coisas (19/11, só o plugin: **reinicie o jogo**)
+
+Pedido do dono: "quando a câmera encostar num objeto, dá zoom no personagem; ao descer com algo perto, ela fica dentro
+das coisas". Em 05/11 isso fechou o jogo duas vezes e foi tirado (seção 9). Agora usa o caminho dos sensores de ré:
+o raio sai **de dentro de uma chamada do próprio jogo**, só num mundo já conferido (o chão achado sob o caminhão).
+Ele vai do peito do personagem até onde a câmera quer ficar e acerta o mundo, o trânsito, as carretas e o seu
+caminhão. Batendo, a câmera fica 0,3 m antes do obstáculo, no mínimo a 0,6 m do peito. Ela chega perto **na hora** e
+volta **devagar** (3 m/s). Na 3ª pessoa, ela começa perto do personagem e vai se afastando.
+
+Trava: o `rays.txt` (Documentos\WestPlay\ets2) passa a dizer "testing" quando a câmera lança os primeiros raios, e
+"ok" depois de 3000 (cerca de 1 minuto a pé em 3ª pessoa). Se o jogo fechar 3 vezes seguidas testando, os raios
+desligam sozinhos e a câmera volta a ser como antes. DLL antiga: `westplay.dll.antes-camera-3a`.
+
+- [ ] Reinicie o jogo, desça e aperte V (3ª pessoa). O jogo **não fecha**? Se fechar, me mande o `plugin.log`.
+- [ ] No plugin.log: `ray: the camera's rays through the game's physics (guard says testing)`. Depois de 1 minuto em
+      3ª pessoa: `3000 camera rays cast without trouble: the guard says ok`.
+- [ ] Ao lado do caminhão, com a câmera virada para ele: ela chega perto do personagem e **não entra** no caminhão?
+- [ ] Encostado numa parede, num prédio ou numa bomba: mesma coisa?
+- [ ] Saindo de perto: a câmera volta para trás devagar, sem tranco?
+- [ ] Em campo aberto, a câmera fica na distância de antes (4,8 m)?
+- [ ] Pulando, agachando, voltando para o caminhão: tudo normal?
+
+## Bater nos carros do trânsito (19/11, só o plugin: **reinicie o jogo**)
+
+Teste do dono: "os carros do jogo não têm física; meu personagem entra dentro deles". Para não dar dano no
+caminhão, a cápsula fica na camada 9, que não encontra o trânsito (camada 4). Agora há uma **terceira forma, na
+camada 22**: pela tabela do jogo ela bate no trânsito, mas **não** no seu caminhão (6, 7) nem na carreta (8).
+
+- [ ] No plugin.log, ao descer: `character: bumping into the traffic (a shape on layer 22)`.
+- [ ] Andando contra um carro do trânsito (parado no sinal ou estacionado): o personagem **bate e para**, sem entrar?
+- [ ] O carro reage de algum jeito estranho (pula, voa, buzina)? Anote.
+- [ ] Encostar no **seu caminhão** e na carreta: continua batendo **sem dano**?
+
+## Atropelado: piscada e de volta ao lado do caminhão (19/11, 22h; vai instalado junto com o volante)
+
+Pedido do dono: "na frente do carro, ele vai me levando até eu sair; se for atropelado, uma piscada na tela, um
+carregamento, e o personagem volta para o lado do caminhão". Agora:
+- **Detecção:** o personagem levado a **mais de 5 m/s por 0,2 s**, no chão (correndo, ele chega a 2,6 m/s; pulos e
+  quedas não contam), **ou** se mexendo a mais de 1,5 m/s **sem nenhuma tecla de andar apertada** por 0,5 s (carro
+  devagar empurrando). 1º teste do dono (19/11, 23h): não funcionou porque ainda não estava instalado (a DLL era a das
+  21:54); vai junto com a instalação do volante. No plugin.log: `character: run over (carried at X m/s): back by the truck`.
+- **Piscada:** a tela inteira escurece em 0,25 s, fica preta 0,55 s e clareia em 0,4 s (desenhada por cima de tudo).
+- **No escuro:** a caminhada acaba e começa de novo, **já no chão ao lado da porta do motorista** (sem a animação de
+  descer). Se não der para recomeçar (caminhão andando, freio de mão solto), o log diz por quê.
+
+- [ ] Fique na frente de um carro do trânsito: a tela pisca preta e você aparece ao lado do caminhão?
+- [ ] Correndo e pulando normal: **nada** acontece (sem piscadas à toa)?
+- [ ] Depois de voltar: dá para andar, entrar no caminhão (F8 na porta) e descer de novo normalmente?
+- [ ] O carro que atropelou faz algo estranho? Anote.

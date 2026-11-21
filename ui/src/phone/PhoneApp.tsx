@@ -44,7 +44,7 @@ export function PhoneApp({ connects }: { connects: boolean }) {
   return (
     <main className={`phone phone-upright shell appearance-${appearance}`}>
       <header className="phone-bar">
-        <span className="phone-name">WestPlay</span>
+        <span className="phone-name">MaxDevMod</span>
         <span className={`phone-link${connected ? ' on' : ''}`}>
           {!connects ? words.noKey : connected ? words.connected : words.connecting}
         </span>
@@ -133,7 +133,7 @@ const WORDS: Record<Language, Words> = {
   en: {
     connected: 'Connected to your PC',
     connecting: 'Connecting to your PC…',
-    noKey: 'Scan the QR code in WestPlay on your PC',
+    noKey: 'Scan the QR code in MaxDevMod on your PC',
     volume: 'Volume',
     fullScreen: 'Full screen',
     leaveFullScreen: 'Leave full screen',
@@ -141,7 +141,7 @@ const WORDS: Record<Language, Words> = {
   pt: {
     connected: 'Conectado ao seu PC',
     connecting: 'Conectando ao seu PC…',
-    noKey: 'Escaneie o QR Code no WestPlay do seu PC',
+    noKey: 'Escaneie o QR Code no MaxDevMod do seu PC',
     volume: 'Volume',
     fullScreen: 'Tela cheia',
     leaveFullScreen: 'Sair da tela cheia',
@@ -149,7 +149,7 @@ const WORDS: Record<Language, Words> = {
   tr: {
     connected: 'Bilgisayarınıza bağlı',
     connecting: 'Bilgisayarınıza bağlanıyor…',
-    noKey: 'Bilgisayarınızdaki WestPlay’de QR kodu okutun',
+    noKey: 'Bilgisayarınızdaki MaxDevMod’de QR kodu okutun',
     volume: 'Ses',
     fullScreen: 'Tam ekran',
     leaveFullScreen: 'Tam ekrandan çık',

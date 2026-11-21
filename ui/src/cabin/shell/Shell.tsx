@@ -152,12 +152,12 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
         type="button"
         className={truckScreen ? 'return-button shown' : 'return-button'}
         style={{ left: button.x - RETURN_BUTTON_SIZE / 2, top: button.y - RETURN_BUTTON_SIZE / 2 }}
-        aria-label="WestPlay"
+        aria-label="MaxDevMod"
         aria-hidden={!truckScreen}
         tabIndex={truckScreen ? 0 : -1}
         onClick={() => useCabin.getState().setTruckScreen(false)}
       >
-        <img src="/westplay.png" alt="" />
+        <img src="/maxdevmod.png" alt="" />
       </button>
       {overlay}
       {/* Over everything, the cursor included: the image's outermost pixels, which the game repeats into
@@ -183,17 +183,15 @@ function useFittedRoot(
     const root = document.getElementById('root')
     if (!root) return
     const page = document.documentElement.style
-    // The split screen: the page in its half, the rest of the screen see-through, the game's map there.
+    // The split screen: the page in its half of the fitted display area, the rest see-through so the game's map shows.
     if (halved) {
-      const at = halved === 'mapLeft' ? '50vw' : '0'
-      Object.assign(root.style, {
-        position: 'fixed',
-        left: at,
-        top: '0',
-        width: '50vw',
-        height: '100vh',
-        transform: 'none',
-      })
+      const midLeft = left + (1 - left - right) / 2
+      const midRight = right + (1 - left - right) / 2
+      const half = halved === 'mapLeft' ? { left: midLeft, right } : { left, right: midRight }
+      const style = fitStyle({ top, bottom, ...half, stretch, size: 1 })
+      if (style) {
+        Object.assign(root.style, { position: 'fixed', transformOrigin: '0 0', ...style })
+      }
       page.removeProperty('background')
       return
     }

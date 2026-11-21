@@ -37,6 +37,159 @@ pub struct Settings {
     pub sound: SoundSettings,
     #[serde(deserialize_with = "lenient")]
     pub character: CharacterSettings,
+    /// Which of the game's virtual mirrors show (the phone's Settings, owner 2026-11-18).
+    #[serde(deserialize_with = "lenient")]
+    pub virtual_mirrors: VirtualMirrors,
+    /// Whether the game sets the suspension back by itself (the phone's Suspensão app, owner 2026-11-18): on, as
+    /// the game has it, until the player turns it off. Kept in the games' own options with them closed.
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_reset: Shown,
+    /// How low the front may go (the Suspensão app, owner 2026-11-18): the game's own, lower, the lowest
+    /// (`westplay_setup::low_suspension`).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_low_front: LowFront,
+    /// How firm the dampers are (the Suspensão app, owner 2026-11-18): `westplay_setup::low_suspension::Damping`.
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_damping: Damping,
+    /// How big the mouse's dot is on the truck's screen and the phone (owner 2026-11-19).
+    #[serde(deserialize_with = "lenient")]
+    pub cursor_size: CursorSize,
+    /// The suspension by itself (the Suspensão app, owner 2026-11-19): lowered on the motorway, normal in town
+    /// (`auto_suspension`). Off at first.
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto: bool,
+}
+
+/// How big the mouse's dot is (`Settings::cursor_size`), times the one drawn at first.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CursorSize {
+    Small,
+    #[default]
+    Normal,
+    Large,
+    Larger,
+}
+
+impl CursorSize {
+    pub fn factor(self) -> f32 {
+        match self {
+            Self::Small => 0.7,
+            Self::Normal => 1.0,
+            Self::Large => 1.35,
+            Self::Larger => 1.7,
+        }
+    }
+
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "small" => Some(Self::Small),
+            "normal" => Some(Self::Normal),
+            "large" => Some(Self::Large),
+            "larger" => Some(Self::Larger),
+            _ => None,
+        }
+    }
+}
+
+/// How firm the dampers are (`Settings::suspension_damping`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Damping {
+    Soft,
+    #[default]
+    Normal,
+    Firm,
+    Firmest,
+}
+
+impl Damping {
+    pub fn level(self) -> westplay_setup::low_suspension::Damping {
+        match self {
+            Self::Soft => westplay_setup::low_suspension::Damping::Soft,
+            Self::Normal => westplay_setup::low_suspension::Damping::Normal,
+            Self::Firm => westplay_setup::low_suspension::Damping::Firm,
+            Self::Firmest => westplay_setup::low_suspension::Damping::Firmest,
+        }
+    }
+
+    /// From a page's word for it.
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "soft" => Some(Self::Soft),
+            "normal" => Some(Self::Normal),
+            "firm" => Some(Self::Firm),
+            "firmest" => Some(Self::Firmest),
+            _ => None,
+        }
+    }
+}
+
+/// How low the front may go (`Settings::suspension_low_front`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LowFront {
+    #[default]
+    Normal,
+    Low,
+    Lowest,
+}
+
+impl LowFront {
+    pub fn level(self) -> westplay_setup::low_suspension::Level {
+        match self {
+            Self::Normal => westplay_setup::low_suspension::Level::Normal,
+            Self::Low => westplay_setup::low_suspension::Level::Low,
+            Self::Lowest => westplay_setup::low_suspension::Level::Lowest,
+        }
+    }
+
+    /// From a page's word for it.
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "normal" => Some(Self::Normal),
+            "low" => Some(Self::Low),
+            "lowest" => Some(Self::Lowest),
+            _ => None,
+        }
+    }
+}
+
+/// Which of the game's virtual mirrors show on the screen (owner 2026-11-18: "some like to simulate and don't want
+/// the virtual mirrors; let them choose both, the right one only, the left one only, or none"). The right one only
+/// at first: the driver sits on the left and sees the left glass mirror, the right one is the one wanted virtual.
+/// The reversing camera is made from the left one, hidden or not.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VirtualMirrors {
+    None,
+    #[default]
+    Right,
+    Left,
+    Both,
+}
+
+impl VirtualMirrors {
+    /// Its value on the bridge (`HostBlock::virtual_mirrors`).
+    pub fn bridge_value(self) -> u32 {
+        match self {
+            Self::None => westplay_shared::VIRTUAL_MIRRORS_NONE,
+            Self::Right => westplay_shared::VIRTUAL_MIRRORS_RIGHT,
+            Self::Left => westplay_shared::VIRTUAL_MIRRORS_LEFT,
+            Self::Both => westplay_shared::VIRTUAL_MIRRORS_BOTH,
+        }
+    }
+
+    /// From a page's word for it (`none`, `right`, `left`, `both`).
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "none" => Some(Self::None),
+            "right" => Some(Self::Right),
+            "left" => Some(Self::Left),
+            "both" => Some(Self::Both),
+            _ => None,
+        }
+    }
 }
 
 /// The Modo Personagem (the companion's Personagem page): walking about on foot by the truck (F8 with it stopped),
@@ -58,6 +211,15 @@ pub struct CharacterSettings {
     pub hints: Shown,
     #[serde(deserialize_with = "lenient")]
     pub hints_key: HintsKey,
+    /// The cargo's papers and coupling by hand, refuelling by hand, and paying that fuel at the pump's attendant:
+    /// each on at first (owner 2026-11-13: "a switch for each, in the app and on the phone", the in-game phone's
+    /// Settings the same ones).
+    #[serde(deserialize_with = "lenient")]
+    pub papers: Shown,
+    #[serde(deserialize_with = "lenient")]
+    pub refuel: Shown,
+    #[serde(deserialize_with = "lenient")]
+    pub pay_attendant: Shown,
 }
 
 impl Default for CharacterSettings {
@@ -69,6 +231,9 @@ impl Default for CharacterSettings {
             person: CharacterPerson::default(),
             hints: Shown::default(),
             hints_key: HintsKey::default(),
+            papers: Shown::default(),
+            refuel: Shown::default(),
+            pay_attendant: Shown::default(),
         }
     }
 }
@@ -161,9 +326,17 @@ impl Default for CharacterKey {
 #[serde(from = "f64", into = "u32")]
 pub struct CharacterPerson(u32);
 
+/// People in [`CHARACTER_PEOPLE`] not to be chosen for now (owner 2026-11-19: "turn the stout man off for now, his
+/// animation isn't good; we'll polish him later"): his files stay in the mod, the default walks in his place.
+pub const PEOPLE_OFF: &[usize] = &[4];
+
 impl CharacterPerson {
     pub fn new(place: f64) -> Self {
-        if place.is_finite() && place >= 0.0 && (place as usize) < CHARACTER_PEOPLE.len() {
+        if place.is_finite()
+            && place >= 0.0
+            && (place as usize) < CHARACTER_PEOPLE.len()
+            && !PEOPLE_OFF.contains(&(place as usize))
+        {
             Self(place as u32)
         } else {
             Self::default()
@@ -476,6 +649,12 @@ pub struct ScreenSettings {
     /// from the game's next start (WestPlay's mod is made again for it), or off, the game's own.
     #[serde(deserialize_with = "lenient")]
     pub split: westplay_setup::game_mod::Split,
+    /// Render resolution tier (`gps_drawable_size`) for in-cabin GPS screens in `westplay.scs`.
+    #[serde(deserialize_with = "lenient")]
+    pub resolution: westplay_setup::game_mod::ScreenResolution,
+    /// Keep the in-cabin screen powered on even when the truck's electrics/engine are off.
+    #[serde(deserialize_with = "lenient")]
+    pub keep_screen_on: bool,
 }
 
 /// The truck's own strip beside WestPlay (the Scania Smart Dash's, the DAF's status bar): kept where the
@@ -647,7 +826,7 @@ mod tests {
         assert_eq!((settings.character.key.get(), settings.character.person.get()), (0x77, 0));
         let chosen = parse(r#"{"version": 2, "character": {"key": 117, "person": 1}}"#).unwrap();
         assert_eq!((chosen.character.key.get(), chosen.character.person.get()), (117, 1));
-        let wrong = parse(r#"{"version": 2, "character": {"key": 999, "person": 3}}"#).unwrap();
+        let wrong = parse(r#"{"version": 2, "character": {"key": 999, "person": 6}}"#).unwrap();
         assert_eq!((wrong.character.key.get(), wrong.character.person.get()), (0x77, 0));
         let set = parse(r#"{"version": 2, "character": {"enabled": true, "sensitivity": 999}}"#).unwrap();
         assert!(set.character.enabled);
@@ -698,13 +877,18 @@ mod tests {
                 person: CharacterPerson::new(9.0),
                 hints: Shown(false),
                 hints_key: HintsKey::new(0x79 as f64),
+                papers: Shown(false),
+                refuel: Shown(true),
+                pay_attendant: Shown(false),
             },
+            ..Settings::default()
         };
         let json = to_json(&settings);
         assert!(json.contains("\"version\": 2"), "{json}");
         assert!(json.contains("\"key\": 5"), "{json}");
         assert!(json.contains("\"mode\": \"toggle\""), "{json}");
         assert!(json.contains("\"truckStrip\": \"off\""), "{json}");
+        assert!(json.contains("\"payAttendant\": false"), "{json}");
         assert_eq!(parse(&json).unwrap(), settings);
     }
 
@@ -821,5 +1005,17 @@ mod tests {
         shared.set(changed.clone());
         assert_ne!(shared.generation(), before);
         assert_eq!(shared.get(), changed);
+    }
+}
+
+#[cfg(test)]
+mod people_off_tests {
+    use super::*;
+
+    #[test]
+    fn the_stout_man_is_off_for_now() {
+        assert_eq!(CharacterPerson::new(3.0).get(), 3);
+        assert_eq!(CharacterPerson::new(4.0), CharacterPerson::default());
+        assert_eq!(CursorSize::from_word("larger").map(CursorSize::factor), Some(1.7));
     }
 }

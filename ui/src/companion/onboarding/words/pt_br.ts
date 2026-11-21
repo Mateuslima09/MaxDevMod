@@ -6,7 +6,7 @@ export const words: Words = {
   continue: 'Continuar',
   welcome: {
     title: 'CarPlay na sua cabine',
-    sub: 'O WestPlay leva o CarPlay para a tela do seu caminhão no American Truck Simulator e no Euro Truck Simulator 2. A configuração leva só alguns minutos.',
+    sub: 'O MaxDevMod leva o CarPlay para a tela do seu caminhão no American Truck Simulator e no Euro Truck Simulator 2. A configuração leva só alguns minutos.',
     start: 'Começar',
   },
   summary: {
@@ -20,10 +20,10 @@ export const words: Words = {
   game: {
     title: 'Seu jogo',
     titleMissing: 'Onde está seu jogo?',
-    found: 'O WestPlay encontrou seu jogo neste PC. Você pode configurar o outro depois, em Configuração → Outros jogos.',
-    foundMany: 'O WestPlay encontrou mais de um jogo neste PC. Escolha o que você joga: o outro dá pra configurar depois, em Configuração → Outros jogos.',
+    found: 'O MaxDevMod encontrou seu jogo neste PC. Você pode configurar o outro depois, em Configuração → Outros jogos.',
+    foundMany: 'O MaxDevMod encontrou mais de um jogo neste PC. Escolha o que você joga: o outro dá pra configurar depois, em Configuração → Outros jogos.',
     missing:
-      'O WestPlay não encontrou o American Truck Simulator nem o Euro Truck Simulator 2. Escolha a pasta onde você o instalou, a que contém o base.scs.',
+      'O MaxDevMod não encontrou o American Truck Simulator nem o Euro Truck Simulator 2. Escolha a pasta onde você o instalou, a que contém o base.scs.',
     chooseAnother: 'Usar outra pasta…',
     chooseFolder: 'Escolher pasta…',
     picker: 'Escolha a pasta do seu jogo',
@@ -32,7 +32,7 @@ export const words: Words = {
     gameGone: 'O jogo não está mais nesta pasta.',
     closeToGoOn: {
       title: 'Feche o jogo.',
-      text: 'O WestPlay só consegue se configurar enquanto o jogo não está aberto.',
+      text: 'O MaxDevMod só consegue se configurar enquanto o jogo não está aberto.',
     },
   },
   check: {
@@ -43,17 +43,17 @@ export const words: Words = {
     notYet: 'Ainda não compatível',
     title: 'Esta é sua configuração',
     titleNotYet: 'Ainda não compatível',
-    cantInstall: 'O WestPlay ainda não é compatível com esta versão do jogo.',
+    cantInstall: 'O MaxDevMod ainda não é compatível com esta versão do jogo.',
     version: 'Versão',
     unknown: 'Desconhecida',
     dlcs: 'DLCs',
     mapDlcs: 'DLCs de mapa',
     noMapDlcs: 'Nenhum',
     untested:
-      'O WestPlay ainda não foi testado nesta versão do jogo, mas muito provavelmente vai funcionar.',
+      'O MaxDevMod ainda não foi testado nesta versão do jogo, mas muito provavelmente vai funcionar.',
     otherCarPlay: {
       title: 'Remova o YMN One',
-      text: 'Outro mod de CarPlay, o YMN One, está instalado no seu jogo (YamanDriveBridge.dll, na pasta plugins). Ele toma a tela do GPS do seu caminhão: o WestPlay não aparece ali, e a tela fica rosa quando o YMN One não está rodando. Feche o jogo e apague esse arquivo.',
+      text: 'Outro mod de CarPlay, o YMN One, está instalado no seu jogo (YamanDriveBridge.dll, na pasta plugins). Ele toma a tela do GPS do seu caminhão: o MaxDevMod não aparece ali, e a tela fica rosa quando o YMN One não está rodando. Feche o jogo e apague esse arquivo.',
     },
     trucks: 'Caminhões',
     truckNotYet: 'Ainda não compatível',
@@ -62,11 +62,11 @@ export const words: Words = {
     notInGame: 'Não está no seu jogo',
     scania7: 'Scania S e R – tela de 7"',
     scaniaSmartDash: 'Scania S e R – Smart Dash',
-    anyTruckTablet: 'Qualquer caminhão – com o tablet WestPlay',
+    anyTruckTablet: 'Qualquer caminhão – com o tablet MaxDevMod',
     profiles: 'Perfis',
     profileCount: { one: '{n} perfil', other: '{n} perfis' },
     noProfiles: 'Nenhum perfil ainda',
-    noProfilesDetail: 'O WestPlay vai preparar o mapa para o primeiro perfil que você criar.',
+    noProfilesDetail: 'O MaxDevMod vai preparar o mapa para o primeiro perfil que você criar.',
     baseMap: 'Mapa original',
     withMods: '{map} com {mods}',
     unreadable: {
@@ -74,20 +74,20 @@ export const words: Words = {
       other: 'Não foi possível ler {n} mods de mapa, então as mudanças deles não vão aparecer',
     },
     mapNote:
-      'O WestPlay prepara um mapa para cada um dos seus perfis, um após o outro, começando pelo último que você jogou. Os mapas são preparados enquanto o jogo está fechado.',
+      'O MaxDevMod prepara um mapa para cada um dos seus perfis, um após o outro, começando pelo último que você jogou. Os mapas são preparados enquanto o jogo está fechado.',
   },
   install: {
-    title: 'Instalar o WestPlay',
-    titleDone: 'O WestPlay está instalado',
-    sub: 'O WestPlay adiciona um plugin ao seu jogo, que carrega sozinho as telas do WestPlay para os caminhões toda vez que você joga: não há nada para ativar no Gerenciador de mods. Os arquivos do próprio jogo ficam intactos, e desinstalar o WestPlay remove tudo.',
+    title: 'Instalar o MaxDevMod',
+    titleDone: 'O MaxDevMod está instalado',
+    sub: 'O MaxDevMod adiciona um plugin ao seu jogo, que carrega sozinho as telas do MaxDevMod para os caminhões toda vez que você joga: não há nada para ativar no Gerenciador de mods. Os arquivos do próprio jogo ficam intactos, e desinstalar o MaxDevMod remove tudo.',
     install: 'Instalar',
     tryAgain: 'Tentar novamente',
     asAdministrator: 'Instalar como administrador',
     plugin: 'Plugin',
-    pluginDetail: 'Mostra o WestPlay na tela do seu caminhão',
+    pluginDetail: 'Mostra o MaxDevMod na tela do seu caminhão',
     banners: {
       installing: { title: 'Instalando…' },
-      done: { title: 'O WestPlay está instalado', text: 'Seu jogo está pronto' },
+      done: { title: 'O MaxDevMod está instalado', text: 'Seu jogo está pronto' },
       permission: { title: 'Permissão necessária', text: 'O Windows vai pedir uma vez' },
       inUse: { title: 'Feche o jogo', text: 'Ele está usando o plugin' },
       failed: { title: 'A instalação não terminou', text: 'Veja os detalhes à esquerda' },
@@ -95,7 +95,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'Feche o jogo.',
-      text: 'O WestPlay não pode ser instalado enquanto o jogo está aberto.',
+      text: 'O MaxDevMod não pode ser instalado enquanto o jogo está aberto.',
     },
     inUse: {
       title: 'Feche o jogo.',
@@ -110,24 +110,24 @@ export const words: Words = {
       text: 'Sem ela, o plugin não pode ser instalado. Tente novamente e escolha “Sim”.',
     },
     pluginFailed: 'Não foi possível instalar o plugin.',
-    modFailed: 'Não foi possível preparar as telas do WestPlay para o caminhão a partir do seu jogo.',
-    noPlugin: 'Esta cópia do WestPlay está sem o plugin. Reinstale o WestPlay.',
+    modFailed: 'Não foi possível preparar as telas do MaxDevMod para o caminhão a partir do seu jogo.',
+    noPlugin: 'Esta cópia do MaxDevMod está sem o plugin. Reinstale o MaxDevMod.',
     noDocuments: 'Sua pasta Documentos não foi encontrada.',
   },
   map: {
     title: 'Preparando seu mapa…',
     titleReady: 'Seu mapa está pronto',
-    sub: 'O WestPlay cria o mapa dele a partir do seu próprio jogo, com seus DLCs e mods de mapa. Isso leva um ou dois minutos.',
+    sub: 'O MaxDevMod cria o mapa dele a partir do seu próprio jogo, com seus DLCs e mods de mapa. Isso leva um ou dois minutos.',
     banners: {
       building: 'Preparando seu mapa',
       ready: { title: 'Seu mapa está pronto', text: 'Com seus DLCs e mods de mapa' },
       waiting: { title: 'Feche o jogo', text: 'O mapa é preparado com o jogo fechado' },
-      failed: { title: 'Não foi possível preparar o mapa', text: 'O WestPlay vai tentar de novo mais tarde' },
+      failed: { title: 'Não foi possível preparar o mapa', text: 'O MaxDevMod vai tentar de novo mais tarde' },
       getting: 'Preparando…',
     },
     waiting: {
       title: 'Feche o jogo.',
-      text: 'Preparar o mapa usa muita memória, então o WestPlay espera até o jogo não estar aberto.',
+      text: 'Preparar o mapa usa muita memória, então o MaxDevMod espera até o jogo não estar aberto.',
     },
     stages: {
       reading: { now: 'Lendo o mapa do seu jogo', done: 'Mapa lido do seu jogo' },
@@ -150,7 +150,7 @@ export const words: Words = {
   },
   accounts: {
     title: 'Entre no YouTube',
-    sub: 'Opcional. Entre para ver suas recomendações, inscrições e histórico na tela do caminhão. Você entra com o Google em uma janela separada, e o WestPlay nunca vê sua conta.',
+    sub: 'Opcional. Entre para ver suas recomendações, inscrições e histórico na tela do caminhão. Você entra com o Google em uma janela separada, e o MaxDevMod nunca vê sua conta.',
     signIn: 'Fazer login',
     signOut: 'Sair',
     signedIn: 'Conectado',
@@ -161,13 +161,13 @@ export const words: Words = {
   },
   spotify: {
     title: 'Entre no Spotify',
-    sub: 'Opcional. Entre para ouvir o Spotify na tela do caminhão, com suas playlists e sua biblioteca. Você entra no Spotify em uma janela separada, e o WestPlay nunca vê sua conta.',
+    sub: 'Opcional. Entre para ouvir o Spotify na tela do caminhão, com suas playlists e sua biblioteca. Você entra no Spotify em uma janela separada, e o MaxDevMod nunca vê sua conta.',
     finishInWindow: 'Termine de entrar na janela do Spotify',
     signingIn: { title: 'Entrando no Spotify', text: 'Continue na janela do Spotify' },
   },
   appleMusic: {
     title: 'Entre no Apple Music',
-    sub: 'Opcional. Entre para ouvir o Apple Music na tela do caminhão, com suas playlists e sua biblioteca. Você entra no Apple Music em uma janela separada, e o WestPlay nunca vê sua conta.',
+    sub: 'Opcional. Entre para ouvir o Apple Music na tela do caminhão, com suas playlists e sua biblioteca. Você entra no Apple Music em uma janela separada, e o MaxDevMod nunca vê sua conta.',
     finishInWindow: 'Termine de entrar na janela do Apple Music',
     signingIn: { title: 'Entrando no Apple Music', text: 'Continue na janela do Apple Music' },
   },
@@ -177,11 +177,11 @@ export const words: Words = {
     steps: [
       {
         title: 'Abra o jogo',
-        text: 'Quando aparecer “Detectada requisição para usar ferramentas de desenvolvedor (SDK) avançadas.”, escolha “OK”. É o WestPlay.',
+        text: 'Quando aparecer “Detectada requisição para usar ferramentas de desenvolvedor (SDK) avançadas.”, escolha “OK”. É o MaxDevMod.',
       },
       {
         title: 'Entre no seu caminhão',
-        text: 'Ligue a parte elétrica, e o WestPlay aparece na tela. Deixe o WestPlay aberto enquanto joga.',
+        text: 'Ligue a parte elétrica, e o MaxDevMod aparece na tela. Deixe o MaxDevMod aberto enquanto joga.',
       },
     ],
   },

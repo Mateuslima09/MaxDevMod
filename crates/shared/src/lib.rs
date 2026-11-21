@@ -28,7 +28,14 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 33;
+pub const BRIDGE_VERSION: u32 = 53;
+
+/// Live D3D11 screen sharpness tier in `HostBlock::screen_resolution`: applied immediately by the plugin on the next
+/// frame without restarting the game.
+pub const SCREEN_RES_GAME_DEFAULT: u32 = 0;
+pub const SCREEN_RES_STANDARD: u32 = 1;
+pub const SCREEN_RES_HIGH: u32 = 2;
+pub const SCREEN_RES_ULTRA: u32 = 3;
 
 /// Size of the app's frames, and the base size of the screen textures in the mod (`westplay_setup::game_mod`
 /// builds them from these).
@@ -80,7 +87,8 @@ pub fn screen_layouts() -> &'static [ScreenLayout] {
 /// shown whole (1.6:1).
 pub fn page_height(index: usize) -> u32 {
     match screen_layouts().get(index).map(|layout| layout.id) {
-        Some("generic") => 793,
+        Some("scania-7") => 793,
+        Some("generic") => 800,
         Some("tablet") => 898,
         Some("travego-16" | "travego-16-23") => 757,
         Some("setra-516") => 777,
@@ -255,6 +263,13 @@ pub const PHONE_PAPER: u32 = 3;
 /// before the trailer is coupled (or the cargo loaded), and the recipient's signature before it's delivered.
 pub const NOTE_PICKUP: u32 = 1;
 pub const NOTE_DELIVERY: u32 = 2;
+/// Not papers: the coupling's steps done by hand (owner 2026-11-19: "a drawing of the fifth wheel, the mouse on its
+/// lock: pull it to uncouple, push it to couple; and the trailer's legs, cranked down and up as in real life").
+/// Shown as the papers are, and answered as one: the same kind done, [`NOTE_LEFT`] put down.
+pub const NOTE_LOCK_PULL: u32 = 3;
+pub const NOTE_LOCK_PUSH: u32 = 4;
+pub const NOTE_LEGS_UP: u32 = 5;
+pub const NOTE_LEGS_DOWN: u32 = 6;
 /// `HostBlock::note_done`: the paper was put down without being collected.
 pub const NOTE_LEFT: u32 = 0xff;
 
@@ -315,7 +330,31 @@ pub struct PluginBlock {
     /// The paper the player asked for at the clerk by the trailer ([`NOTE_PICKUP`], [`NOTE_DELIVERY`]; 0: none):
     /// the app shows it to sign ([`PHONE_PAPER`]) until the plugin takes it back.
     pub note_wanted: AtomicU32,
+    /// The fuel the player filled by hand, to pay at the pump's attendant ([`FuelBill`]; its `id` 0: none asked):
+    /// the app shows it on the phone's Nupay to pay ([`PHONE_PAPER`]) until the plugin takes it back.
+    pub fuel_bill: SeqLock<FuelBill>,
+    /// The fuel filled by hand and still owed to the pump's attendant (its `id` 0: nothing owed), as soon as it's
+    /// owed: the app tells it on the phone (owner 2026-11-20: "there's no message saying you have to pay").
+    pub fuel_owed: SeqLock<FuelBill>,
 }
+
+/// The fuel filled by hand at a pump, as its meter said it (owner 2026-11-12: "pay at the attendant, on the phone"):
+/// a number of its own (the host answers it, [`HostBlock::fuel_paid`]), how much (litres, or gallons), the price for
+/// one and the total, in the money the game's pump showed (its sign: `R$`, `$`, `€`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FuelBill {
+    pub id: u32,
+    /// 1: the amount is gallons (the American game), 0: litres.
+    pub gallons: u32,
+    pub amount: f32,
+    pub price: f32,
+    pub total: f32,
+    pub sign: FixedStr<8>,
+}
+
+/// [`HostBlock::fuel_paid`]: the bill put down on the phone without paying (its id with this bit).
+pub const FUEL_NOT_PAID: u32 = 0x8000_0000;
 
 /// How many of the latest money events the bridge keeps: more than a player makes between two looks of the app.
 pub const MONEY_EVENTS: usize = 16;
@@ -529,7 +568,97 @@ pub struct HostBlock {
     /// The cargo's papers and coupling by hand (owner 2026-11-11): 1 on, 2 off (the phone's Settings); 0 until the
     /// app has said, taken as off.
     pub freight_papers: AtomicU32,
+    /// Refuelling by hand at the truck's tank (owner 2026-11-11): 1 on, 2 off (the phone's Settings); 0 until the
+    /// app has said, taken as off.
+    pub manual_refuel: AtomicU32,
+    /// Whether the truck stands at a fuel pump (the game's green icon), by the played map's pumps
+    /// (`westplay_host::pumps`): 0 the pumps aren't known (a map built before they were kept), 1 at one, 2 at none.
+    pub at_pump: AtomicU32,
+    /// The fuel bill paid on the phone (its [`FuelBill::id`]), or put down unpaid (with [`FUEL_NOT_PAID`]): the
+    /// plugin takes it (and sets it back to 0).
+    pub fuel_paid: AtomicU32,
+    /// Paying the fuel filled by hand at the pump's attendant (owner 2026-11-13: its own switch): 1 on, 2 off (the
+    /// app's settings); 0 until the app has said, taken as on.
+    pub pay_attendant: AtomicU32,
+    /// Where the reversing camera shows the game's rear-view mirrors on the screen frame (plugin/src/mirror.rs): left,
+    /// top, width and height in the frame's pixels, the page see-through there; a width of 0 while it doesn't.
+    pub mirror_rect: [AtomicU32; 4],
+    /// Live screen sharpness tier (`SCREEN_RES_*`): applied immediately in D3D11 on the next frame (0: game default).
+    pub screen_resolution: AtomicU32,
+    /// Split-screen mode (0: off, 1: left, 2: right): when non-zero, the game draws its own map alongside WestPlay.
+    pub screen_split: AtomicU32,
+    /// 1 while MaxDevMod is handed to the truck (the page hidden, the game's own screen and map showing): the
+    /// high-resolution screen (plugin/src/hires.rs) stands aside then, as its picture has no game's map under it
+    /// (owner 2026-11-20: hidden, the screen went black where the map should be). 0 shown, or not said yet.
+    pub screen_handed_over: AtomicU32,
+    /// Which of the game's virtual mirrors show on the screen (`VIRTUAL_MIRRORS_*`, the phone's Settings, owner
+    /// 2026-11-18); 0 until the app has said, taken as the right one only. The reversing camera is made from the
+    /// driver's side one whatever is chosen (plugin/src/hide_virtual.rs).
+    pub virtual_mirrors: AtomicU32,
+    /// 1: keep the in-cabin screen powered on even when the truck's electrics/engine are off; 0: turn off with electrics.
+    pub keep_screen_on: AtomicU32,
+    /// The player's own phone as a steering wheel (owner 2026-11-19, remote.rs's wheel page): 1 while a wheel page
+    /// is connected and talking; the plugin gives the game the values below only then (the player's keyboard and
+    /// wheel work as ever otherwise). The app sets it back to 0 when the phone closes or goes quiet.
+    pub wheel_active: AtomicU32,
+    /// The phone wheel's steering, an `f32`'s bits ([`f32::to_bits`]): -1 full left to 1 full right.
+    pub wheel_steering: AtomicU32,
+    /// The phone wheel's throttle and brake pedals, `f32` bits each: 0 up to 1 all the way down.
+    pub wheel_throttle: AtomicU32,
+    pub wheel_brake: AtomicU32,
+    /// Incremented on every value the phone wheel sent: the plugin lets go of the wheel if it stops changing (the
+    /// app gone without saying so).
+    pub wheel_seq: AtomicU64,
+    /// The reversing camera moved by the player on its screen (owner 2026-11-20: "can I adjust it myself?"): a count
+    /// of the presses (above the low byte) and the last one ([`CAMERA_NUDGE_BACK`]…); the plugin keeps each truck's
+    /// and trailer's own.
+    pub camera_nudge: AtomicU32,
+    /// MaxDevMod's own floating screen in the cab (owner 2026-11-20: "a screen of our own, in any truck, no accessory"):
+    /// a count of the presses (above the low byte) and the last one ([`FLOAT_TOGGLE`]…). The plugin keeps whether
+    /// it's on and each truck's place (crates/plugin float_screen.rs).
+    pub float_screen: AtomicU32,
 }
+
+/// [`HostBlock::float_screen`]'s presses: on or off, moved (in the truck's axes: forward, back, up, down, left,
+/// right), turned (yaw left or right, tilted up or down, rolled left or right), or as it was.
+pub const FLOAT_TOGGLE: u32 = 1;
+pub const FLOAT_FORWARD: u32 = 2;
+pub const FLOAT_BACK: u32 = 3;
+pub const FLOAT_UP: u32 = 4;
+pub const FLOAT_DOWN: u32 = 5;
+pub const FLOAT_LEFT: u32 = 6;
+pub const FLOAT_RIGHT: u32 = 7;
+pub const FLOAT_TURN_LEFT: u32 = 8;
+pub const FLOAT_TURN_RIGHT: u32 = 9;
+pub const FLOAT_TILT_UP: u32 = 10;
+pub const FLOAT_TILT_DOWN: u32 = 11;
+pub const FLOAT_ROLL_LEFT: u32 = 12;
+pub const FLOAT_ROLL_RIGHT: u32 = 13;
+pub const FLOAT_RESET: u32 = 14;
+/// Its size (owner 2026-11-20: made smaller by pushing it forward, it stood behind the dashboard and slid as the head
+/// moved): bigger or smaller, 5% a press.
+pub const FLOAT_BIGGER: u32 = 15;
+pub const FLOAT_SMALLER: u32 = 16;
+
+/// [`HostBlock::camera_nudge`]'s presses: the camera further back, forward, up, down, or as it was.
+pub const CAMERA_NUDGE_BACK: u32 = 1;
+pub const CAMERA_NUDGE_FORWARD: u32 = 2;
+pub const CAMERA_NUDGE_UP: u32 = 3;
+pub const CAMERA_NUDGE_DOWN: u32 = 4;
+pub const CAMERA_NUDGE_RESET: u32 = 5;
+/// Turned (owner 2026-11-20): looking up or down, to the left or right, and seeing wider or narrower.
+pub const CAMERA_NUDGE_TILT_UP: u32 = 6;
+pub const CAMERA_NUDGE_TILT_DOWN: u32 = 7;
+pub const CAMERA_NUDGE_TURN_LEFT: u32 = 8;
+pub const CAMERA_NUDGE_TURN_RIGHT: u32 = 9;
+pub const CAMERA_NUDGE_WIDER: u32 = 10;
+pub const CAMERA_NUDGE_NARROWER: u32 = 11;
+
+/// The virtual mirrors shown (`HostBlock::virtual_mirrors`): none, the right one only, the left one only, both.
+pub const VIRTUAL_MIRRORS_NONE: u32 = 1;
+pub const VIRTUAL_MIRRORS_RIGHT: u32 = 2;
+pub const VIRTUAL_MIRRORS_LEFT: u32 = 3;
+pub const VIRTUAL_MIRRORS_BOTH: u32 = 4;
 
 /// The Modo Personagem's mouse speeds while walking, in percent: the least, the most, and where it starts.
 pub const CHARACTER_SENSITIVITY: (u32, u32, u32) = (10, 200, 50);
@@ -541,7 +670,7 @@ pub const CHARACTER_KEY: u32 = 0x77;
 /// mover walking as them (`westplay_setup::own_character::PEOPLE`: the tattooed man, `wt_`, the woman, `wm_`, and the cowboy, `wc_`), in the
 /// order the companion shows their pictures, the first the default. In WestPlay's mod only when their files are on
 /// the PC: without them, [`CHARACTER_GAME_PERSON`] walks instead.
-pub const CHARACTER_PEOPLE: [&str; 3] = ["wt_walk", "wm_walk", "wc_walk"];
+pub const CHARACTER_PEOPLE: [&str; 6] = ["wt_walk", "wm_walk", "wc_walk", "wh_walk", "wg_walk", "wo_walk"];
 pub const CHARACTER_PERSON: usize = 0;
 /// A person of the game's own (the man `m_vanilla_ice_01`, in ETS2 and ATS), walking when the chosen one's files
 /// aren't on the PC.
@@ -573,6 +702,27 @@ pub const TRUCK_COMMANDS: &[&str] = &[
     // The Services app's: the game's services window (F7: towing, the nearest service), and parking itself.
     "services",
     "quickpark",
+    // The ignition (owner 2026-11-11): the key's first turn (the electrics on), the start (held, as the key is),
+    // and off.
+    "ignitionon",
+    "ignitionstrt",
+    "ignitionoff",
+    // The trailer's suspension (owner 2026-11-18: the phone's Suspensão app), up and down.
+    "trlrsuspup",
+    "trlrsuspdwn",
+    // The phone wheel's gear buttons (owner 2026-11-19: "engatar a marcha para frente e para trás"): drive, reverse
+    // and neutral, as the game's own automatic box's controls.
+    "geardrive",
+    "gearreverse",
+    "gear0",
+    // The phone wheel's other buttons (owner 2026-11-20): the blinkers, the headlights (the game's switch, round its
+    // positions) and high beams, the camera put back where it belongs, and the camera following the steering.
+    "lblinker",
+    "rblinker",
+    "light",
+    "hblight",
+    "camreset",
+    "looksteer",
 ];
 
 const _: () = assert!(TRUCK_COMMANDS.len() <= 64);
@@ -599,8 +749,14 @@ pub enum Keybind {
 }
 
 impl Keybind {
-    pub const ALL: [Keybind; KEYBIND_COUNT] =
-        [Keybind::VolumeUp, Keybind::VolumeDown, Keybind::PlayPause, Keybind::Phone, Keybind::Character, Keybind::Hints];
+    pub const ALL: [Keybind; KEYBIND_COUNT] = [
+        Keybind::VolumeUp,
+        Keybind::VolumeDown,
+        Keybind::PlayPause,
+        Keybind::Phone,
+        Keybind::Character,
+        Keybind::Hints,
+    ];
 }
 
 pub const KEYBIND_COUNT: usize = 6;
@@ -819,6 +975,69 @@ pub struct Telemetry {
     /// SDK's `multiplayer.time.offset`; 0 out of one): the cab's clock shows `game_time` plus this. A job's
     /// times are the player's own.
     pub multiplayer_time_offset: i32,
+    /// The reversing camera's: how far the steered wheels are turned (radians, left positive: the mean of the
+    /// SDK's `truck.wheel.steering` over the wheels the truck's configuration says steer), and the truck as
+    /// its configuration lays it out (metres, its own space: z back): the steered axle, the axle it turns about
+    /// (the middle of the others), its fifth wheel (`hook.position`), its rear end (behind its last axle) and
+    /// its half width (at its widest wheels). All 0 until the configuration is known.
+    pub wheel_steering: f32,
+    pub front_axle_z: f32,
+    pub rear_axle_z: f32,
+    pub hook_z: f32,
+    pub rear_z: f32,
+    pub half_width: f32,
+    /// The first trailer, while it's coupled (the SDK's `trailer.0.*`): where it is (world, as `x`, `y`, `z`)
+    /// and how it's turned (turns), and its configuration as the truck's (its own space: the kingpin, the axle
+    /// it turns about, its rear end, its half width).
+    pub trailer_connected: bool,
+    pub trailer_x: f64,
+    pub trailer_y: f64,
+    pub trailer_z: f64,
+    pub trailer_heading: f32,
+    pub trailer_hook_z: f32,
+    pub trailer_axle_z: f32,
+    pub trailer_rear_z: f32,
+    pub trailer_half_width: f32,
+    /// The parking sensors through the game's own physics (plugin/src/ray.rs): each rear sensor's nearest thing
+    /// (metres, in the page's sensors' order: left corner, left middle, right middle, right corner; -1: nothing in
+    /// its range, or not known), and how the rays are (`rays`: 0 not yet, 1 working, 2 off after the game closed
+    /// while they were tested, 3 not available here: not found, or under TruckersMP).
+    pub ray_sensors: [f32; 4],
+    pub rays: u8,
+    /// Whether the game drew its rear-view mirrors lately (plugin/src/mirror.rs): the reversing camera then shows
+    /// their picture (the screen frame left see-through where the page asks, `HostBlock::mirror_rect`).
+    pub mirror: bool,
+    /// The suspension, for the phone's Suspensão app (owner 2026-11-18): how far the springs are pressed in (metres,
+    /// the SDK's `wheel.suspension.deflection`, the mean of each group's wheels): the truck's front axle, its rear
+    /// axles, the first trailer's; -1 not known.
+    pub suspension: [f32; 3],
+    /// How hard the truck brakes (0..1, the SDK's `truck.effective.brake`): the automatic suspension raises it a little
+    /// under long braking (owner 2026-11-19: "braking long, lowered, it touches the ground").
+    pub brake: f32,
+    /// Whether the plugin's reversing camera has settled on the mirror and can be shown (plugin/src/rear_camera.rs
+    /// `ready`): the page covers the screen going into reverse until then.
+    pub camera_ready: bool,
+    /// The truck's wear (0..1, the SDK's `truck.wear.*`), for the phone's notifications (owner 2026-11-20): its
+    /// engine, transmission, cab, chassis and wheels, in that order.
+    pub wear: [f32; 5],
+    /// The truck's own low-fuel warning (the SDK's `truck.fuel.warning`), for the phone's notifications.
+    pub fuel_warning: bool,
+    /// Game minutes until the driver must rest (the SDK's `rest.stop`), while `rest_known` (the game said it).
+    pub rest_stop: i32,
+    pub rest_known: bool,
+    /// The reversing camera as the player moved it for this truck or trailer (metres: further back, higher).
+    pub camera_back: f32,
+    pub camera_up: f32,
+    /// And turned (degrees: looking further up, to the right, and how much wider it sees).
+    pub camera_tilt: f32,
+    pub camera_turn: f32,
+    pub camera_wide: f32,
+    /// The floating screen (crates/plugin float_screen.rs): switched on by the player, drawn lately (the camera in
+    /// the cab, the cab found), and its move from where it goes by itself in this truck (metres: right, up, forward;
+    /// degrees: turned right, tilted up, rolled right).
+    pub float_on: bool,
+    pub float_seen: bool,
+    pub float_pose: [f32; 6],
 }
 
 /// Identity of the current truck, from the SDK's "truck" configuration.
@@ -944,6 +1163,8 @@ unsafe impl Plain for Telemetry {}
 unsafe impl Plain for TruckInfo {}
 // SAFETY: byte strings, integers, floats and `bool`s only (see `Plain`).
 unsafe impl Plain for JobInfo {}
+// SAFETY: plain numbers and bytes, any bits a value.
+unsafe impl Plain for FuelBill {}
 // SAFETY: integers and floats only (see `Plain`); a count read torn is bounded by `Nearby::players`.
 unsafe impl Plain for Nearby {}
 // SAFETY: integers and byte strings only (see `Plain`); a count read torn only says which events are new.
@@ -1086,8 +1307,9 @@ mod tests {
     #[test]
     fn the_7_inch_screens_page_takes_its_displays_shape() {
         let index = |id: &str| screen_layouts().iter().position(|layout| layout.id == id).unwrap();
-        // 1280 x 793: 1.614, the display's 1.615.
-        assert_eq!(page_height(index("generic")), 793);
+        // 1280 x 793: 1.614, the 7" Scania display's 1.615; generic covers the full canvas at 1280 x 800.
+        assert_eq!(page_height(index("scania-7")), 793);
+        assert_eq!(page_height(index("generic")), 800);
         // The coaches' displays, each its shape.
         for (layout, height) in [
             ("travego-16", 757),
@@ -1233,7 +1455,7 @@ mod tests {
     #[test]
     fn mod_screens_have_slots_their_heights_told_by_setups_file() {
         let slots: Vec<&str> = screen_layouts().iter().map(|layout| layout.id).filter(|id| is_mod_slot(id)).collect();
-        assert_eq!(slots.len(), 16);
+        assert_eq!(slots.len(), 48);
         assert!(screen_layouts().iter().filter(|layout| is_mod_slot(layout.id)).all(|l| l.gps_scripts.is_empty()));
         assert!(!is_mod_slot("mod-") && !is_mod_slot("mod-x") && !is_mod_slot("generic"));
         let file = "mod-1 793\nmod-2 2000\nmod-12 480\n";

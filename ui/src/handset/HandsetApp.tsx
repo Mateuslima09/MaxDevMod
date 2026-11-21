@@ -1,16 +1,25 @@
-import { type CSSProperties, type ReactNode, Suspense, useEffect, useState } from 'react'
+import { type CSSProperties, type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { formatGameTime, formatGear } from '../shared/format'
 import { cabClock } from '../shared/host'
 import { NowPlayingWidget } from '../cabin/dashboard/widgets'
 import { useLook, useLookChanges } from '../cabin/state/hooks'
-import { connectHost, useCharacter, useLive, usePaper, useTikTok } from '../cabin/state/store'
-import { postToHost } from '../shared/host'
+import {
+  connectHost,
+  useCharacter,
+  useCharacterSwitches,
+  useLive,
+  useFuelBill,
+  usePaper,
+  useTikTok,
+} from '../cabin/state/store'
+import { ALERT_GROUPS, type AlertGroup, type CameraNudge, postToHost } from '../shared/host'
 import { languageOf } from '../cabin/state/strings'
 import { followTimeZone } from '../cabin/state/timeZone'
 import { PhoneVolume } from '../phone/PhoneVolume'
 import { useNowPlaying } from '../cabin/dashboard/useNowPlaying'
 import { CharacterApp, CHARACTER_WORDS } from './CharacterApp'
 import { CommandsApp } from './CommandsApp'
+import { CouplingStep } from './FifthWheel'
 import { COMMAND_WORDS } from './commandWords'
 import { goFullScreen } from './fullScreen'
 import { Home } from './Home'
@@ -18,11 +27,16 @@ import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
 import { distance, formatMoney, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
 import { NupayApp } from './NupayApp'
+import { FuelBill } from './FuelBill'
 import { Paper } from './Paper'
 import { ServicesApp } from './ServicesApp'
 import { SERVICES_WORDS } from './servicesWords'
 import { Notifications } from './notifications'
 import { TikTokApp } from './TikTokApp'
+import { SideKeys } from './SideKeys'
+import { SuspensionApp, SUSPENSION_WORDS } from './SuspensionApp'
+import { FloatScreenApp, FLOAT_SCREEN_WORDS } from './FloatScreenApp'
+import { ScrollThumb } from './ScrollThumb'
 import { Scaled } from './Scaled'
 import { ScreenFitList } from './ScreenFitList'
 import { Keyboard, MapView, SpotifyApp, YouTubeMusicApp } from './lazy'
@@ -58,6 +72,8 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   const appearance = prefs.look === 'auto' ? cab : prefs.look
   const words = WORDS[language === 'pt' ? 'pt' : 'en']
   const [app, setApp] = useState<AppId | null>(null)
+  // The app's page, for the scroll bar at its edge (ScrollThumb).
+  const content = useRef<HTMLDivElement>(null)
   const home = () => setApp(null)
   // Taken out on one of its apps (its Personagem's keybind): that app open, whatever was.
   const opened = useCharacter((state) => state.opened)
@@ -68,14 +84,27 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   // TikTok's own site shows under the page, through its app (the phone in the game's alone).
   const onTikTok = app === 'tiktok' && !remote
   useTikTokNotifications(prefs, remote)
-  // The cargo's papers and coupling by hand, on or off: said to the host as the page loads and as it changes.
-  const freightPapers = prefs.freightPapers
-  useEffect(() => {
-    if (!remote) postToHost({ type: 'freightPapers', on: freightPapers })
-  }, [remote, freightPapers])
+  useGameNotifications(prefs.alertsOff, remote)
   // The cargo's paper to sign, in place of the phone (the phone in the game's alone: the host shows it large).
   const paper = usePaper((state) => state.stage)
-  if (paper && !remote) {
+  // The fuel's bill to pay at the pump's attendant, on Nupay, in place of the phone as the paper is.
+  const fuelBill = useFuelBill((state) => state.bill)
+  if (fuelBill && !remote) {
+    return (
+      <main className="handset shell is-paper">
+        <FuelBill key={fuelBill.id} bill={fuelBill} language={language === 'pt' ? 'pt' : 'en'} />
+      </main>
+    )
+  }
+  // The fifth wheel's lock to pull, uncoupling by hand (owner 2026-11-19), shown as the paper is.
+  if ((paper === 'lockPull' || paper === 'lockPush' || paper === 'legsUp' || paper === 'legsDown') && !remote) {
+    return (
+      <main className="handset shell is-paper">
+        <CouplingStep key={paper} step={paper} language={language === 'pt' ? 'pt' : 'en'} />
+      </main>
+    )
+  }
+  if ((paper === 'pickup' || paper === 'delivery') && !remote) {
     return (
       <main className="handset shell is-paper">
         <Paper key={paper} stage={paper} language={language === 'pt' ? 'pt' : 'en'} prefs={prefs} />
@@ -85,17 +114,21 @@ export function HandsetApp({ remote }: { remote: boolean }) {
 
   return (
     <main
-      className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : ''}${onTikTok ? ' on-tiktok' : ''}`}
+      className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : ' with-keys'}${onTikTok ? ' on-tiktok' : ''}`}
     >
+      {!remote && <SideKeys tiktok={onTikTok} />}
       <div
         className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}${onTikTok ? ' on-tiktok' : ''}`}
       >
         <StatusBar />
-        <Notifications language={language === 'pt' ? 'pt' : 'en'} />
+        <Notifications language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />
         {app === null ? (
           <Home words={words} open={setApp} units={prefs.units} remote={remote} />
         ) : (
-          <section className={`ios-app-screen${compact ? ' compact' : ''}${app === 'tiktok' ? ' is-tiktok' : ''}`} key={app}>
+          <section
+            className={`ios-app-screen${compact ? ' compact' : ''}${app === 'tiktok' ? ' is-tiktok' : ''}`}
+            key={app}
+          >
             {/* TikTok's is all TikTok's: home is the indicator under it. */}
             {!onTikTok && (
               <header className="ios-nav">
@@ -108,7 +141,8 @@ export function HandsetApp({ remote }: { remote: boolean }) {
                 {compact && <span className="ios-nav-title">{words.apps[app]}</span>}
               </header>
             )}
-            <div className={`ios-content ios-content-${app}`}>
+            {!onTikTok && <ScrollThumb target={content} />}
+            <div className={`ios-content ios-content-${app}`} ref={content}>
               {/* Nupay has its own head; TikTok in the game is all TikTok's. */}
               {!compact && app !== 'nupay' && !onTikTok && <h1 className="ios-large-title">{words.apps[app]}</h1>}
               {app === 'maps' && (
@@ -144,6 +178,14 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'character' && <CharacterApp words={CHARACTER_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'tiktok' && <TikTokApp language={language === 'pt' ? 'pt' : 'en'} remote={remote} />}
+              {app === 'suspension' && <SuspensionApp words={SUSPENSION_WORDS[language === 'pt' ? 'pt' : 'en']} />}
+              {app === 'camera' && <CameraApp words={words} />}
+              {app === 'floatScreen' && (
+                <FloatScreenApp
+                  words={FLOAT_SCREEN_WORDS[language === 'pt' ? 'pt' : 'en']}
+                  language={language === 'pt' ? 'pt' : 'en'}
+                />
+              )}
             </div>
           </section>
         )}
@@ -173,6 +215,18 @@ function useTikTokNotifications(prefs: Prefs, remote: boolean) {
     postToHost({ type: 'tiktok', command: { action: 'notifications', on: wanted } })
     // Said again as TikTok starts (`signedIn` known): one started since heard nothing of it.
   }, [remote, wanted, known, playing, signedIn])
+}
+
+/**
+ * The game's notifications' groups turned off in the phone's Settings, said to the host (it's the host that tells
+ * them, and shows the phone's top for them) as the phone in the game's page loads and as they change.
+ */
+function useGameNotifications(off: AlertGroup[], remote: boolean) {
+  const said = off.join(',')
+  useEffect(() => {
+    if (remote) return
+    postToHost({ type: 'alerts', off: said ? (said.split(',') as AlertGroup[]) : [] })
+  }, [remote, said])
 }
 
 /** One of the cab's own screens, smaller (Scaled.tsx), in an app window as the cab has it, with the cab's
@@ -362,10 +416,127 @@ function TruckApp({ words, units }: { words: Words; units: Prefs['units'] }) {
   )
 }
 
+/**
+ * The reversing camera's own app (owner 2026-11-20: at the end of the Truck page "it isn't showing for me … make an
+ * app"): big arrows moving it as its cab screen's buttons do, how far it has moved, and back to where it goes by
+ * itself. For the trailer coupled now, or the truck alone (rear_camera.rs `nudged`).
+ */
+function CameraApp({ words }: { words: Words }) {
+  const t = useLive((state) => state.telemetry)
+  if (!t) return <Empty>{words.noGame}</Empty>
+  const press = (action: CameraNudge) => postToHost({ type: 'cameraNudge', action })
+  const language = words === WORDS.pt ? 'pt' : 'en'
+  const back = t.cameraBack ?? 0
+  const up = t.cameraUp ?? 0
+  return (
+    <>
+      <article className="ios-hero ios-camera-hero">
+        <div className="ios-hero-kicker">{t.trailerConnected ? words.cameraForTrailer : words.cameraForTruck}</div>
+        <div className="ios-camera-pad">
+          <button type="button" className="ios-camera-key up" onClick={() => press('up')}>
+            <span aria-hidden>▲</span>
+            {words.cameraUp}
+          </button>
+          <button type="button" className="ios-camera-key forward" onClick={() => press('forward')}>
+            <span aria-hidden>◀</span>
+            {words.cameraForward}
+          </button>
+          <div className="ios-camera-now">
+            <div>
+              {words.cameraDistance} <b>{signedMetres(back, language)}</b>
+            </div>
+            <div>
+              {words.cameraHeight} <b>{signedMetres(up, language)}</b>
+            </div>
+          </div>
+          <button type="button" className="ios-camera-key back" onClick={() => press('back')}>
+            {words.cameraBack}
+            <span aria-hidden>▶</span>
+          </button>
+          <button type="button" className="ios-camera-key down" onClick={() => press('down')}>
+            {words.cameraDown}
+            <span aria-hidden>▼</span>
+          </button>
+        </div>
+      </article>
+      {/* Turned too (owner 2026-11-20: "turn it up if it looks too far down; to the sides; a wider view"). */}
+      <List header={words.cameraTurning}>
+        <CameraTurnRow
+          name={words.cameraTilt}
+          value={signedDegrees(t.cameraTilt ?? 0, language)}
+          less={{ label: words.cameraTiltDown, press: () => press('tiltDown') }}
+          more={{ label: words.cameraTiltUp, press: () => press('tiltUp') }}
+        />
+        <CameraTurnRow
+          name={words.cameraTurn}
+          value={signedDegrees(t.cameraTurn ?? 0, language)}
+          less={{ label: words.cameraTurnLeft, press: () => press('turnLeft') }}
+          more={{ label: words.cameraTurnRight, press: () => press('turnRight') }}
+        />
+        <CameraTurnRow
+          name={words.cameraWide}
+          value={signedDegrees(t.cameraWide ?? 0, language)}
+          less={{ label: words.cameraNarrower, press: () => press('narrower') }}
+          more={{ label: words.cameraWider, press: () => press('wider') }}
+        />
+      </List>
+      <List footer={words.cameraNote}>
+        <button type="button" className="ios-row ios-row-action" onClick={() => press('reset')}>
+          {words.cameraReset}
+        </button>
+      </List>
+    </>
+  )
+}
+
+/** One of the camera's turns: its name and how far it's turned, and a button each way. */
+function CameraTurnRow({
+  name,
+  value,
+  less,
+  more,
+}: {
+  name: string
+  value: string
+  less: { label: string; press: () => void }
+  more: { label: string; press: () => void }
+}) {
+  return (
+    <div className="ios-row ios-camera-row">
+      <span className="ios-camera-name">
+        {name} <b>{value}</b>
+      </span>
+      <span className="ios-camera-buttons">
+        <button type="button" onClick={less.press}>
+          {less.label}
+        </button>
+        <button type="button" onClick={more.press}>
+          {more.label}
+        </button>
+      </span>
+    </div>
+  )
+}
+
+/** A signed angle: "+4°". */
+function signedDegrees(degrees: number, language: 'en' | 'pt'): string {
+  const sign = degrees > 0 ? '+' : degrees < 0 ? '−' : ''
+  const number = String(Math.round(Math.abs(degrees) * 10) / 10)
+  return `${sign}${language === 'pt' ? number.replace('.', ',') : number}°`
+}
+
+/** A signed distance: "+0,50 m". */
+function signedMetres(metres: number, language: 'en' | 'pt'): string {
+  const sign = metres > 0 ? '+' : metres < 0 ? '−' : ''
+  const number = Math.abs(metres).toFixed(2)
+  return `${sign}${language === 'pt' ? number.replace('.', ',') : number} m`
+}
+
 const LITRES_PER_GALLON = 3.785411784
 
 /** The phone's look and units (prefs.ts), the volume of what plays, reloading it, and how it's used. */
 function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; remote: boolean }) {
+  const switches = useCharacterSwitches()
   return (
     <>
       {/* Each choice as wide as its row: its header names it. */}
@@ -457,24 +628,111 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
           </button>
         </List>
       )}
-      {/* The cargo's papers and coupling by hand: the phone in the game's (they're played in the game). */}
+      {/* The game's notifications (owner 2026-11-20: payments, fines, the truck, the job), each group on or off. */}
       {!remote && (
-        <List header={words.freightPapers} footer={words.freightPapersHint}>
-          <Row
-            icon={<RowIcon tone="#1f8f4a">{GLYPH_PAPER}</RowIcon>}
-            label={
-              <Segmented
-                options={[
-                  ['on', words.on],
-                  ['off', words.off],
-                ]}
-                chosen={prefs.freightPapers ? 'on' : 'off'}
-                choose={(chosen) => setPrefs({ freightPapers: chosen === 'on' })}
-              />
-            }
-          />
+        <List header={words.gameNotifications} footer={words.gameNotificationsHint}>
+          {ALERT_GROUPS.map((group) => (
+            <Row
+              key={group}
+              icon={ALERT_ICONS[group]}
+              label={
+                <span className="ios-alert-row">
+                  <span>{words.alertGroups[group]}</span>
+                  <Segmented
+                    options={[
+                      ['on', words.on],
+                      ['off', words.off],
+                    ]}
+                    chosen={prefs.alertsOff.includes(group) ? 'off' : 'on'}
+                    choose={(chosen) =>
+                      setPrefs({
+                        alertsOff:
+                          chosen === 'on'
+                            ? prefs.alertsOff.filter((each) => each !== group)
+                            : [...prefs.alertsOff.filter((each) => each !== group), group],
+                      })
+                    }
+                  />
+                </span>
+              }
+            />
+          ))}
+          <button type="button" className="ios-row ios-row-action" onClick={() => postToHost({ type: 'testAlerts' })}>
+            {words.testGameNotifications}
+          </button>
         </List>
       )}
+      <SwitchList
+        header={words.keepScreenOn}
+        footer={words.keepScreenOnHint}
+        icon={<RowIcon tone="#0a84ff">{GLYPH_SCREEN}</RowIcon>}
+        on={switches.keepScreenOn}
+        change={(on) => postToHost({ type: 'keepScreenOn', on })}
+        words={words}
+      />
+      {/* The Modo Personagem's switches: the app's settings (owner 2026-11-13: in the app and on the phone too),
+          the same here, on the player's own phone and on the companion's Personagem page. */}
+      <SwitchList
+        header={words.freightPapers}
+        footer={words.freightPapersHint}
+        icon={<RowIcon tone="#1f8f4a">{GLYPH_PAPER}</RowIcon>}
+        on={switches.freightPapers}
+        change={(on) => postToHost({ type: 'freightPapers', on })}
+        words={words}
+      />
+      <SwitchList
+        header={words.manualRefuel}
+        footer={words.manualRefuelHint}
+        icon={<RowIcon tone="#c9541a">{GLYPH_FUEL}</RowIcon>}
+        on={switches.manualRefuel}
+        change={(on) => postToHost({ type: 'manualRefuel', on })}
+        words={words}
+      />
+      <SwitchList
+        header={words.payAttendant}
+        footer={words.payAttendantHint}
+        icon={<RowIcon tone="#820ad1">{GLYPH_FUEL}</RowIcon>}
+        on={switches.payAttendant}
+        change={(on) => postToHost({ type: 'payAttendant', on })}
+        words={words}
+      />
+      {/* Which of the game's virtual mirrors show (owner 2026-11-18): the reversing camera uses the left one, shown
+          or not. On the player's own phone too. */}
+      <List header={words.virtualMirrors} footer={words.virtualMirrorsHint}>
+        <Row
+          icon={<RowIcon tone="#0a84ff">{GLYPH_MIRROR}</RowIcon>}
+          label={
+            <Segmented
+              options={[
+                ['none', words.mirrorsNone],
+                ['left', words.mirrorsLeft],
+                ['right', words.mirrorsRight],
+                ['both', words.mirrorsBoth],
+              ]}
+              chosen={switches.virtualMirrors}
+              choose={(which) => postToHost({ type: 'virtualMirrors', which })}
+            />
+          }
+        />
+      </List>
+      {/* How big the mouse's dot is, on the truck's screen and the phone (owner 2026-11-19). */}
+      <List header={words.cursorSize} footer={words.cursorSizeHint}>
+        <Row
+          icon={<RowIcon tone="#5e5ce6">{GLYPH_CURSOR}</RowIcon>}
+          label={
+            <Segmented
+              options={[
+                ['small', words.cursorSmall],
+                ['normal', words.cursorNormal],
+                ['large', words.cursorLarge],
+                ['larger', words.cursorLarger],
+              ]}
+              chosen={switches.cursorSize}
+              choose={(which) => postToHost({ type: 'cursorSize', which })}
+            />
+          }
+        />
+      </List>
       <ScreenFitList words={words} />
       {/* A new version installed: the page again, without scanning the QR code again (owner 2026-11-02). */}
       <List footer={words.reloadHint}>
@@ -488,7 +746,7 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
           </button>
         )}
       </List>
-      <List header={words.howTo} footer="WestPlay ATS">
+      <List header={words.howTo} footer="MaxDevMod ATS">
         <Row label={<span className="ios-row-wrap">{words.howToText}</span>} />
       </List>
     </>
@@ -533,12 +791,44 @@ const GLYPH_BRAKE = (
   />
 )
 const GLYPH_LIGHT = <path d="M10 6a6 6 0 0 0 0 12h2V6ZM14 8h7M14 12h7M14 16h7" />
-const GLYPH_PAPER = <path d="M6 2h9l4 4v16H6Zm8 1.5V7h3.5ZM9 11h7v1.6H9Zm0 3.4h7V16H9Zm0 3.4h4.5v1.6H9Z" fillRule="evenodd" />
+const GLYPH_PAPER = (
+  <path d="M6 2h9l4 4v16H6Zm8 1.5V7h3.5ZM9 11h7v1.6H9Zm0 3.4h7V16H9Zm0 3.4h4.5v1.6H9Z" fillRule="evenodd" />
+)
+const GLYPH_CURSOR = (
+  <>
+    <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+    <circle cx="12" cy="12" r="3" />
+  </>
+)
+const GLYPH_MIRROR = (
+  <path
+    d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-4v3h-2v-3H7a3 3 0 0 1-3-3Zm3-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z"
+    fillRule="evenodd"
+  />
+)
+/** The game's notifications' groups in Settings, each with its glyph. */
+const ALERT_ICONS: Record<AlertGroup, ReactNode> = {
+  moneyIn: <RowIcon tone="#8a05be">{GLYPH_MONEY}</RowIcon>,
+  moneyOut: <RowIcon tone="#5e2a84">{GLYPH_MONEY}</RowIcon>,
+  fine: <RowIcon tone="#ff3b30">{<path d="M12 2 1 21h22Zm-1 7h2v6h-2Zm0 8h2v2h-2Z" />}</RowIcon>,
+  fuel: <RowIcon tone="#c9541a">{GLYPH_FUEL}</RowIcon>,
+  damage: <RowIcon tone="#1c7ed6">{GLYPH_ENGINE}</RowIcon>,
+  rest: <RowIcon tone="#5856d6">{GLYPH_CLOCK}</RowIcon>,
+  job: <RowIcon tone="#ff9500">{GLYPH_PAPER}</RowIcon>,
+}
 const GLYPH_LOOK = <path d="M12 3a9 9 0 1 0 0 18Zm0 2v14a7 7 0 0 1 0-14Z" fillRule="evenodd" />
+const GLYPH_SCREEN = (
+  <>
+    <rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path d="M8 20h8M12 17v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </>
+)
 
 const WORDS = {
   en: {
     home: 'Home',
+    pageBack: 'Previous page',
+    pageNext: 'Next page',
     apps: {
       maps: 'Maps',
       music: 'Music',
@@ -552,6 +842,9 @@ const WORDS = {
       services: 'Services',
       character: 'Character',
       tiktok: 'TikTok',
+      suspension: 'Suspension',
+      camera: 'Rear Camera',
+      floatScreen: 'Screen',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -569,6 +862,28 @@ const WORDS = {
     from: 'From',
     to: 'To',
     gear: 'Gear',
+    camera: 'Reversing camera',
+    cameraNote:
+      'Moves and turns the camera for the trailer coupled now (or the truck alone): 5 cm, 1° up or down, 2° to the side or 5° of view a press. Kept for it; best tried in reverse, watching the cab screen.',
+    cameraDistance: 'Distance',
+    cameraHeight: 'Height',
+    cameraForward: 'Forward',
+    cameraBack: 'Back',
+    cameraDown: 'Lower',
+    cameraUp: 'Higher',
+    cameraReset: 'Back to default',
+    cameraForTrailer: 'Adjusting for the trailer coupled now',
+    cameraForTruck: 'Adjusting for the truck alone',
+    cameraTurning: 'Turn and view',
+    cameraTilt: 'Tilt',
+    cameraTiltUp: 'Up',
+    cameraTiltDown: 'Down',
+    cameraTurn: 'Turn',
+    cameraTurnLeft: 'Left',
+    cameraTurnRight: 'Right',
+    cameraWide: 'Field of view',
+    cameraWider: 'Wider',
+    cameraNarrower: 'Narrower',
     fuel: 'Fuel',
     range: 'Range',
     truck: 'Truck',
@@ -594,21 +909,56 @@ const WORDS = {
     wallpaper: 'Wallpaper',
     tiktokNotifications: 'TikTok LIVE notifications',
     tiktokNotificationsHint:
-      'While you’re live on TikTok, who follows, sends a gift, shares or subscribes shows on the phone, with a sound. Put away, the top of the phone comes up for it. Sign in to TikTok under Accounts, in WestPlay.',
+      'While you’re live on TikTok, who follows, sends a gift, shares or subscribes shows on the phone, with a sound. Put away, the top of the phone comes up for it. Sign in to TikTok under Accounts, in MaxDevMod.',
     testNotification: 'Test a notification',
+    gameNotifications: 'Game notifications',
+    gameNotificationsHint:
+      'Payments, fines, the truck and the job show on the phone, with a sound. Put away, the top of the phone comes up for them.',
+    testGameNotifications: 'Test the game’s notifications',
+    alertGroups: {
+      moneyIn: 'Payments received',
+      moneyOut: 'Payments made (tolls, fuel…)',
+      fine: 'Fines',
+      fuel: 'Fuel (low, pay the attendant)',
+      damage: 'Truck damage',
+      rest: 'Rest (fatigue)',
+      job: 'Jobs and deadlines',
+    } satisfies Record<AlertGroup, string>,
     freightPapers: 'Cargo papers and coupling by hand',
     freightPapersHint:
       'On a job with your own truck: get out, sign the cargo’s bill with the clerk by the trailer, then couple the trailer at the fifth wheel (E). At the other end, the recipient signs before you can deliver. Needs the Modo Personagem.',
+    manualRefuel: 'Refuelling by hand',
+    manualRefuelHint:
+      'At a pump, the refuel key in the cab no longer fills the tank: get out, walk to the truck’s tank (beside it, behind the cab) and press E. E again stops. Needs the Modo Personagem.',
+    virtualMirrors: 'Virtual mirrors',
+    virtualMirrorsHint:
+      'Which of the game’s virtual mirrors show on the screen. The reversing camera works with any of them: it’s made from the left one, kept on (hidden if not chosen).',
+    mirrorsNone: 'None',
+    mirrorsLeft: 'Left',
+    mirrorsRight: 'Right',
+    mirrorsBoth: 'Both',
+    cursorSize: 'Mouse dot',
+    cursorSizeHint: 'How big the dot that follows the mouse is, on the truck’s screen and on the phone.',
+    cursorSmall: 'Small',
+    cursorNormal: 'Normal',
+    cursorLarge: 'Large',
+    cursorLarger: 'Larger',
+    payAttendant: 'Pay the pump attendant',
+    payAttendantHint:
+      'After refuelling by hand, the fuel is owed: walk up to the attendant in front of the truck and press E to pay on Nupay. Off, it’s paid at once.',
+    keepScreenOn: 'Screen on with truck off',
+    keepScreenOnHint:
+      'Keeps the dashboard multimedia screen powered on and interactive even when the truck is turned off. Toggle off anytime to turn it back off.',
     wallpapers: { aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
     miles: 'Miles',
     kilometres: 'Km',
     howTo: 'How to use',
     reload: 'Reload the page',
-    reloadHint: 'After a WestPlay update: loads the new version here, without scanning the QR code again.',
+    reloadHint: 'After a MaxDevMod update: loads the new version here, without scanning the QR code again.',
     screenFit: 'Vehicle screen',
     screenFitHint:
-      'Fits WestPlay on the screen of the vehicle you’re in, there at once: for when it’s too small or cut off to reach its own Settings.',
-    screenFitNone: 'Get in a vehicle with WestPlay on its screen.',
+      'Fits MaxDevMod on the screen of the vehicle you’re in, there at once: for when it’s too small or cut off to reach its own Settings.',
+    screenFitNone: 'Get in a vehicle with MaxDevMod on its screen.',
     edgeTop: 'Top edge',
     edgeBottom: 'Bottom edge',
     edgeLeft: 'Left edge',
@@ -616,11 +966,22 @@ const WORDS = {
     proportion: 'Proportion',
     fitSize: 'Size',
     restoreFit: 'Restore default',
+    fitPresets: {
+      title: 'Screen format (Manual)',
+      auto: 'Automatic (Detected)',
+      widescreen: '16:9 Widescreen',
+      sixteenTen: '16:10 Medium',
+      classic: '4:3 Classic',
+      ultrawide: '21:9 Ultrawide',
+      bandCenter: 'Mod Square Band',
+    },
     howToText:
-      'Alt+4 takes the phone out and puts it away. Hold Alt to use it with the mouse. The key can be changed in WestPlay’s Controls.',
+      'Alt+4 takes the phone out and puts it away. Hold Alt to use it with the mouse. The key can be changed in MaxDevMod’s Controls.',
   },
   pt: {
     home: 'Início',
+    pageBack: 'Página anterior',
+    pageNext: 'Próxima página',
     apps: {
       maps: 'Mapas',
       music: 'Música',
@@ -634,6 +995,9 @@ const WORDS = {
       services: 'Serviços',
       character: 'Personagem',
       tiktok: 'TikTok',
+      suspension: 'Suspensão',
+      camera: 'Câmera de Ré',
+      floatScreen: 'Tela',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',
@@ -651,6 +1015,28 @@ const WORDS = {
     from: 'De',
     to: 'Para',
     gear: 'Marcha',
+    camera: 'Câmera de ré',
+    cameraNote:
+      'Move e gira a câmera da carreta engatada agora (ou do caminhão sozinho): 5 cm, 1° para cima ou para baixo, 2° para o lado ou 5° de visão por toque. Fica guardado para ela; melhor ajustar de ré, olhando a tela da cabine.',
+    cameraDistance: 'Distância',
+    cameraHeight: 'Altura',
+    cameraForward: 'Para frente',
+    cameraBack: 'Para trás',
+    cameraDown: 'Descer',
+    cameraUp: 'Subir',
+    cameraReset: 'Voltar ao padrão',
+    cameraForTrailer: 'Ajustando para a carreta engatada',
+    cameraForTruck: 'Ajustando para o caminhão sozinho',
+    cameraTurning: 'Girar e campo de visão',
+    cameraTilt: 'Inclinação',
+    cameraTiltUp: 'Para cima',
+    cameraTiltDown: 'Para baixo',
+    cameraTurn: 'Girar',
+    cameraTurnLeft: 'Esquerda',
+    cameraTurnRight: 'Direita',
+    cameraWide: 'Campo de visão',
+    cameraWider: 'Mais',
+    cameraNarrower: 'Menos',
     fuel: 'Diesel',
     range: 'Autonomia',
     truck: 'Caminhão',
@@ -676,21 +1062,56 @@ const WORDS = {
     wallpaper: 'Papel de parede',
     tiktokNotifications: 'Notificações da LIVE do TikTok',
     tiktokNotificationsHint:
-      'Enquanto você faz live no TikTok, quem segue, manda presente, compartilha ou se inscreve aparece no celular, com som. Guardado, o topo do celular sobe para mostrar. Entre no TikTok em Contas, no WestPlay.',
+      'Enquanto você faz live no TikTok, quem segue, manda presente, compartilha ou se inscreve aparece no celular, com som. Guardado, o topo do celular sobe para mostrar. Entre no TikTok em Contas, no MaxDevMod.',
     testNotification: 'Testar notificação',
+    gameNotifications: 'Notificações do jogo',
+    gameNotificationsHint:
+      'Pagamentos, multas, o caminhão e o frete aparecem no celular, com som. Guardado, o topo do celular sobe para mostrar.',
+    testGameNotifications: 'Testar notificações do jogo',
+    alertGroups: {
+      moneyIn: 'Pagamentos recebidos',
+      moneyOut: 'Pagamentos feitos (pedágio, diesel…)',
+      fine: 'Multas',
+      fuel: 'Combustível (reserva, pagar frentista)',
+      damage: 'Dano no caminhão',
+      rest: 'Descanso (sono)',
+      job: 'Fretes e prazos',
+    } satisfies Record<AlertGroup, string>,
     freightPapers: 'Nota fiscal e engate manual',
     freightPapersHint:
       'Nos fretes com o seu caminhão: desça, assine a nota fiscal com o conferente ao lado da carreta e engate a carreta na quinta roda (E). Na entrega, o destinatário assina antes de você poder entregar. Precisa do Modo Personagem.',
+    manualRefuel: 'Abastecimento manual',
+    manualRefuelHint:
+      'Na bomba, a tecla de abastecer na cabine não enche mais o tanque: desça, vá até o tanque do caminhão (ao lado dele, atrás da cabine) e aperte E. E de novo para. Precisa do Modo Personagem.',
+    virtualMirrors: 'Espelhos virtuais',
+    virtualMirrorsHint:
+      'Quais espelhos virtuais do jogo aparecem na tela. A câmera de ré funciona com qualquer escolha: ela é feita do espelho esquerdo, que fica ligado (escondido, se não for escolhido).',
+    mirrorsNone: 'Nenhum',
+    mirrorsLeft: 'Esquerdo',
+    mirrorsRight: 'Direito',
+    mirrorsBoth: 'Os dois',
+    cursorSize: 'Bolinha do mouse',
+    cursorSizeHint: 'O tamanho da bolinha que segue o mouse, na tela do caminhão e no celular.',
+    cursorSmall: 'Pequena',
+    cursorNormal: 'Normal',
+    cursorLarge: 'Grande',
+    cursorLarger: 'Muito grande',
+    payAttendant: 'Pagar no frentista',
+    payAttendantHint:
+      'Depois de abastecer a pé, o abastecimento fica em aberto: vá até o frentista na frente do caminhão e aperte E para pagar no Nupay. Desligado, já fica pago.',
+    keepScreenOn: 'Tela ligada (caminhão desligado)',
+    keepScreenOnHint:
+      'Mantém a central multimídia ligada e funcionando mesmo com o caminhão desligado. Desative quando quiser desligar a tela junto com o caminhão.',
     wallpapers: { aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
     miles: 'Milhas',
     kilometres: 'Km',
     howTo: 'Como usar',
     reload: 'Atualizar página',
-    reloadHint: 'Depois de uma atualização do WestPlay: carrega a versão nova aqui, sem escanear o QR Code de novo.',
+    reloadHint: 'Depois de uma atualização do MaxDevMod: carrega a versão nova aqui, sem escanear o QR Code de novo.',
     screenFit: 'Tela do veículo',
     screenFitHint:
-      'Ajusta o WestPlay na tela do veículo em que você está, na hora: para quando ela fica pequena ou cortada demais para chegar nos Ajustes dela.',
-    screenFitNone: 'Entre num veículo com o WestPlay na tela.',
+      'Ajusta o MaxDevMod na tela do veículo em que você está, na hora: para quando ela fica pequena ou cortada demais para chegar nos Ajustes dela.',
+    screenFitNone: 'Entre num veículo com o MaxDevMod na tela.',
     edgeTop: 'Borda de cima',
     edgeBottom: 'Borda de baixo',
     edgeLeft: 'Borda esquerda',
@@ -698,8 +1119,17 @@ const WORDS = {
     proportion: 'Proporção',
     fitSize: 'Tamanho',
     restoreFit: 'Restaurar padrão',
+    fitPresets: {
+      title: 'Formato da tela (Manual)',
+      auto: 'Automático (Detectado)',
+      widescreen: '16:9 Widescreen',
+      sixteenTen: '16:10 Médio',
+      classic: '4:3 Clássico',
+      ultrawide: '21:9 Ultrawide',
+      bandCenter: 'Faixa Central (Mod)',
+    },
     howToText:
-      'Alt+4 tira e guarda o celular. Segure o Alt para mexer nele com o mouse. A tecla pode ser trocada em Controles, no WestPlay.',
+      'Alt+4 tira e guarda o celular. Segure o Alt para mexer nele com o mouse. A tecla pode ser trocada em Controles, no MaxDevMod.',
   },
 }
 
@@ -713,6 +1143,41 @@ function Volume({ words }: { words: Words }) {
       <Row
         label={
           showing ? <PhoneVolume label={words.volume} /> : <span className="ios-row-off">{words.nothingPlays}</span>
+        }
+      />
+    </List>
+  )
+}
+
+/** A Modo Personagem switch in Settings: on or off, as the app's settings have it (`useCharacterSwitches`). */
+function SwitchList({
+  header,
+  footer,
+  icon,
+  on,
+  change,
+  words,
+}: {
+  header: string
+  footer: string
+  icon: ReactNode
+  on: boolean
+  change: (on: boolean) => void
+  words: { on: string; off: string }
+}) {
+  return (
+    <List header={header} footer={footer}>
+      <Row
+        icon={icon}
+        label={
+          <Segmented
+            options={[
+              ['on', words.on],
+              ['off', words.off],
+            ]}
+            chosen={on ? 'on' : 'off'}
+            choose={(chosen) => change(chosen === 'on')}
+          />
         }
       />
     </List>

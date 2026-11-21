@@ -72,6 +72,8 @@ arm.matrix_world = mathutils.Matrix.Rotation(math.pi,4,"Z") @ arm.matrix_world  
 root.scs_props.scs_root_animated='anim'
 root.scs_props.scs_root_object_allow_anim_custom_path=True
 root.scs_props.scs_root_object_anim_export_filepath="//model/westplay/"+DIR+"/anim"
+# The exporter doesn't make the folder (a new person's first export failed on it, 2026-11-14).
+os.makedirs(os.path.join(BASE,"model","westplay",DIR,"anim"), exist_ok=True)
 print("CHILDREN",[c.name for c in root.children], "mesh parent", mesh.parent.name if mesh.parent else None)
 # material
 mat=mesh.data.materials[0]
@@ -95,7 +97,8 @@ for m2 in mesh.data.materials[1:]:
     m2.scs_props.active_shader_preset_name = "dif.spec"
     mu.set_shader_data_to_material(m2, section)
     m2.scs_props.mat_effect_name="eut2.dif.spec"
-    m2.scs_props.shader_texture_base = "//model/westplay/"+DIR+"/"+MODEL.split("_")[0]+"_phone_tex.tobj"
+    # (the phone's by default; the pump's nozzle names its own: `abastecer.py`)
+    m2.scs_props.shader_texture_base = "//model/westplay/"+DIR+"/"+MODEL.split("_")[0]+"_"+m2.get("westplay_tex","phone_tex")+".tobj"
     u2=m2.scs_props.shader_texture_base_uv
     if len(u2)==0: u2.add()
     u2[0].value=mesh.data.uv_layers[0].name

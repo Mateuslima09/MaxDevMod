@@ -36,6 +36,7 @@ SCS (exportar e converter) → pasta do WestPlay → código (uma entrada por lu
 | `andar_agachado`, `agachado_andar`, `agachado_parar` | `cwalk`, `cstart`, `csettle` | Crouched Walking (In Place), mais as transições feitas pelo `agachar_completo.py` e pelo `transicao_parar.py` | não |
 | `celular` | `text` | Texting (pega o celular e digita) | não |
 | `celular_andando` | `txwalk` | Texting And Walking (In Place) | não |
+| `engatar` | `work` | **nenhuma**: feita no Blender a partir do `agachar` da própria pessoa (`engatar.py`, abaixo) | não |
 
 Se uma animação faltar, o personagem faz sem ela: para em vez de tocar o "parar", continua andando com o celular
 aberto, e assim por diante. Só o pulo e o agachar precisam dos tempos no perfil (passo 8).
@@ -67,6 +68,13 @@ Feito por IA (Tripo) ou à mão. Antes do Mixamo:
 - virar de frente (−Y). O personagem 2 veio de costas e precisou girar 180°;
 - deixar na altura do padrão. Não precisa acertar no centímetro: o passo 3 corrige;
 - exportar FBX com a textura embutida (*Path Mode: Copy*, *Embed Textures*) e enviar ao Mixamo.
+
+O `preparar_mixamo.py` faz isso (menos reduzir e o *bake*): de pé no chão, de frente, na altura, textura 2048, o FBX
+e as prévias. Com `eye=x,z,rx,rz`, pinta de novo um olho estragado espelhando o outro (o personagem 6, 2026-11-14):
+
+```
+B -b [modelo.blend] --python T/preparar_mixamo.py -- "<pasta>/mixamo" <nome> <altura m> [modelo.fbx] [eye=0.018,0.918,0.017,0.010]
+```
 
 ### 2. Mixamo
 
@@ -114,6 +122,45 @@ chão quadro a quadro, porque tem um instante com os dois pés no ar: só desce 
 baixo tocar o chão. Testado em 2026-11-06
 com o agachar, o pulo, o pulo correndo, o parar e o celular da mulher no homem: tudo passa no conferidor (só
 o bico da bota, no pulo correndo, desce 3,6 cm).
+
+O `engatar` (engatar e desengatar a carreta à mão, 2026-11-11) não vem do Mixamo: depois de ter o `agachar`,
+
+```
+B -b "<saída>_animada.blend" --python T/engatar.py -- [<pasta para 5 imagens de conferência>]
+```
+
+desce até o quadro 20 do agachar, põe as mãos trabalhando à frente, perto do chão (a direita girando, a esquerda
+segurando; uma volta a cada 25 quadros) do 20 ao 70, e levanta até o 90. O plugin repete do 20 ao 70 enquanto a
+pessoa trabalha. Entra na exportação como `work:engatar`.
+
+O `abastecer` (abastecer a pé com o bico na mão, 2026-11-12) também não vem do Mixamo: o primeiro quadro do
+`parado`, o braço direito esticado à frente e para baixo (IK), a mão virada com o polegar para cima e os dedos
+fechados; e um bico simples (corpo, cano, gatilho, punho e mangueira) preso no osso da mão, como o celular:
+
+```
+B -b "<saída>_animada.blend" --python T/abastecer.py -- "<saída>_bico.blend" "<pasta>/xx_nozzle_tex.png" [<pasta para imagens>]
+```
+
+Entra na exportação do personagem como `fuel:abastecer`, e o corpo sem cabeça com o bico sai da cena `_bico`:
+`exportar_scs.py -- <nome> <pasta> xx_nzbody "" xx_player headless`. A textura do bico vira TGA como a do celular
+(`xx_nozzle_tex.tga` + `.tobj`). No código, `Person` ganha `nozzle_body: "xx_nzbody.pmd"`.
+
+### 3c. Braços fora da barriga (pessoa bem mais larga que a das animações)
+
+Quem reaproveita as animações de alguém magro fica com as mãos dentro da barriga e das costas (no gordinho `wg`
+entravam até 18 cm). Primeiro meça, depois corrija **depois** do engatar, do abastecer e do celular (estes também
+são conferidos), e antes de exportar:
+
+```
+B -b "<saída>_animada.blend" --python T/conferir_bracos.py
+B -b "<saída>_animada.blend" --python T/bracos_abertos.py
+```
+
+O `bracos_abertos.py` gira o braço no ombro, para fora (até 40°) e para trás ou para a frente (até 30°), só o
+necessário em cada quadro. Depois ele suaviza o giro no tempo e grava. Com mais giro o corpo fica de caranguejo e o
+braço da corrida sobe atrás (dono, 2026-11-14). Depois disso, o `conferir_bracos.py` ainda acusa alguns quadros
+com as mãos apoiadas no quadril: é a beirada do quadril, não o braço dentro do corpo. Confira esses quadros com o
+`retrato.py` antes de mexer.
 
 ### 4. Conferir
 
@@ -190,7 +237,10 @@ B -b "<saída>_animada.blend" --python T/retrato.py -- ui/public/characters/xx.p
    - `phone`: para onde a animação parada volta (depois de pegar o celular) e o comprimento.
    O que ficar `None`, o personagem faz sem.
 4. `ui/src/companion/useSettings.ts`: `CHARACTER_PEOPLE.people` ganha `{ picture: '/characters/xx.png', kind:
-   'man' | 'woman' }`. O nome no cartão sai sozinho ("Homem 2", "Mulher 2").
+   'man' | 'woman', name: '<chave>' }`. Desde 2026-11-14 cada um tem um nome no cartão (Tatuado, Madame,
+   Fazendeiro, Pistoleiro, Gordinho). Para um novo: acrescente a chave em `PersonName`
+   (`ui/src/companion/pages/words/index.ts`) e o nome em `names` em cada idioma de `pages/words`. Sem `name`, o
+   cartão diz "Homem 2", "Mulher 2".
 
 Os testes (`cargo test`) conferem se as listas estão na mesma ordem e se os nomes cabem no jogo.
 
@@ -242,6 +292,16 @@ WestPlay é aberto. Por isso os arquivos convertidos ficam **fora do repositóri
    (`anelar_como_indicador.py`, depois do `reaproveitar`; sem isso ele ficaria esticado). O perfil é o do tatuado,
    e o celular usa `up` 0,042 (com 0,031 a palma aparecia na tela). Cenas: `pesonagem 3/mixamo/cowboy_animado.blend`
    e `cowboy_celular.blend`. **Falta o personagem 2** (o caminhoneiro, prefixo sugerido `wk`): só o rig do Mixamo.
+2b. **O homem de preto com chapéu (`wh`, personagem 6) entrou em 2026-11-14**, pasta `model/westplay/chapeu`, quarto
+   cartão ("Homem 3"). Feito como o cowboy: rig do dono ("3 Chain Fingers"), as 13 animações do tatuado, o anelar como
+   o indicador, o engatar e o abastecer dele mesmo, o celular com `up` 0,042. O **gordinho (`wg`, personagem 5)** entrou no mesmo dia, do mesmo jeito: pasta
+   `model/westplay/gordinho`, quinto cartão ("Homem 4"). O material dele no Blender vinha do Tripo com a cor ligada à
+   transparência (só a prévia do Blender ficava clara; o jogo usa o próprio material): desligado nas cenas dele.
+2c. **A engenheira de capacete e colete (`wo`, personagem 7) entrou em 2026-11-20**, pasta `model/westplay/obra`,
+   sexto cartão ("Engenheira"; no celular, "Mulher 2"). Rig do dono ("2 Chain Fingers"), as animações da Madame
+   (`reaproveitar_animacoes.py` de `mulher_animada.blend`), o engatar, o abastecer e o celular dela mesma (`up`
+   0,042), o perfil da mulher. Antes do Mixamo, os olhos vesgos e a sobrancelha emendada foram pintados de novo na
+   textura (projetando uma foto de frente corrigida). A textura ficou com 4096 a pedido do dono.
 3. **Licença do Mixamo**: para uma release com personagem, as animações precisam ser nossas ou CC0 (veja
    "Licença"). Hoje o personagem só existe no PC de quem tem os arquivos.
 4. **Backup no repo privado `Mateuslima09/WestPlay-personagem`** (2026-11-07): a própria pasta `personagem_scs` é

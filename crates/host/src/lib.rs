@@ -5,6 +5,7 @@
 
 #[macro_use]
 pub mod log;
+mod alerts;
 mod apple_music;
 pub mod browser;
 mod camera;
@@ -23,6 +24,7 @@ mod planner;
 mod play_log;
 mod player;
 mod pointer;
+mod pumps;
 mod remote;
 pub mod route;
 mod route_change;
@@ -30,13 +32,15 @@ pub mod settings;
 mod signin;
 pub mod speakers;
 mod spotify;
-mod tiktok;
 pub mod startup;
+mod tiktok;
 mod truck_commands;
+mod auto_suspension;
 mod typing;
 mod wallet;
 mod weather;
 mod webview;
+mod wheel;
 mod youtube;
 mod youtube_music;
 
@@ -66,6 +70,13 @@ use westplay_mapdata::junctions::Turn;
 pub use webview::{Error, wait_for_browsers};
 /// Size the cabin page is rendered at: the size of the frames the plugin copies into the screen textures.
 pub use westplay_shared::{SCREEN_HEIGHT, SCREEN_WIDTH};
+
+/// How often the page is sent the game's telemetry (ms): 20 times a second, and in reverse as often as the
+/// screen shows frames (30: capture.rs MAX_FPS), for the reversing camera to follow the truck smoothly.
+const TELEMETRY_MS: u64 = 50;
+/// How long after its page is told a paper is shown (the page draws it first: no phone seen before it).
+const PAPER_REVEAL: Duration = Duration::from_millis(150);
+const TELEMETRY_REVERSING_MS: u64 = 33;
 
 /// Built-in page used when no UI URL is given: shows that frames and telemetry arrive.
 pub const TEST_PAGE: &str = include_str!("test_page.html");
@@ -102,6 +113,9 @@ pub struct Status {
     /// The phone in the game's page on the player's phone, as `phone_url` and `phone_qr` the panel's.
     pub handset_url: Option<String>,
     pub handset_qr: Option<String>,
+    /// The wheel page (the player's phone as a steering wheel, wheel.rs), over HTTPS, as `phone_url` and `phone_qr`.
+    pub wheel_url: Option<String>,
+    pub wheel_qr: Option<String>,
     /// The game WestPlay works with (`westplay_setup::game::current`: the one played, switched to as it starts),
     /// the one `game_connected` says of.
     pub game: westplay_setup::game::Kind,
@@ -306,7 +320,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         Content::Folder { root, .. } => Some(root.clone()),
         _ => None,
     };
-    let remote = std::rc::Rc::new(remote::Remote::start(ui_root.clone(), maps_dir.clone(), &config.data_dir));
+    let remote = std::rc::Rc::new(remote::Remote::start(ui_root.clone(), maps_dir.clone(), &config.data_dir, bridge.clone()));
     // The phone in the game (owner 2026-11-01), out at its keybind: its own page beside the cab's, on the cab's
     // browser, told what the cab is as the player's phones are, and captured into a frame of its own the plugin
     // draws over the game. Hidden (drawing nothing) while it's put away.
@@ -339,8 +353,14 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // The cargo's paper the player asked for at the clerk (the plugin's `note_wanted`), shown in the phone's frame
     // to sign until it's collected or put down.
     let mut handset_paper: Option<u32> = None;
+    // When a paper asked for with the phone away is shown (`PAPER_REVEAL` after the page was told).
+    let mut paper_reveal: Option<Instant> = None;
+    // The fuel filled by hand, to pay at the pump's attendant (the plugin's `fuel_bill`), shown on the phone's
+    // Nupay until it's paid or put down.
+    let mut handset_bill: Option<westplay_shared::FuelBill> = None;
     // The truck's commands the phones hold, for the plugin's input device.
     let mut truck_commands = truck_commands::TruckCommands::default();
+    let mut auto_suspension = auto_suspension::AutoSuspension::default();
     // The player's account, for the phone's Nupay (wallet.rs).
     let mut wallet_game = westplay_setup::game::current();
     let mut wallet = wallet::Wallet::open(&config.data_dir, wallet_game.sdk_id());
@@ -357,6 +377,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         });
     }
     let mut map_shown: (Option<String>, Option<u64>) = (None, None);
+    let mut map_pumps: Option<Vec<[f32; 2]>> = None;
     let mut status = Status {
         webview_version: webview.version.clone(),
         cab_adapter: cab_gpu.and_then(|luid| graphics::name_of(luid, &adapters)),
@@ -365,6 +386,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         phone_qr: remote.qr.clone(),
         handset_url: remote.handset_url.clone(),
         handset_qr: remote.handset_qr.clone(),
+        wheel_url: remote.wheel_url.clone(),
+        wheel_qr: remote.wheel_qr.clone(),
         ..Default::default()
     };
 
@@ -481,6 +504,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut apple_music_playback: Option<String> = None;
     // YouTube Music's web player, the same way (on the cabin page's profile, sharing YouTube's sign-in).
     let mut youtube_music: Option<youtube_music::YouTubeMusic> = None;
+    let mut suspension_option = SuspensionOption::default();
     let mut youtube_music_state: Option<youtube_music::State> = None;
     let (mut youtube_music_window_open, mut youtube_music_confirming) = (false, false);
     let mut youtube_music_playback: Option<String> = None;
@@ -501,6 +525,29 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // WestPlay's screen out of view (`camera::Unseen`), and as last told to the page.
     let mut unseen = camera::Unseen::default();
     let mut unseen_told: Option<bool> = None;
+    // The phone's notifications of the game and MaxDevMod (alerts.rs): what's watched for them, and the groups
+    // turned off in its Settings.
+    let mut alert_watch = alerts::Watch::default();
+    let mut alert_filter = alerts::Filter::default();
+    let mut alert_owed = alerts::Owed::default();
+    // A notification for the phone (TikTok's, the game's): on its page and the player's phones, the phone's top
+    // showing for it while it's put away (not over a paper or a bill in its frame).
+    macro_rules! notify_phone {
+        ($message:expr) => {{
+            let message: &str = $message;
+            remote.broadcast(message);
+            if let Some(handset) = &handset {
+                let _ = handset.post_json(message);
+                if !handset_shown && handset_paper.is_none() && handset_bill.is_none() {
+                    if handset_peek.is_none() {
+                        let _ = handset.show(true);
+                        host.phone_shown.store(westplay_shared::PHONE_PEEKS, Ordering::Release);
+                    }
+                    handset_peek = Some(Instant::now() + PEEK_FOR);
+                }
+            }
+        }};
+    }
     while !stop.load(Ordering::Relaxed) {
         pump_messages();
         host.heartbeat.fetch_add(1, Ordering::Release);
@@ -535,7 +582,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             // The phone in the hand is seen wherever the cab's screen is (on foot too: owner 2026-11-06, out of
             // the truck its cursor didn't show with Alt, the phone's frames held with the cab's screen).
             if let Some(phone) = &pipeline.phone
-                && (handset_shown || handset_peek.is_some() || handset_paper.is_some())
+                && (handset_shown || handset_peek.is_some() || handset_paper.is_some() || handset_bill.is_some())
             {
                 phone.flush(handset_cursor.look(Instant::now()), 1.0);
             }
@@ -625,18 +672,52 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             handset_paper = paper;
             handset_peek = None;
             let _ = handset.post_json(&paper_message(paper));
-            let _ = handset.show(paper.is_some() || handset_shown);
-            let shown = if paper.is_some() { westplay_shared::PHONE_PAPER } else { u32::from(handset_shown) };
-            host.phone_shown.store(shown, Ordering::Release);
+            // A paper coming with the phone away: shown a moment later, once the page has drawn it (owner
+            // 2026-11-19: the phone flashed up for an instant before the trailer's legs). Going: at once.
+            if paper.is_some() && !handset_shown {
+                paper_reveal = Some(Instant::now() + PAPER_REVEAL);
+            } else {
+                paper_reveal = None;
+                let _ = handset.show(paper.is_some() || handset_shown);
+                let shown = if paper.is_some() { westplay_shared::PHONE_PAPER } else { u32::from(handset_shown) };
+                host.phone_shown.store(shown, Ordering::Release);
+            }
             if let Some(app) = &tiktok {
                 let _ = app.out(handset_shown && paper.is_none());
             }
             log!("[handset] {}", if paper.is_some() { "a paper to sign" } else { "the paper put away" });
         }
+        if let (Some(at), Some(handset)) = (paper_reveal, &handset)
+            && Instant::now() >= at
+        {
+            paper_reveal = None;
+            if handset_paper.is_some() {
+                let _ = handset.show(true);
+                host.phone_shown.store(westplay_shared::PHONE_PAPER, Ordering::Release);
+            }
+        }
+        // The fuel's bill asked for at the pump's attendant (the plugin's), or taken back: the phone shows it as the
+        // paper is (large, with the mouse), on Nupay; then the phone as it was.
+        let bill = bridge.bridge().plugin.fuel_bill.read().filter(|bill| bill.id != 0);
+        if bill != handset_bill
+            && let Some(handset) = &handset
+        {
+            handset_bill = bill;
+            handset_peek = None;
+            let _ = handset.post_json(&bill_message(bill.as_ref()));
+            let large = bill.is_some() || handset_paper.is_some();
+            let _ = handset.show(large || handset_shown);
+            let shown = if large { westplay_shared::PHONE_PAPER } else { u32::from(handset_shown) };
+            host.phone_shown.store(shown, Ordering::Release);
+            if let Some(app) = &tiktok {
+                let _ = app.out(handset_shown && !large);
+            }
+            log!("[handset] {}", if bill.is_some() { "the fuel's bill to pay" } else { "the fuel's bill put away" });
+        }
         // A notification's time on a phone put away is up: away again.
         if handset_peek.is_some_and(|until| Instant::now() >= until) {
             handset_peek = None;
-            if !handset_shown && handset_paper.is_none() {
+            if !handset_shown && handset_paper.is_none() && handset_bill.is_none() {
                 if let Some(handset) = &handset {
                     let _ = handset.show(false);
                 }
@@ -657,6 +738,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let running = is_running(bridge.bridge().plugin.pid.load(Ordering::Relaxed));
             if running != game_running {
                 game_running = running;
+                alert_watch.reset();
                 if !running {
                     players_closing = true;
                     log!("the game closed: its web players are closed");
@@ -816,10 +898,33 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             host.character_person.store(character.person.get() + 1, Ordering::Release);
             host.character_hints.store(if character.hints.0 { 1 } else { 2 }, Ordering::Release);
             host.character_hints_key.store(character.hints_key.get(), Ordering::Release);
+            let switch = |on: settings::Shown| if on.0 { 1 } else { 2 };
+            host.freight_papers.store(switch(character.papers), Ordering::Release);
+            host.manual_refuel.store(switch(character.refuel), Ordering::Release);
+            host.pay_attendant.store(switch(character.pay_attendant), Ordering::Release);
+            host.virtual_mirrors.store(config.settings.get().virtual_mirrors.bridge_value(), Ordering::Release);
+            cursor::set_size(config.settings.get().cursor_size.factor());
+            let screen = config.settings.get().screen;
+            let res_code = match screen.resolution {
+                westplay_setup::game_mod::ScreenResolution::GameDefault => westplay_shared::SCREEN_RES_GAME_DEFAULT,
+                westplay_setup::game_mod::ScreenResolution::Standard => westplay_shared::SCREEN_RES_STANDARD,
+                westplay_setup::game_mod::ScreenResolution::High => westplay_shared::SCREEN_RES_HIGH,
+                westplay_setup::game_mod::ScreenResolution::Ultra => westplay_shared::SCREEN_RES_ULTRA,
+            };
+            host.screen_resolution.store(res_code, Ordering::Release);
+            let split_code = match screen.split {
+                westplay_setup::game_mod::Split::Off => 0,
+                westplay_setup::game_mod::Split::MapLeft => 1,
+                westplay_setup::game_mod::Split::MapRight => 2,
+            };
+            host.screen_split.store(split_code, Ordering::Release);
+            // Never on (owner 2026-11-18: with it, the music played on with the ignition cut, and the screen didn't
+            // power up again; the game draws no screen without the electrics anyway). The setting is left, unused.
+            host.keep_screen_on.store(0, Ordering::Release);
             let _ = webview.post_json(&settings_message(&config.settings.get()));
         }
         // The mouse in the phone while it's out (its own pointer and cursor, at its size), else in the cab's screen.
-        if let Some(handset) = handset.as_deref().filter(|_| handset_shown || handset_paper.is_some()) {
+        if let Some(handset) = handset.as_deref().filter(|_| handset_shown || handset_paper.is_some() || handset_bill.is_some()) {
             // Over TikTok (under the phone's page, where its app cuts it open), the mouse is TikTok's page's; the
             // phone's own page is told it left.
             let mouse = handset_pointer.update_with(&bridge.bridge().plugin.pointer, |kind, keys, data, point| {
@@ -848,7 +953,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             config.settings.set(changed);
         }
         // The truck's commands the phones hold, as the plugin gives them to the game.
-        host.truck_commands.store(truck_commands.held(Instant::now()), Ordering::Release);
+        // And the suspension by itself, if the player turned it on (auto_suspension.rs).
+        let auto_held =
+            auto_suspension.tick(config.settings.get().suspension_auto, last_telemetry.as_ref(), Instant::now());
+        host.truck_commands.store(truck_commands.held(Instant::now()) | auto_held, Ordering::Release);
         // The game played changed (`westplay_setup::game::current`): its own account.
         if westplay_setup::game::current() != wallet_game {
             wallet_game = westplay_setup::game::current();
@@ -860,6 +968,22 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             && wallet.take(&money)
         {
             let _ = webview.post_json(&wallet.message());
+        }
+        // The fuel filled by hand owed to the pump's attendant: told on the phone as it's owed.
+        if let Some(owed) = bridge.bridge().plugin.fuel_owed.read()
+            && let Some(alert) = alert_owed.check(&owed)
+            && alert_filter.allows(&alert)
+        {
+            notify_phone!(&alert.message());
+        }
+        // Money in and out as notifications on the phone (a job paid, a fine, a toll, fuel, a repair at the save).
+        let fresh = wallet.take_fresh();
+        if !fresh.is_empty() {
+            for alert in alerts::from_entries(&fresh, wallet.currency()) {
+                if alert_filter.allows(&alert) {
+                    notify_phone!(&alert.message());
+                }
+            }
         }
         // The player's keybinds pressed in the game: the page acts on each.
         for keybind in Keybind::ALL {
@@ -877,7 +1001,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     }
                     // The phone's is the host's own: out, or put away.
                     // (Not while a paper to sign is in its frame.)
-                    (Keybind::Phone | Keybind::Character, None) if handset_paper.is_some() => {}
+                    (Keybind::Phone | Keybind::Character, None) if handset_paper.is_some() || handset_bill.is_some() => {}
                     (Keybind::Phone, None) => {
                         if let Some(handset) = &handset {
                             // Its key while only its top shows (a notification): out, whole.
@@ -964,6 +1088,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 map_shown = (update.folder.clone(), update.built);
                 let _ = webview.post_json(&maps::map_message(map_shown.0.as_deref(), map_shown.1));
                 (status.map_folder, status.map_built) = map_shown.clone();
+                // The map's fuel pumps, for refuelling by hand (pumps.rs).
+                map_pumps = map_shown.0.as_deref().and_then(|folder| pumps::load(&maps_dir, folder));
+                log!(
+                    "[pumps] {} of the map shown",
+                    map_pumps.as_ref().map_or("none known".to_owned(), |p| p.len().to_string())
+                );
                 (config.on_status)(&status);
             }
             if status.map != update.status || status.profile_maps != update.profiles {
@@ -1002,6 +1132,15 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         let _ = app.out(handset_shown);
                     }
                 }
+                // The notifications' groups turned off in the phone's Settings, and one of each to try them.
+                Ok(HandsetMessage::Alerts { off }) => alert_filter.set_off(&off),
+                Ok(HandsetMessage::TestAlerts) => {
+                    for alert in alerts::samples(wallet.currency()) {
+                        if alert_filter.allows(&alert) {
+                            notify_phone!(&alert.message());
+                        }
+                    }
+                }
                 Ok(HandsetMessage::PhoneBanner { showing }) => {
                     if handset_peek.is_some() {
                         let left = if showing { PEEK_FOR } else { PEEK_AFTER };
@@ -1015,15 +1154,30 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         host.note_done.store(done, Ordering::Release);
                     }
                 }
-                Ok(HandsetMessage::FreightPapers { on }) => {
-                    if host.freight_papers.swap(if on { 1 } else { 2 }, Ordering::AcqRel) != if on { 1 } else { 2 } {
-                        log!("[handset] the cargo's papers and coupling by hand: {}", if on { "on" } else { "off" });
+                // The fuel's bill paid on Nupay (in the game's money: the wallet's entry), or put down unpaid.
+                Ok(HandsetMessage::FuelPaid { id, amount, detail }) => {
+                    if handset_bill.is_some_and(|bill| bill.id == id) {
+                        wallet.paid("fuel", amount, &detail);
+                        let _ = webview.post_json(&wallet.message());
+                        host.fuel_paid.store(id, Ordering::Release);
+                        // Paid, the phone put away (owner 2026-11-12: "when I pay, the phone stays open"), even
+                        // one taken out by its key before: it goes as the plugin takes the bill back.
+                        handset_shown = false;
+                        log!("[handset] the fuel's bill paid ({amount})");
+                    }
+                }
+                Ok(HandsetMessage::FuelPutDown { id }) => {
+                    if handset_bill.is_some_and(|bill| bill.id == id) {
+                        host.fuel_paid.store(id | westplay_shared::FUEL_NOT_PAID, Ordering::Release);
                     }
                 }
                 // The phone's page loaded (anew): the paper again, and TikTok's account.
                 Ok(HandsetMessage::Ready) => {
                     if let (Some(handset), Some(_)) = (&handset, handset_paper) {
                         let _ = handset.post_json(&paper_message(handset_paper));
+                    }
+                    if let (Some(handset), Some(_)) = (&handset, handset_bill) {
+                        let _ = handset.post_json(&bill_message(handset_bill.as_ref()));
                     }
                     if let (Some(handset), Some(app)) = (&handset, &tiktok) {
                         let signing_in = tiktok_window_open || tiktok_confirming;
@@ -1033,6 +1187,16 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 }
                 Err(_) => {}
             }
+        }
+        // The suspension's auto reset in the games' options as the player chose (with them closed), and whether it is
+        // there yet, told to the pages (`{"type":"suspensionOption","applied":…}`) when that changes.
+        if let Some(applied) = suspension_option.check(config.settings.get().suspension_auto_reset.0) {
+            let message = serde_json::json!({ "type": "suspensionOption", "applied": applied }).to_string();
+            let _ = webview.post_json(&message);
+            if let Some(handset) = handset.as_deref() {
+                let _ = handset.post_json(&message);
+            }
+            remote.broadcast(&message);
         }
         for message in webview.take_page_messages().into_iter().chain(remote.take()).chain(handset_rest) {
             // Adjust Screen's: passed on, the cab's page and the phones each taking what's theirs.
@@ -1044,6 +1208,18 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 // The page announces itself when it (re)loads; it missed everything sent before, so send the
                 // current state again (some of it is otherwise only sent when it changes).
                 Some(PageMessage::Ready) => {
+                    for slot in &host.mirror_rect {
+                        slot.store(0, Ordering::Release);
+                    }
+                    // The suspension option told the page again.
+                    suspension_option = SuspensionOption::default();
+                    // No camera on a page loaded anew: the videos' pictures no longer put away for it.
+                    if let Some(player) = &youtube {
+                        let _ = player.cover(false);
+                    }
+                    if let Some(music) = &youtube_music {
+                        let _ = music.cover(false);
+                    }
                     // A page loaded anew asks again if it wants it.
                     spectrum = false;
                     cursor_told = None;
@@ -1102,6 +1278,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     let _ = webview.post_json(&wallet.message());
                 }
                 Some(PageMessage::Westplay { open }) => {
+                    bridge.bridge().host.screen_handed_over.store(u32::from(!open), Ordering::Release);
                     if status.westplay_open != Some(open) {
                         status.westplay_open = Some(open);
                         (config.on_status)(&status);
@@ -1116,6 +1293,115 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         (config.on_settings)(&settings);
                     }
                 }
+                Some(PageMessage::ScreenResolution { resolution }) => {
+                    let mut settings = config.settings.get();
+                    if settings.screen.resolution != resolution {
+                        settings.screen.resolution = resolution;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[screen] live resolution changed from cabin: {resolution:?}");
+                    }
+                }
+                Some(PageMessage::KeepScreenOn { on }) => {
+                    let mut settings = config.settings.get();
+                    if settings.screen.keep_screen_on != on {
+                        settings.screen.keep_screen_on = on;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[screen] keep screen on with truck off: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // The Modo Personagem's switches, from a phone (the game's, or the player's own): the app's settings,
+                // the companion's Personagem page the same (owner 2026-11-13).
+                Some(
+                    message @ (PageMessage::FreightPapers { .. }
+                    | PageMessage::ManualRefuel { .. }
+                    | PageMessage::PayAttendant { .. }),
+                ) => {
+                    let mut settings = config.settings.get();
+                    let (slot, on, what) = match message {
+                        PageMessage::FreightPapers { on } => (&mut settings.character.papers, on, "papers"),
+                        PageMessage::ManualRefuel { on } => (&mut settings.character.refuel, on, "refuel"),
+                        PageMessage::PayAttendant { on } => (&mut settings.character.pay_attendant, on, "pay"),
+                        _ => unreachable!(),
+                    };
+                    if slot.0 != on {
+                        *slot = settings::Shown(on);
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the Modo Personagem's {what}: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // The suspension set back by the game or not, from the Suspensão app: in the games' options at once if
+                // they're closed, else once they are (`suspension_option`).
+                Some(PageMessage::SuspensionAutoReset { on }) => {
+                    let mut settings = config.settings.get();
+                    if settings.suspension_auto_reset.0 != on {
+                        settings.suspension_auto_reset = settings::Shown(on);
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension set back by the game: {}", if on { "on" } else { "off" });
+                    }
+                    suspension_option.checked = None;
+                }
+                // How low the front may go, from the Suspensão app: the archive made again for the next start.
+                Some(PageMessage::SuspensionLowFront { which }) => {
+                    let mut settings = config.settings.get();
+                    if let Some(which) = settings::LowFront::from_word(&which)
+                        && settings.suspension_low_front != which
+                    {
+                        settings.suspension_low_front = which;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the front's lowest: {which:?}");
+                    }
+                }
+                // How firm the dampers are, from the Suspensão app: the archive made again for the next start.
+                Some(PageMessage::SuspensionDamping { which }) => {
+                    let mut settings = config.settings.get();
+                    if let Some(which) = settings::Damping::from_word(&which)
+                        && settings.suspension_damping != which
+                    {
+                        settings.suspension_damping = which;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the dampers: {which:?}");
+                    }
+                }
+                // The suspension by itself, from the Suspensão app (owner 2026-11-19).
+                Some(PageMessage::SuspensionAuto { on }) => {
+                    let mut settings = config.settings.get();
+                    if settings.suspension_auto != on {
+                        settings.suspension_auto = on;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension by itself: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // How big the mouse's dot is, from a phone's Settings (owner 2026-11-19).
+                Some(PageMessage::CursorSize { which }) => {
+                    let mut settings = config.settings.get();
+                    if let Some(which) = settings::CursorSize::from_word(&which)
+                        && settings.cursor_size != which
+                    {
+                        settings.cursor_size = which;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the cursor's size: {which:?}");
+                    }
+                }
+                // Which virtual mirrors show, from a phone's Settings (owner 2026-11-18).
+                Some(PageMessage::VirtualMirrors { which }) => {
+                    let mut settings = config.settings.get();
+                    if let Some(which) = settings::VirtualMirrors::from_word(&which)
+                        && settings.virtual_mirrors != which
+                    {
+                        settings.virtual_mirrors = which;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the virtual mirrors shown: {which:?}");
+                    }
+                }
                 Some(PageMessage::CharacterPerson { person }) => {
                     let mut settings = config.settings.get();
                     let person = settings::CharacterPerson::new(person);
@@ -1127,9 +1413,75 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     }
                 }
                 Some(PageMessage::Spectrum { on }) => spectrum = on,
+                Some(PageMessage::CameraNudge { action }) => {
+                    let press = match action.as_str() {
+                        "back" => westplay_shared::CAMERA_NUDGE_BACK,
+                        "forward" => westplay_shared::CAMERA_NUDGE_FORWARD,
+                        "up" => westplay_shared::CAMERA_NUDGE_UP,
+                        "down" => westplay_shared::CAMERA_NUDGE_DOWN,
+                        "reset" => westplay_shared::CAMERA_NUDGE_RESET,
+                        "tiltUp" => westplay_shared::CAMERA_NUDGE_TILT_UP,
+                        "tiltDown" => westplay_shared::CAMERA_NUDGE_TILT_DOWN,
+                        "turnLeft" => westplay_shared::CAMERA_NUDGE_TURN_LEFT,
+                        "turnRight" => westplay_shared::CAMERA_NUDGE_TURN_RIGHT,
+                        "wider" => westplay_shared::CAMERA_NUDGE_WIDER,
+                        "narrower" => westplay_shared::CAMERA_NUDGE_NARROWER,
+                        _ => 0,
+                    };
+                    if press != 0 {
+                        // A new count each press (the plugin takes each once), the press in the low byte.
+                        let count = (host.camera_nudge.load(Ordering::Acquire) >> 8).wrapping_add(1) & 0x00ff_ffff;
+                        host.camera_nudge.store((count.max(1) << 8) | press, Ordering::Release);
+                    }
+                }
+                Some(PageMessage::FloatScreen { action }) => {
+                    let press = match action.as_str() {
+                        "toggle" => westplay_shared::FLOAT_TOGGLE,
+                        "forward" => westplay_shared::FLOAT_FORWARD,
+                        "back" => westplay_shared::FLOAT_BACK,
+                        "up" => westplay_shared::FLOAT_UP,
+                        "down" => westplay_shared::FLOAT_DOWN,
+                        "left" => westplay_shared::FLOAT_LEFT,
+                        "right" => westplay_shared::FLOAT_RIGHT,
+                        "turnLeft" => westplay_shared::FLOAT_TURN_LEFT,
+                        "turnRight" => westplay_shared::FLOAT_TURN_RIGHT,
+                        "tiltUp" => westplay_shared::FLOAT_TILT_UP,
+                        "tiltDown" => westplay_shared::FLOAT_TILT_DOWN,
+                        "rollLeft" => westplay_shared::FLOAT_ROLL_LEFT,
+                        "rollRight" => westplay_shared::FLOAT_ROLL_RIGHT,
+                        "reset" => westplay_shared::FLOAT_RESET,
+                        "bigger" => westplay_shared::FLOAT_BIGGER,
+                        "smaller" => westplay_shared::FLOAT_SMALLER,
+                        _ => 0,
+                    };
+                    if press != 0 {
+                        // A new count each press (the plugin takes each once), the press in the low byte.
+                        let count = (host.float_screen.load(Ordering::Acquire) >> 8).wrapping_add(1) & 0x00ff_ffff;
+                        host.float_screen.store((count.max(1) << 8) | press, Ordering::Release);
+                    }
+                }
+                Some(PageMessage::MirrorCamera { x, y, width, height }) => {
+                    let rect = mirror_rect(x, y, width, height);
+                    for (slot, value) in host.mirror_rect.iter().zip(rect) {
+                        slot.store(value, Ordering::Release);
+                    }
+                    // The videos' pictures lie under the page, where the camera is seen through it: put away while
+                    // it shows (owner 2026-11-18: with YouTube playing, only the guide lines), their sound plays on.
+                    let covered = rect[2] > 0;
+                    if let Some(player) = &youtube {
+                        let _ = player.cover(covered);
+                    }
+                    if let Some(music) = &youtube_music {
+                        let _ = music.cover(covered);
+                    }
+                }
                 Some(PageMessage::CursorLight { light }) => cursor.set_light(light, Instant::now()),
                 Some(PageMessage::TruckCommand { command, down }) => {
                     truck_commands.press(&command, down, Instant::now());
+                    // The player's own suspension press: the suspension by itself waits.
+                    if down && command.contains("susp") {
+                        auto_suspension.manual(Instant::now());
+                    }
                 }
                 Some(PageMessage::VolumeShown { volume }) => {
                     let _ =
@@ -1756,20 +2108,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         tiktok::Report::Typing(_) => {}
                         // A follow, a gift: on the phone, its top showing for it while it's put away. Never
                         // logged (who did what on the player's LIVE is theirs).
-                        tiktok::Report::Event(event) => {
-                            let message = tiktok::notification_message(&event);
-                            remote.broadcast(&message);
-                            if let Some(handset) = &handset {
-                                let _ = handset.post_json(&message);
-                                if !handset_shown && handset_paper.is_none() {
-                                    if handset_peek.is_none() {
-                                        let _ = handset.show(true);
-                                        host.phone_shown.store(westplay_shared::PHONE_PEEKS, Ordering::Release);
-                                    }
-                                    handset_peek = Some(Instant::now() + PEEK_FOR);
-                                }
-                            }
-                        }
+                        tiktok::Report::Event(event) => notify_phone!(&tiktok::notification_message(&event)),
                     }
                 }
                 if state_changed {
@@ -1821,9 +2160,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             );
             let game_frame = plugin.heartbeat.load(Ordering::Acquire);
             let (electrics, paused) = (telemetry.electric_enabled, telemetry.paused);
+            let effective_electrics = electrics;
             // On foot (the plugin's Modo Personagem) the camera is outside the cab, whatever was drawn.
             let on_foot = plugin.on_foot.load(Ordering::Acquire) == 1;
-            let outside = camera.outside(truck.id.as_str(), cab_drawn, game_frame, electrics, paused) || on_foot;
+            let outside = camera.outside(truck.id.as_str(), cab_drawn, game_frame, effective_electrics, paused) || on_foot;
             if outside != was_outside {
                 was_outside = outside;
                 log!("camera: {} the cab", if outside { "outside" } else { "in" });
@@ -1873,9 +2213,20 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             }
         }
 
-        if last_telemetry_post.elapsed() >= Duration::from_millis(50) {
+        // In reverse, the reversing camera follows the truck: telemetry as often as the screen shows frames. The
+        // dashboard's gear as well as the engine's: stopped with an automatic gearbox, the engine's is neutral though
+        // reverse is chosen (as the page's `inReverse`, cabin/reversing/shown.ts).
+        let reversing =
+            last_telemetry.as_ref().is_some_and(|telemetry| telemetry.displayed_gear < 0 || telemetry.gear < 0);
+        let telemetry_every = Duration::from_millis(if reversing { TELEMETRY_REVERSING_MS } else { TELEMETRY_MS });
+        if last_telemetry_post.elapsed() >= telemetry_every {
             last_telemetry_post = Instant::now();
             let plugin = &bridge.bridge().plugin;
+            // Whether the truck stands at a fuel pump, told to the plugin (refuelling by hand).
+            if let Some(telemetry) = plugin.telemetry.read() {
+                let at = pumps::told(map_pumps.as_deref(), [telemetry.x, telemetry.z]);
+                bridge.bridge().host.at_pump.store(at, Ordering::Release);
+            }
             // A write the game never finished (it crashed in the middle) reads as nothing: nothing to send. A
             // game that closed leaves its last telemetry behind: not sent (a page reloading would power on).
             if game_running
@@ -1904,6 +2255,15 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 let message = serde_json::json!({ "type": "job", "data": job });
                 let _ = webview.post_json(&message.to_string());
             }
+            // The game's news for the phone (alerts.rs): the truck's damage, its fuel, the rest, the job.
+            if game_running && let Some(telemetry) = last_telemetry {
+                let truck = last_truck.map(|truck| truck.id.as_str().to_owned()).unwrap_or_default();
+                for alert in alert_watch.tick(&telemetry, last_job.as_ref(), &truck, Instant::now()) {
+                    if alert_filter.allows(&alert) {
+                        notify_phone!(&alert.message());
+                    }
+                }
+            }
             let layout = plugin.screen_layout.load(Ordering::Acquire);
             if last_layout != Some(layout) {
                 last_layout = Some(layout);
@@ -1930,7 +2290,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     host.phone_generation.store(0, Ordering::Release);
     host.phone_shown.store(0, Ordering::Release);
     host.note_done.store(0, Ordering::Release);
+    for slot in &host.mirror_rect {
+        slot.store(0, Ordering::Release);
+    }
+    host.fuel_paid.store(0, Ordering::Release);
     host.truck_commands.store(0, Ordering::Release);
+    host.wheel_active.store(0, Ordering::Release);
     host.screen_enabled.store(0, Ordering::Release);
     host.pid.store(0, Ordering::Release);
     drop(pipeline);
@@ -2010,8 +2375,8 @@ pub fn tell_already_running() {
     unsafe {
         MessageBoxW(
             None,
-            windows::core::w!("WestPlay is already running. Find it in the taskbar or the notification area."),
-            windows::core::w!("WestPlay"),
+            windows::core::w!("MaxDevMod is already running. Find it in the taskbar or the notification area."),
+            windows::core::w!("MaxDevMod"),
             MB_OK | MB_ICONINFORMATION,
         );
     }
@@ -2252,17 +2617,47 @@ enum HandsetMessage {
     Tiktok { command: tiktok::Command },
     /// Whether a notification is on the phone's screen: its top stays in view meanwhile.
     PhoneBanner { showing: bool },
+    /// The notifications' groups turned off in the phone's Settings (alerts.rs `Group`'s names).
+    Alerts { off: Vec<String> },
+    /// One notification of each group, to see and hear them.
+    TestAlerts,
     /// The cargo's paper collected (signed), or put down (`collected` false).
     PaperDone { collected: bool },
-    /// The cargo's papers and coupling by hand, on or off (the phone's Settings).
-    FreightPapers { on: bool },
+    /// The fuel's bill (its `id`) paid on Nupay: `amount` in the game's money (negative), about `detail`.
+    FuelPaid { id: u32, amount: i64, detail: String },
+    /// The fuel's bill put down without paying.
+    FuelPutDown { id: u32 },
 }
 
 /// `{"type":"paper","stage":"pickup"}`: the cargo's paper for the phone's page to show in place of the phone
 /// (`pickup`: the nota fiscal to sign; `delivery`: the recipient's signature), `null` for none.
 fn paper_message(paper: Option<u32>) -> String {
-    let stage = paper.map(|kind| if kind == westplay_shared::NOTE_DELIVERY { "delivery" } else { "pickup" });
+    let stage = paper.map(|kind| match kind {
+        westplay_shared::NOTE_DELIVERY => "delivery",
+        // The coupling's steps by hand (owner 2026-11-19): the fifth wheel's lock, the trailer's legs.
+        westplay_shared::NOTE_LOCK_PULL => "lockPull",
+        westplay_shared::NOTE_LOCK_PUSH => "lockPush",
+        westplay_shared::NOTE_LEGS_UP => "legsUp",
+        westplay_shared::NOTE_LEGS_DOWN => "legsDown",
+        _ => "pickup",
+    });
     serde_json::json!({ "type": "paper", "stage": stage }).to_string()
+}
+
+/// `{"type":"fuelBill","bill":{…}}`: the fuel filled by hand for the phone's page to show on Nupay, to pay (`null`:
+/// none).
+fn bill_message(bill: Option<&westplay_shared::FuelBill>) -> String {
+    let bill = bill.map(|bill| {
+        serde_json::json!({
+            "id": bill.id,
+            "gallons": bill.gallons == 1,
+            "amount": bill.amount,
+            "price": bill.price,
+            "total": bill.total,
+            "sign": bill.sign.as_str(),
+        })
+    });
+    serde_json::json!({ "type": "fuelBill", "bill": bill }).to_string()
 }
 
 /// TikTok, started as the phone's app first shows it (on a WebView2 profile of its own: signing out of TikTok
@@ -2495,12 +2890,23 @@ fn settings_message(settings: &settings::Settings) -> String {
         "type": "settings",
         "truckStrip": settings.screen.truck_strip,
         "split": settings.screen.split,
+        "screenResolution": settings.screen.resolution,
+        "keepScreenOn": false,
         "wallpaper": settings.look.wallpaper,
         "iconSet": settings.look.icon_set,
         "iconStyle": settings.look.icon_style,
         "equalizer": settings.sound.equalizer.clamped(),
         "equalizerCustom": settings.sound.custom,
         "characterPerson": settings.character.person.get(),
+        "freightPapers": settings.character.papers.0,
+        "manualRefuel": settings.character.refuel.0,
+        "payAttendant": settings.character.pay_attendant.0,
+        "virtualMirrors": settings.virtual_mirrors,
+        "suspensionAutoReset": settings.suspension_auto_reset.0,
+        "suspensionLowFront": settings.suspension_low_front,
+        "suspensionDamping": settings.suspension_damping,
+        "cursorSize": settings.cursor_size,
+        "suspensionAuto": settings.suspension_auto,
     })
     .to_string()
 }
@@ -2527,6 +2933,10 @@ enum PageMessage {
     Wallpaper { id: String },
     /// The truck's information bar beside WestPlay, kept or not, chosen in the cab's Settings (Appearance).
     TruckStrip { strip: settings::TruckStrip },
+    /// Live screen sharpness tier chosen in the cab's Settings (Adjust Screen), applied immediately on the next frame.
+    ScreenResolution { resolution: westplay_setup::game_mod::ScreenResolution },
+    /// Keep the in-cabin screen powered on even when the truck's ignition/electrics are off.
+    KeepScreenOn { on: bool },
     /// The players' tone, set in the cab's Settings (Equalizer): the player's curve (bass, mid and treble, dB
     /// each), and whether it plays (Custom) or the speakers as tuned (Recommended).
     Equalizer {
@@ -2572,6 +2982,44 @@ enum PageMessage {
     /// Who walks in the Modo Personagem, chosen in the phone's Personagem app (a place in
     /// `westplay_shared::CHARACTER_PEOPLE`): kept with the settings, for the next time out of the truck.
     CharacterPerson { person: f64 },
+    /// The Modo Personagem's switches (a phone's Settings): the cargo's papers and coupling by hand, refuelling by
+    /// hand, paying at the pump's attendant.
+    FreightPapers { on: bool },
+    ManualRefuel { on: bool },
+    PayAttendant { on: bool },
+    /// Which of the game's virtual mirrors show (a phone's Settings): `none`, `right`, `left` or `both`.
+    VirtualMirrors { which: String },
+    /// Whether the game sets the suspension back by itself (the phone's Suspensão app).
+    SuspensionAutoReset { on: bool },
+    /// How low the front may go (the Suspensão app): `normal`, `low` or `lowest`.
+    SuspensionLowFront { which: String },
+    /// How firm the dampers are (the Suspensão app): `soft`, `normal`, `firm` or `firmest`.
+    SuspensionDamping { which: String },
+    CursorSize { which: String },
+    SuspensionAuto { on: bool },
+    /// Where the reversing camera shows the game's rear-view mirrors (the page see-through there), in the frame's
+    /// pixels; a width of 0 while it doesn't (`HostBlock::mirror_rect`).
+    MirrorCamera { x: f64, y: f64, width: f64, height: f64 },
+    /// The reversing camera moved on its screen (`back`, `forward`, `up`, `down`, `reset`): `HostBlock::camera_nudge`.
+    CameraNudge { action: String },
+    /// MaxDevMod's floating screen in the cab, from the phone's Tela app (`toggle`, `forward`, `back`, `up`, `down`,
+    /// `left`, `right`, `turnLeft`, `turnRight`, `tiltUp`, `tiltDown`, `rollLeft`, `rollRight`, `reset`):
+    /// `HostBlock::float_screen`.
+    FloatScreen { action: String },
+}
+
+/// The page's rectangle for the mirrors as the bridge has it (whole pixels, within the frame): none (all 0) if it's
+/// empty.
+fn mirror_rect(x: f64, y: f64, width: f64, height: f64) -> [u32; 4] {
+    let (most_x, most_y) = (f64::from(westplay_shared::SCREEN_WIDTH), f64::from(westplay_shared::SCREEN_HEIGHT));
+    let left = x.clamp(0.0, most_x).round();
+    let top = y.clamp(0.0, most_y).round();
+    let right = (x + width).clamp(0.0, most_x).round();
+    let bottom = (y + height).clamp(0.0, most_y).round();
+    if !(right - left >= 8.0 && bottom - top >= 8.0) {
+        return [0; 4];
+    }
+    [left as u32, top as u32, (right - left) as u32, (bottom - top) as u32]
 }
 
 /// A route being handed to the game's GPS: the page's request, the hand-over (the route picked and the
@@ -2619,6 +3067,37 @@ impl From<PageRouteAction> for westplay_shared::RouteAction {
 /// `{"type":"westplay","open":true}`: open (or close) WestPlay on the truck's screen.
 fn westplay_message(open: bool) -> String {
     serde_json::json!({ "type": "westplay", "open": open }).to_string()
+}
+
+/// The suspension's auto reset as the games' options have it, looked at now and then: set there as the player chose
+/// once the games are closed (they write their options back as they close).
+#[derive(Default)]
+struct SuspensionOption {
+    /// When it was last looked at (`None`: never, or the choice just changed), and whether it was there then.
+    checked: Option<Instant>,
+    applied: Option<bool>,
+}
+
+impl SuspensionOption {
+    const EVERY: Duration = Duration::from_secs(5);
+
+    /// Looked at again (every few seconds, or at once after a change): set if it can be; whether it's there now, if
+    /// that changed.
+    fn check(&mut self, wanted: bool) -> Option<bool> {
+        if self.checked.is_some_and(|at| at.elapsed() < Self::EVERY) {
+            return None;
+        }
+        self.checked = Some(Instant::now());
+        let mut now = westplay_setup::suspension::auto_reset().unwrap_or(true) == wanted;
+        if !now && westplay_setup::suspension::set_auto_reset(wanted) {
+            log!("[suspension] the game's auto reset set {} in its options", if wanted { "on" } else { "off" });
+            now = westplay_setup::suspension::auto_reset().unwrap_or(true) == wanted;
+        }
+        (self.applied != Some(now)).then(|| {
+            self.applied = Some(now);
+            now
+        })
+    }
 }
 
 fn parse_page_message(message: &str) -> Option<PageMessage> {
@@ -2797,7 +3276,25 @@ mod tests {
     #[test]
     fn reads_the_pages_messages() {
         assert_eq!(parse_page_message(r#"{"type":"ready"}"#), Some(PageMessage::Ready));
+        assert_eq!(
+            parse_page_message(r#"{"type":"cameraNudge","action":"back"}"#),
+            Some(PageMessage::CameraNudge { action: "back".into() })
+        );
+        assert_eq!(
+            parse_page_message(r#"{"type":"floatScreen","action":"toggle"}"#),
+            Some(PageMessage::FloatScreen { action: "toggle".into() })
+        );
+        assert_eq!(
+            parse_page_message(r#"{"type":"mirrorCamera","x":0,"y":0,"width":900.5,"height":720}"#),
+            Some(PageMessage::MirrorCamera { x: 0.0, y: 0.0, width: 900.5, height: 720.0 })
+        );
+        assert_eq!(super::mirror_rect(10.4, -3.0, 900.0, 800.0), [10, 0, 900, 720]);
+        assert_eq!(super::mirror_rect(0.0, 0.0, 0.0, 0.0), [0; 4]);
         assert_eq!(parse_page_message(r#"{"type":"walletClear"}"#), Some(PageMessage::WalletClear));
+        assert_eq!(
+            parse_page_message(r#"{"type":"virtualMirrors","which":"left"}"#),
+            Some(PageMessage::VirtualMirrors { which: "left".to_owned() })
+        );
         // The PC's own music apps aren't followed (removed 2026-10-17): their controls are no message.
         assert_eq!(parse_page_message(r#"{"type":"media","source":"AppleMusic.exe","action":"playPause"}"#), None);
         assert_eq!(
@@ -2978,12 +3475,23 @@ mod tests {
                 "type": "settings",
                 "truckStrip": "auto",
                 "split": "off",
+                "screenResolution": "high",
+                "keepScreenOn": false,
                 "wallpaper": null,
                 "iconSet": null,
                 "iconStyle": "auto",
                 "equalizer": { "bass": 0, "mid": 0, "treble": 0 },
                 "equalizerCustom": false,
                 "characterPerson": 0,
+                "freightPapers": true,
+                "manualRefuel": true,
+                "payAttendant": true,
+                "virtualMirrors": "right",
+                "suspensionAutoReset": true,
+                "suspensionLowFront": "normal",
+                "suspensionDamping": "normal",
+                "cursorSize": "normal",
+                "suspensionAuto": false,
             })
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;

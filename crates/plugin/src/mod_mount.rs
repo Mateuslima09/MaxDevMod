@@ -17,7 +17,10 @@
 //! screen (2026-10-21). So the mod pool's index is rebuilt right after the mount, as the game does.
 
 use std::ffi::{CString, c_char, c_void};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// The low suspension's archive, beside WestPlay's mod (`westplay_setup::low_suspension::FILE_NAME`).
+const LOW_SUSPENSION: &str = "westplay_suspensao.scs";
 
 use windows::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -120,6 +123,21 @@ pub(crate) fn game_folder(game_id: &str) -> Option<&'static str> {
 pub unsafe fn mount(game_id: &str) {
     // Its own game's: ATS's and ETS2's, each built from its game (`crate::log::game_dir`).
     let path = Some(crate::log::game_dir().join("westplay.scs"));
+    // One WestPlay made while the game had this one open (`westplay_setup::game_mod::install`): in its place now,
+    // before the game has it open.
+    // And the low suspension's archive beside it (westplay_setup::low_suspension), the same way.
+    let low = crate::log::game_dir().join(LOW_SUSPENSION);
+    for path in path.iter().map(PathBuf::as_path).chain([low.as_path()]) {
+        let mut next = path.as_os_str().to_owned();
+        next.push(".next");
+        let next = PathBuf::from(next);
+        if next.is_file() {
+            match std::fs::rename(&next, path) {
+                Ok(()) => log!("mod mount: {} WestPlay made while the game ran put in place", path.display()),
+                Err(e) => log!("mod mount: {} WestPlay made while the game ran not put in place: {e}", path.display()),
+            }
+        }
+    }
     let Some(path) = path.clone().filter(|path| path.is_file()) else {
         // The folder looked in whole, and what's in it: a player's "it's there" is then checked by this log.
         let looked = path.as_deref().map_or("no Documents folder".into(), |path| path.display().to_string());
@@ -190,6 +208,21 @@ pub unsafe fn mount(game_id: &str) {
         );
         if device.is_null() {
             return;
+        }
+        // The low suspension's archive (the trucks' chassis, the front's travel longer), if WestPlay made one: in
+        // the mod pool too, at the same priority (no file of the main mod's in it).
+        if low.is_file() {
+            let text = low.to_string_lossy().replace('\\', "/");
+            if let Ok(text) = CString::new(text) {
+                let text: &'static CString = Box::leak(Box::new(text));
+                let request = Request { path: text.as_ptr(), ..request };
+                let device = mount(&request);
+                log!(
+                    "mod mount: {}: {}",
+                    text.to_string_lossy(),
+                    if device.is_null() { "the game refused it".to_string() } else { format!("device {:#x}", device as usize) }
+                );
+            }
         }
         // The pool the mount just took (so it's there), its index rebuilt as the game does after its own mounts;
         // a game with no index has nothing to rebuild.

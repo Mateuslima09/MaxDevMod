@@ -26,10 +26,17 @@ const DRAG = 14
 /** The apps in the dock, on every page; and each page's own. */
 const DOCK: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify']
 const PAGE_ONE: AppId[] = ['freight', 'truck', 'commands', 'settings']
-const PAGE_TWO: AppId[] = ['nupay', 'services', 'character', 'tiktok']
+const PAGE_TWO: AppId[] = ['nupay', 'services', 'character', 'tiktok', 'suspension', 'camera', 'floatScreen']
+
+/** The home screen's page last shown: back from an app, the phone is on the page it was left on (owner 2026-11-11:
+ * out of TikTok, on the second page, it went back to the first, "to drag again each time"). */
+let lastPage = 0
 
 export interface HomeWords {
   apps: Record<AppId, string>
+  /** The home screen's other page, by its corner buttons. */
+  pageBack: string
+  pageNext: string
   days: string[]
   noGame: string
   openMap: string
@@ -52,7 +59,11 @@ export function Home({
   units: Prefs['units']
   remote: boolean
 }) {
-  const [page, setPage] = useState(0)
+  const [page, showPage] = useState(lastPage)
+  const setPage = (next: number) => {
+    lastPage = next
+    showPage(next)
+  }
   const swipe = useSwipe(page, setPage, 2)
   return (
     <section className="ios-home">
@@ -94,6 +105,29 @@ export function Home({
         </div>
       </div>
       <div className="ios-dots" role="tablist">
+        {/* The other page by a tap, in the corner (owner 2026-11-11: a drag with the mouse doesn't always take). */}
+        <button
+          type="button"
+          className="ios-page-arrow left"
+          aria-label={words.pageBack}
+          disabled={page === 0}
+          onClick={() => setPage(page - 1)}
+        >
+          <svg viewBox="0 0 12 20" aria-hidden>
+            <path d="M9 3 3 10l6 7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="ios-page-arrow right"
+          aria-label={words.pageNext}
+          disabled={page === 1}
+          onClick={() => setPage(page + 1)}
+        >
+          <svg viewBox="0 0 12 20" aria-hidden>
+            <path d="M3 3l6 7-6 7" />
+          </svg>
+        </button>
         {[0, 1].map((dot) => (
           <button
             key={dot}

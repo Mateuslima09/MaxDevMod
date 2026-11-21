@@ -36,18 +36,49 @@ pub struct Key {
 pub struct Climb {
     pub keys: Vec<Key>,
     pub time: f32,
+    /// Whether it starts behind the person (third person): the camera into their eyes first, the body hidden there.
+    pub approach: bool,
 }
+
+/// From behind the person into their eyes (third person, climbing in), quickly: seconds a metre, and at least and
+/// at most (owner 2026-11-14: the body went at once and the camera took its time from afar).
+const APPROACH_PER_METRE: f32 = 0.12;
+const APPROACH_LEAST: f32 = 0.25;
+const APPROACH_MOST: f32 = 0.6;
 
 impl Climb {
     /// From `from` (where camera 0 is), looking `yaw`, `pitch`, into the truck's cab.
     pub fn new(from: [f64; 3], yaw: f32, pitch: f32, truck: &Truck) -> Self {
-        Climb { keys: path(from, yaw, pitch, truck), time: 0.0 }
+        Climb { keys: path(from, yaw, pitch, truck), time: 0.0, approach: false }
+    }
+
+    /// From `from` (camera 0, behind the person in third person) into their `eyes` first, then as `new` from
+    /// there: the person seen till the camera is where they look from.
+    pub fn from_behind(from: [f64; 3], eyes: [f64; 3], yaw: f32, pitch: f32, truck: &Truck) -> Self {
+        let apart = (from[0] - eyes[0]).hypot(from[1] - eyes[1]).hypot(from[2] - eyes[2]) as f32;
+        let secs = (apart * APPROACH_PER_METRE).clamp(APPROACH_LEAST, APPROACH_MOST);
+        let mut keys = vec![
+            Key { at: from, yaw, pitch, secs: 0.0, step: false },
+            Key { at: eyes, yaw, pitch, secs, step: false },
+        ];
+        keys.extend(path(eyes, yaw, pitch, truck).into_iter().skip(1));
+        Climb { keys, time: 0.0, approach: true }
+    }
+
+    /// Whether the camera reached the person's eyes in the last `dt` seconds (`from_behind`).
+    pub fn reached_eyes(&self, dt: f32) -> bool {
+        self.approach && self.passed(1, dt)
+    }
+
+    /// The place where the door opens: on the ground by it (one later from behind the person).
+    pub fn door_key(&self) -> usize {
+        if self.approach { 2 } else { 1 }
     }
 
     /// Out of the truck's cab (owner 2026-11-05: "an animation getting out, not all at once"): from the seat, up
     /// into the doorway, down the step, onto the ground by the door, looking out.
     pub fn out(truck: &Truck) -> Self {
-        Climb { keys: path_out(truck), time: 0.0 }
+        Climb { keys: path_out(truck), time: 0.0, approach: false }
     }
 
     /// Where the way ends: the eyes and their look.
@@ -166,6 +197,8 @@ mod tests {
             position: [100.0, 10.0, 200.0],
             heading: 0.0,
             speed: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
             parking_brake: true,
             multiplayer: false,
             head: [-0.6, 2.5, -1.8],

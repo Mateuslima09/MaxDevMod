@@ -58,6 +58,10 @@ pub enum Command {
     },
     /// The page before.
     Back,
+    /// Its videos' volume a step up (1) or down (-1): the phone's side keys (owner 2026-11-21).
+    Volume {
+        step: i8,
+    },
     /// Whether the player's LIVE is watched for the phone's notifications (the phone's Settings).
     Notifications {
         on: bool,
@@ -266,6 +270,10 @@ impl TikTok {
                 self.view.navigate(&page.address(user))
             }
             Command::Back => self.view.post_json(r#"{"action":"back"}"#),
+            Command::Volume { step } => {
+                let step = step.signum();
+                self.view.post_json(&serde_json::json!({ "action": "volume", "step": step }).to_string())
+            }
             Command::Notifications { on } => {
                 self.notifications.set(*on);
                 Ok(())
@@ -589,6 +597,7 @@ mod tests {
         assert_eq!(read(r#"{"action":"go","page":"forYou"}"#), Some(Command::Go { page: Page::ForYou }));
         assert_eq!(read(r#"{"action":"notifications","on":false}"#), Some(Command::Notifications { on: false }));
         assert_eq!(read(r#"{"action":"testNotification"}"#), Some(Command::TestNotification));
+        assert_eq!(read(r#"{"action":"volume","step":-1}"#), Some(Command::Volume { step: -1 }));
         assert_eq!(read(r#"{"action":"go","page":"https://evil.example/"}"#), None);
     }
 

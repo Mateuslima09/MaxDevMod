@@ -74,7 +74,7 @@ export interface Strings {
     full: string
     onJob: string
     noAnswer: string
-    /** The game runs as administrator: WestPlay can't see its route. */
+    /** The game runs as administrator: MaxDevMod can't see its route. */
     elevated: string
     unsupported: string
     failed: string
@@ -351,7 +351,7 @@ export interface Strings {
     mute: string
     unmute: string
   }
-  /** YouTube Music: WestPlay's own app, in the look of YouTube Music's tablet app. */
+  /** YouTube Music: MaxDevMod's own app, in the look of YouTube Music's tablet app. */
   youtubeMusic: {
     tabs: { home: string; explore: string; library: string; search: string }
     searchHint: string
@@ -430,23 +430,55 @@ export interface Strings {
     roads: string
     roadStates: { dry: string; damp: string; wet: string }
     roadTrends: { drying: string; gettingWet: string }
-    /** No game, or one whose weather WestPlay can't read. */
+    /** No game, or one whose weather MaxDevMod can't read. */
     unavailable: string
   }
   /** The Settings app: its pages, rows and the words under them. */
+  /** The reversing camera (cabin/reversing), and its page in Settings. */
+  reversing: {
+    /** The camera's own name, over its picture and in Settings. */
+    title: string
+    /** Under the picture, as on a real one. */
+    checkSurroundings: string
+    /** The nearest thing the sensors see, metres. */
+    distance: (metres: string) => string
+    /** Right up against it. */
+    stop: string
+    /** On the trailer, or the truck alone. */
+    onTrailer: string
+    onTruck: string
+    /** The sensors' sound: off, and on again (the button over the picture). */
+    mute: string
+    unmute: string
+    /** Settings. */
+    showCamera: string
+    showCameraNote: string
+    beeps: string
+    beepVolume: string
+    guides: string
+    /** Moving the camera by hand, on its screen (owner 2026-11-20), kept for this truck or trailer. */
+    adjust: string
+    adjustBack: string
+    adjustForward: string
+    adjustUp: string
+    adjustDown: string
+    adjustReset: string
+    adjustDone: string
+    adjustNote: string
+  }
   settings: {
     appearance: string
     light: string
     dark: string
     automatic: string
     automaticFooter: string
-    /** The truck's information bar beside WestPlay (the DAF's, the Scania Smart Dash's), and what it is. */
+    /** The truck's information bar beside MaxDevMod (the DAF's, the Scania Smart Dash's), and what it is. */
     vehicleBar: string
     vehicleBarFooter: string
     textSize: string
     /** Text Size's own text, shown at the size chosen (iOS's). */
     textSizeAbout: string
-    /** Adjust Screen (state/screenFit.ts): the player's own fit of WestPlay on this vehicle's screen. */
+    /** Adjust Screen (state/screenFit.ts): the player's own fit of MaxDevMod on this vehicle's screen. */
     screenFit: string
     screenFitFooter: string
     screenFitNone: string
@@ -458,6 +490,26 @@ export interface Strings {
     proportion: string
     proportionFooter: string
     fitSize: string
+    resolution: {
+      title: string
+      footer: string
+      high: string
+      ultra: string
+      standard: string
+      gameDefault: string
+    }
+    keepScreenOn: string
+    keepScreenOnFooter: string
+    fitPresets: {
+      title: string
+      footer: string
+      auto: string
+      widescreen: string
+      sixteenTen: string
+      classic: string
+      ultrawide: string
+      bandCenter: string
+    }
     restoreFit: string
     wallpaper: string
     dashboard: string
@@ -565,7 +617,7 @@ export const STRINGS: Record<Language, Strings> = {
       full: 'The route has 10 stops, the most the game allows',
       onJob: 'On a job, the destination is the job’s',
       noAnswer: 'The game didn’t answer',
-      elevated: 'The game is running as administrator, so WestPlay can’t see its route. Start it normally',
+      elevated: 'The game is running as administrator, so MaxDevMod can’t see its route. Start it normally',
       unsupported: 'This version of the game isn’t supported yet',
       failed: 'The game couldn’t route there',
     },
@@ -927,6 +979,30 @@ export const STRINGS: Record<Language, Strings> = {
       roadTrends: { drying: 'Drying', gettingWet: 'Getting wetter' },
       unavailable: 'The weather shows while the game runs.',
     },
+    reversing: {
+      title: 'Reversing Camera',
+      checkSurroundings: 'Check your surroundings',
+      distance: (metres) => `${metres} m`,
+      stop: 'STOP',
+      onTrailer: 'Trailer',
+      onTruck: 'Truck',
+      mute: 'Mute the sensors',
+      unmute: 'Sensors’ sound on',
+      showCamera: 'Show When Reversing',
+      showCameraNote:
+        'The camera’s picture is drawn from your game’s map: its roads and buildings. The sensors hear the buildings and other players’ trucks.',
+      beeps: 'Sensors’ Beeps',
+      beepVolume: 'Beep Volume',
+      guides: 'Guide Lines',
+      adjust: 'Adjust the camera',
+      adjustBack: 'Further back',
+      adjustForward: 'Further forward',
+      adjustUp: 'Higher',
+      adjustDown: 'Lower',
+      adjustReset: 'Default',
+      adjustDone: 'Done',
+      adjustNote: 'Kept for this truck or trailer.',
+    },
     settings: {
       appearance: 'Appearance',
       light: 'Light',
@@ -934,12 +1010,12 @@ export const STRINGS: Record<Language, Strings> = {
       automatic: 'Automatic',
       automaticFooter: 'Dark at night and whenever the headlights are on, the way the truck’s light sensor does it.',
       vehicleBar: 'Vehicle Bar',
-      vehicleBarFooter: 'The truck’s information bar beside WestPlay. Turned off, WestPlay fills the whole screen.',
+      vehicleBarFooter: 'The truck’s information bar beside MaxDevMod. Turned off, MaxDevMod fills the whole screen.',
       textSize: 'Text Size',
-      textSizeAbout: 'WestPlay’s apps will adjust to your preferred reading size below.',
+      textSizeAbout: 'MaxDevMod’s apps will adjust to your preferred reading size below.',
       screenFit: 'Adjust Screen',
       screenFitFooter: 'For this vehicle only. The screen changes as you adjust it.',
-      screenFitNone: 'Get in a vehicle with WestPlay on its screen to adjust it.',
+      screenFitNone: 'Get in a vehicle with MaxDevMod on its screen to adjust it.',
       edges: 'Edges',
       edgeTop: 'Top',
       edgeBottom: 'Bottom',
@@ -948,6 +1024,28 @@ export const STRINGS: Record<Language, Strings> = {
       proportion: 'Proportion',
       proportionFooter: 'Narrower if the picture looks stretched, wider if it looks squeezed.',
       fitSize: 'Size',
+      resolution: {
+        title: 'Screen Resolution (Live)',
+        footer: 'Applies immediately on the truck screen without restarting the game.',
+        high: 'High · HD (1280×720)',
+        ultra: 'Ultra · Max Sharpness (1280×720+)',
+        standard: 'Standard · Balanced (640×360)',
+        gameDefault: 'Game Default (Original)',
+      },
+      keepScreenOn: 'Keep Screen On (Truck Off)',
+      keepScreenOnFooter:
+        'Allows the multimedia screen to stay powered on and interactive even when the truck is turned off.',
+      fitPresets: {
+        title: 'Screen Format (Quick Presets)',
+        footer:
+          'Pick a preset for modded trucks or fine-tune each edge (negative expands outward, positive crops inward).',
+        auto: 'Automatic (Detected)',
+        widescreen: 'Widescreen 16:9',
+        sixteenTen: 'Medium 16:10',
+        classic: 'Classic 4:3',
+        ultrawide: 'Ultrawide 21:9',
+        bandCenter: 'Mod Square Band (Center)',
+      },
       restoreFit: 'Restore Default',
       wallpaper: 'Wallpaper',
       dashboard: 'Dashboard',
@@ -958,7 +1056,7 @@ export const STRINGS: Record<Language, Strings> = {
       recommended: 'Recommended',
       custom: 'Custom',
       equalizerFooter:
-        'WestPlay plays your music through each truck’s own speakers, tuned for its cab. If you prefer a different sound, you can customise how every music app sounds, in every truck.',
+        'MaxDevMod plays your music through each truck’s own speakers, tuned for its cab. If you prefer a different sound, you can customise how every music app sounds, in every truck.',
       low: 'Low',
       mid: 'Mid',
       high: 'High',
@@ -1060,7 +1158,7 @@ export const STRINGS: Record<Language, Strings> = {
       full: 'A rota já tem 10 paradas, o máximo que o jogo permite',
       onJob: 'Durante uma entrega, o destino é o da carga',
       noAnswer: 'O jogo não respondeu',
-      elevated: 'O jogo está rodando como administrador, então o WestPlay não vê a rota. Abra o jogo normalmente',
+      elevated: 'O jogo está rodando como administrador, então o MaxDevMod não vê a rota. Abra o jogo normalmente',
       unsupported: 'Esta versão do jogo ainda não é suportada',
       failed: 'O jogo não conseguiu traçar rota até lá',
     },
@@ -1425,6 +1523,30 @@ export const STRINGS: Record<Language, Strings> = {
       roadTrends: { drying: 'Secando', gettingWet: 'Ficando mais molhada' },
       unavailable: 'O clima aparece enquanto o jogo está aberto.',
     },
+    reversing: {
+      title: 'Câmera de Ré',
+      checkSurroundings: 'Verifique os arredores',
+      distance: (metres) => `${metres} m`,
+      stop: 'PARE',
+      onTrailer: 'Carreta',
+      onTruck: 'Caminhão',
+      mute: 'Silenciar os sensores',
+      unmute: 'Som dos sensores',
+      showCamera: 'Mostrar ao Engatar a Ré',
+      showCameraNote:
+        'A imagem da câmera é desenhada a partir do mapa do seu jogo: as ruas e os prédios. Os sensores percebem os prédios e os caminhões de outros jogadores.',
+      beeps: 'Bipe dos Sensores',
+      beepVolume: 'Volume do Bipe',
+      guides: 'Linhas Guia',
+      adjust: 'Ajustar a câmera',
+      adjustBack: 'Mais para trás',
+      adjustForward: 'Mais para frente',
+      adjustUp: 'Subir',
+      adjustDown: 'Descer',
+      adjustReset: 'Padrão',
+      adjustDone: 'Pronto',
+      adjustNote: 'Fica guardado para este caminhão ou carreta.',
+    },
     settings: {
       appearance: 'Aparência',
       light: 'Claro',
@@ -1433,12 +1555,12 @@ export const STRINGS: Record<Language, Strings> = {
       automaticFooter: 'Escuro à noite e sempre que os faróis estiverem ligados, como o sensor de luz do caminhão.',
       vehicleBar: 'Barra do Veículo',
       vehicleBarFooter:
-        'A barra de informações do caminhão ao lado do WestPlay. Desligada, o WestPlay ocupa a tela toda.',
+        'A barra de informações do caminhão ao lado do MaxDevMod. Desligada, o MaxDevMod ocupa a tela toda.',
       textSize: 'Tamanho do Texto',
-      textSizeAbout: 'Os apps do WestPlay vão se ajustar ao tamanho de leitura que você escolher abaixo.',
+      textSizeAbout: 'Os apps do MaxDevMod vão se ajustar ao tamanho de leitura que você escolher abaixo.',
       screenFit: 'Ajustar Tela',
       screenFitFooter: 'Só para este veículo. A tela muda enquanto você ajusta.',
-      screenFitNone: 'Entre num veículo com o WestPlay na tela para ajustá-la.',
+      screenFitNone: 'Entre num veículo com o MaxDevMod na tela para ajustá-la.',
       edges: 'Bordas',
       edgeTop: 'Cima',
       edgeBottom: 'Baixo',
@@ -1447,6 +1569,27 @@ export const STRINGS: Record<Language, Strings> = {
       proportion: 'Proporção',
       proportionFooter: 'Mais estreito se a imagem parece esticada, mais largo se parece achatada.',
       fitSize: 'Tamanho',
+      resolution: {
+        title: 'Resolução da Tela (Ao Vivo)',
+        footer: 'Aplica na hora direto no painel do caminhão, sem precisar reiniciar o jogo.',
+        high: 'Alta · HD (1280×720)',
+        ultra: 'Ultra · Nitidez Máxima (1280×720+)',
+        standard: 'Padrão · Equilibrada (640×360)',
+        gameDefault: 'Padrão do Jogo (Original)',
+      },
+      keepScreenOn: 'Tela Ligada (Caminhão Desligado)',
+      keepScreenOnFooter: 'Mantém a central multimídia ligada e funcionando mesmo com o caminhão desligado.',
+      fitPresets: {
+        title: 'Formato da Tela (Manual)',
+        footer:
+          'Escolha um formato rápido para caminhões de mod ou ajuste cada borda (valores negativos expandem a tela, positivos recolhem).',
+        auto: 'Automático (Detectado)',
+        widescreen: 'Widescreen 16:9',
+        sixteenTen: 'Médio 16:10',
+        classic: 'Clássico 4:3',
+        ultrawide: 'Ultrawide 21:9',
+        bandCenter: 'Faixa Central (Mod 256×256)',
+      },
       restoreFit: 'Restaurar Padrão',
       wallpaper: 'Papel de Parede',
       dashboard: 'Painel',
@@ -1457,7 +1600,7 @@ export const STRINGS: Record<Language, Strings> = {
       recommended: 'Recomendado',
       custom: 'Personalizado',
       equalizerFooter:
-        'O WestPlay toca suas músicas pelos alto-falantes de cada caminhão, ajustados para a cabine. Se preferir outro som, você pode personalizar como cada app de música soa, em todos os caminhões.',
+        'O MaxDevMod toca suas músicas pelos alto-falantes de cada caminhão, ajustados para a cabine. Se preferir outro som, você pode personalizar como cada app de música soa, em todos os caminhões.',
       low: 'Graves',
       mid: 'Médios',
       high: 'Agudos',
@@ -1559,7 +1702,7 @@ export const STRINGS: Record<Language, Strings> = {
       full: 'Rotada 10 durak var, oyunun izin verdiği en fazla',
       onJob: 'İşteyken varış noktası işin',
       noAnswer: 'Oyun yanıt vermedi',
-      elevated: 'Oyun yönetici olarak çalışıyor, WestPlay rotasını göremiyor. Oyunu normal başlatın',
+      elevated: 'Oyun yönetici olarak çalışıyor, MaxDevMod rotasını göremiyor. Oyunu normal başlatın',
       unsupported: 'Oyunun bu sürümü henüz desteklenmiyor',
       failed: 'Oyun oraya rota çizemedi',
     },
@@ -1925,6 +2068,30 @@ export const STRINGS: Record<Language, Strings> = {
       roadTrends: { drying: 'Kuruyor', gettingWet: 'Islanıyor' },
       unavailable: 'Hava durumu oyun açıkken görünür.',
     },
+    reversing: {
+      title: 'Geri Görüş Kamerası',
+      checkSurroundings: 'Çevrenizi kontrol edin',
+      distance: (metres) => `${metres} m`,
+      stop: 'DUR',
+      onTrailer: 'Römork',
+      onTruck: 'Çekici',
+      mute: 'Sensörleri sustur',
+      unmute: 'Sensör sesi açık',
+      showCamera: 'Geri Viteste Göster',
+      showCameraNote:
+        'Kameranın görüntüsü oyununuzun haritasından çizilir: yolları ve binaları. Sensörler binaları ve diğer oyuncuların tırlarını algılar.',
+      beeps: 'Sensör Sesleri',
+      beepVolume: 'Sensör Ses Seviyesi',
+      guides: 'Kılavuz Çizgiler',
+      adjust: 'Kamerayı ayarla',
+      adjustBack: 'Daha geri',
+      adjustForward: 'Daha ileri',
+      adjustUp: 'Yukarı',
+      adjustDown: 'Aşağı',
+      adjustReset: 'Varsayılan',
+      adjustDone: 'Tamam',
+      adjustNote: 'Bu kamyon veya dorse için saklanır.',
+    },
     settings: {
       appearance: 'Görünüm',
       light: 'Açık',
@@ -1932,12 +2099,12 @@ export const STRINGS: Record<Language, Strings> = {
       automatic: 'Otomatik',
       automaticFooter: 'Geceleri ve farlar her yandığında koyu; tıpkı kamyonun ışık sensörü gibi.',
       vehicleBar: 'Araç Çubuğu',
-      vehicleBarFooter: 'WestPlay’in yanındaki kamyon bilgi çubuğu. Kapatırsan WestPlay tüm ekranı kaplar.',
+      vehicleBarFooter: 'MaxDevMod’in yanındaki kamyon bilgi çubuğu. Kapatırsan MaxDevMod tüm ekranı kaplar.',
       textSize: 'Metin Boyutu',
-      textSizeAbout: 'WestPlay’in uygulamaları aşağıda seçtiğin okuma boyutuna göre ayarlanır.',
+      textSizeAbout: 'MaxDevMod’in uygulamaları aşağıda seçtiğin okuma boyutuna göre ayarlanır.',
       screenFit: 'Ekranı Ayarla',
       screenFitFooter: 'Yalnızca bu araç için. Ayarladıkça ekran değişir.',
-      screenFitNone: 'Ayarlamak için ekranında WestPlay olan bir araca bin.',
+      screenFitNone: 'Ayarlamak için ekranında MaxDevMod olan bir araca bin.',
       edges: 'Kenarlar',
       edgeTop: 'Üst',
       edgeBottom: 'Alt',
@@ -1946,6 +2113,26 @@ export const STRINGS: Record<Language, Strings> = {
       proportion: 'Oran',
       proportionFooter: 'Görüntü gerilmiş görünüyorsa daralt, basık görünüyorsa genişlet.',
       fitSize: 'Boyut',
+      resolution: {
+        title: 'Ekran Çözünürlüğü (Anlık)',
+        footer: 'Oyunu yeniden başlatmadan anında kamyon ekranına uygulanır.',
+        high: 'Yüksek · HD (1280×720)',
+        ultra: 'Ultra · Maksimum Netlik (1280×720+)',
+        standard: 'Standart · Dengeli (640×360)',
+        gameDefault: 'Oyun Varsayılanı (Orijinal)',
+      },
+      keepScreenOn: 'Ekranı Açık Tut (Motor Kapalı)',
+      keepScreenOnFooter: 'Kamyon kapalıyken bile multimedya ekranının açık kalmasını ve çalışmasını sağlar.',
+      fitPresets: {
+        title: 'Ekran Biçimi (Manuel)',
+        footer: 'Mod araçlar için hızlı bir biçim seçin veya kenarları tek tek ayarlayın (eksi değerler dışa büyütür).',
+        auto: 'Otomatik (Algılanan)',
+        widescreen: 'Geniş Ekran 16:9',
+        sixteenTen: 'Orta 16:10',
+        classic: 'Klasik 4:3',
+        ultrawide: 'Ultra Geniş 21:9',
+        bandCenter: 'Mod Orta Şerit',
+      },
       restoreFit: 'Varsayılana Döndür',
       wallpaper: 'Duvar Kâğıdı',
       dashboard: 'Gösterge Paneli',
@@ -1956,7 +2143,7 @@ export const STRINGS: Record<Language, Strings> = {
       recommended: 'Önerilen',
       custom: 'Özel',
       equalizerFooter:
-        'WestPlay müziğini her kamyonun kendi hoparlörlerinden, kabinine göre ayarlanmış olarak çalar. Farklı bir ses istersen, her müzik uygulamasının her kamyonda nasıl çalacağını özelleştirebilirsin.',
+        'MaxDevMod müziğini her kamyonun kendi hoparlörlerinden, kabinine göre ayarlanmış olarak çalar. Farklı bir ses istersen, her müzik uygulamasının her kamyonda nasıl çalacağını özelleştirebilirsin.',
       low: 'Düşük',
       mid: 'Orta',
       high: 'Yüksek',

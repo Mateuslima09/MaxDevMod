@@ -6,7 +6,7 @@ export const words: Words = {
   continue: 'Продовжити',
   welcome: {
     title: 'CarPlay у вашій кабіні',
-    sub: 'WestPlay виводить CarPlay на екран вашої вантажівки в American Truck Simulator. Налаштування займе лише кілька хвилин.',
+    sub: 'MaxDevMod виводить CarPlay на екран вашої вантажівки в American Truck Simulator. Налаштування займе лише кілька хвилин.',
     start: 'Почати',
   },
   summary: {
@@ -20,10 +20,10 @@ export const words: Words = {
   game: {
     title: 'Ваша гра',
     titleMissing: 'Де ваша гра?',
-    found: 'WestPlay знайшов American Truck Simulator на цьому комп’ютері.',
+    found: 'MaxDevMod знайшов American Truck Simulator на цьому комп’ютері.',
     foundMany: 'American Truck Simulator встановлено в кількох місцях. Виберіть ту, у яку ви граєте.',
     missing:
-      'WestPlay не знайшов American Truck Simulator. Виберіть теку, у яку ви встановили гру, — ту, де є base.scs.',
+      'MaxDevMod не знайшов American Truck Simulator. Виберіть теку, у яку ви встановили гру, — ту, де є base.scs.',
     chooseAnother: 'Вибрати іншу теку…',
     chooseFolder: 'Вибрати теку…',
     picker: 'Виберіть теку American Truck Simulator',
@@ -32,7 +32,7 @@ export const words: Words = {
     gameGone: 'Гри більше немає в цій теці.',
     closeToGoOn: {
       title: 'Закрийте гру.',
-      text: 'WestPlay може налаштуватися, лише поки American Truck Simulator не запущено.',
+      text: 'MaxDevMod може налаштуватися, лише поки American Truck Simulator не запущено.',
     },
   },
   check: {
@@ -43,16 +43,16 @@ export const words: Words = {
     notYet: 'Поки не підтримується',
     title: 'Ось що у вас є',
     titleNotYet: 'Поки не підтримується',
-    cantInstall: 'WestPlay поки не підтримує цю версію гри.',
+    cantInstall: 'MaxDevMod поки не підтримує цю версію гри.',
     version: 'Версія',
     unknown: 'Невідома',
     dlcs: 'DLC',
     mapDlcs: 'DLC, що змінюють мапу',
     noMapDlcs: 'Немає',
-    untested: 'WestPlay створено для версії 1.61. Вашу версію ще не перевіряли, але найімовірніше все працюватиме.',
+    untested: 'MaxDevMod створено для версії 1.61. Вашу версію ще не перевіряли, але найімовірніше все працюватиме.',
     otherCarPlay: {
       title: 'Видаліть YMN One',
-      text: 'У грі встановлено інший мод CarPlay — YMN One (YamanDriveBridge.dll у теці plugins). Він займає екран GPS вашої вантажівки: WestPlay не може там з’явитися, а коли YMN One не запущено, екран стає рожевим. Закрийте гру й видаліть цей файл.',
+      text: 'У грі встановлено інший мод CarPlay — YMN One (YamanDriveBridge.dll у теці plugins). Він займає екран GPS вашої вантажівки: MaxDevMod не може там з’явитися, а коли YMN One не запущено, екран стає рожевим. Закрийте гру й видаліть цей файл.',
     },
     trucks: 'Вантажівки',
     truckNotYet: 'Поки не підтримується',
@@ -61,11 +61,11 @@ export const words: Words = {
     notInGame: 'Немає у вашій грі',
     scania7: 'Scania S і R — екран 7"',
     scaniaSmartDash: 'Scania S і R — Smart Dash',
-    anyTruckTablet: 'Будь-яка вантажівка – з планшетом WestPlay',
+    anyTruckTablet: 'Будь-яка вантажівка – з планшетом MaxDevMod',
     profiles: 'Профілі',
     profileCount: { one: '{n} профіль', few: '{n} профілі', many: '{n} профілів', other: '{n} профілю' },
     noProfiles: 'Профілів поки немає',
-    noProfilesDetail: 'WestPlay підготує мапу для першого профілю, який ви створите.',
+    noProfilesDetail: 'MaxDevMod підготує мапу для першого профілю, який ви створите.',
     baseMap: 'Оригінальна мапа',
     withMods: '{map} з модами: {mods}',
     unreadable: {
@@ -75,20 +75,20 @@ export const words: Words = {
       other: 'Не вдалося прочитати {n} мода мапи, тому їхніх змін не буде видно',
     },
     mapNote:
-      'WestPlay готує мапу для кожного вашого профілю, по черзі, починаючи з того, у якому ви грали останнім. Мапи готуються, поки гру закрито.',
+      'MaxDevMod готує мапу для кожного вашого профілю, по черзі, починаючи з того, у якому ви грали останнім. Мапи готуються, поки гру закрито.',
   },
   install: {
-    title: 'Встановлення WestPlay',
-    titleDone: 'WestPlay встановлено',
-    sub: 'WestPlay додає до гри плагін, який сам завантажує екрани WestPlay для вантажівок щоразу, коли ви граєте: у «Модифікаціях» нічого вмикати не потрібно. Файли самої гри залишаються недоторканими, а під час видалення WestPlay усе прибирається.',
+    title: 'Встановлення MaxDevMod',
+    titleDone: 'MaxDevMod встановлено',
+    sub: 'MaxDevMod додає до гри плагін, який сам завантажує екрани MaxDevMod для вантажівок щоразу, коли ви граєте: у «Модифікаціях» нічого вмикати не потрібно. Файли самої гри залишаються недоторканими, а під час видалення MaxDevMod усе прибирається.',
     install: 'Встановити',
     tryAgain: 'Спробувати ще раз',
     asAdministrator: 'Встановити від імені адміністратора',
     plugin: 'Плагін',
-    pluginDetail: 'Показує WestPlay на екрані вашої вантажівки',
+    pluginDetail: 'Показує MaxDevMod на екрані вашої вантажівки',
     banners: {
       installing: { title: 'Встановлення…' },
-      done: { title: 'WestPlay встановлено', text: 'Ваша гра готова' },
+      done: { title: 'MaxDevMod встановлено', text: 'Ваша гра готова' },
       permission: { title: 'Потрібен дозвіл', text: 'Windows запитає один раз' },
       inUse: { title: 'Закрийте гру', text: 'Вона використовує плагін' },
       failed: { title: 'Встановлення не завершено', text: 'Подробиці ліворуч' },
@@ -96,7 +96,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'Закрийте гру.',
-      text: 'WestPlay не можна встановити, поки запущено American Truck Simulator.',
+      text: 'MaxDevMod не можна встановити, поки запущено American Truck Simulator.',
     },
     inUse: {
       title: 'Закрийте гру.',
@@ -111,24 +111,24 @@ export const words: Words = {
       text: 'Без нього плагін не встановити. Спробуйте ще раз і виберіть «Так».',
     },
     pluginFailed: 'Не вдалося встановити плагін.',
-    modFailed: 'Не вдалося підготувати екрани WestPlay для вантажівки з вашої гри.',
-    noPlugin: 'У цій копії WestPlay немає плагіна. Перевстановіть WestPlay.',
+    modFailed: 'Не вдалося підготувати екрани MaxDevMod для вантажівки з вашої гри.',
+    noPlugin: 'У цій копії MaxDevMod немає плагіна. Перевстановіть MaxDevMod.',
     noDocuments: 'Не вдалося знайти теку «Документи».',
   },
   map: {
     title: 'Готуємо вашу мапу…',
     titleReady: 'Ваша мапа готова',
-    sub: 'WestPlay будує свою мапу з вашої гри — разом із вашими DLC і модами мапи. Це займе хвилину-дві.',
+    sub: 'MaxDevMod будує свою мапу з вашої гри — разом із вашими DLC і модами мапи. Це займе хвилину-дві.',
     banners: {
       building: 'Готуємо вашу мапу',
       ready: { title: 'Ваша мапа готова', text: 'З вашими DLC і модами мапи' },
       waiting: { title: 'Закрийте гру', text: 'Мапа будується, коли гру закрито' },
-      failed: { title: 'Не вдалося підготувати мапу', text: 'WestPlay спробує пізніше' },
+      failed: { title: 'Не вдалося підготувати мапу', text: 'MaxDevMod спробує пізніше' },
       getting: 'Підготовка…',
     },
     waiting: {
       title: 'Закрийте гру.',
-      text: 'Для підготовки мапи потрібно багато пам’яті, тому WestPlay чекає, доки гру не буде закрито.',
+      text: 'Для підготовки мапи потрібно багато пам’яті, тому MaxDevMod чекає, доки гру не буде закрито.',
     },
     stages: {
       reading: { now: 'Читаємо мапу вашої гри', done: 'Мапу прочитано' },
@@ -151,7 +151,7 @@ export const words: Words = {
   },
   accounts: {
     title: 'Вхід у YouTube',
-    sub: 'Необов’язково. Увійдіть, щоб бачити на екрані вантажівки свої рекомендації, підписки й історію. Вхід у Google виконується в окремому вікні, і WestPlay ніколи не бачить ваш обліковий запис.',
+    sub: 'Необов’язково. Увійдіть, щоб бачити на екрані вантажівки свої рекомендації, підписки й історію. Вхід у Google виконується в окремому вікні, і MaxDevMod ніколи не бачить ваш обліковий запис.',
     signIn: 'Увійти',
     signOut: 'Вийти',
     signedIn: 'Вхід виконано',
@@ -162,13 +162,13 @@ export const words: Words = {
   },
   spotify: {
     title: 'Вхід у Spotify',
-    sub: 'Необов’язково. Увійдіть, щоб слухати Spotify на екрані вантажівки зі своїми плейлистами й медіатекою. Вхід у Spotify виконується в окремому вікні, і WestPlay ніколи не бачить ваш обліковий запис.',
+    sub: 'Необов’язково. Увійдіть, щоб слухати Spotify на екрані вантажівки зі своїми плейлистами й медіатекою. Вхід у Spotify виконується в окремому вікні, і MaxDevMod ніколи не бачить ваш обліковий запис.',
     finishInWindow: 'Завершіть вхід у вікні Spotify',
     signingIn: { title: 'Вхід у Spotify', text: 'Продовжте у вікні Spotify' },
   },
   appleMusic: {
     title: 'Вхід у Apple Music',
-    sub: 'Необов’язково. Увійдіть, щоб слухати Apple Music на екрані вантажівки зі своїми плейлистами й медіатекою. Вхід у Apple Music виконується в окремому вікні, і WestPlay ніколи не бачить ваш обліковий запис.',
+    sub: 'Необов’язково. Увійдіть, щоб слухати Apple Music на екрані вантажівки зі своїми плейлистами й медіатекою. Вхід у Apple Music виконується в окремому вікні, і MaxDevMod ніколи не бачить ваш обліковий запис.',
     finishInWindow: 'Завершіть вхід у вікні Apple Music',
     signingIn: { title: 'Вхід у Apple Music', text: 'Продовжте у вікні Apple Music' },
   },
@@ -178,11 +178,11 @@ export const words: Words = {
     steps: [
       {
         title: 'Запустіть гру',
-        text: 'Коли з’явиться повідомлення «Виявлено спробу використати набір SDK.», натисніть «ОК». Це WestPlay.',
+        text: 'Коли з’явиться повідомлення «Виявлено спробу використати набір SDK.», натисніть «ОК». Це MaxDevMod.',
       },
       {
         title: 'Сідайте у вантажівку',
-        text: 'Увімкніть електрику, і WestPlay з’явиться на екрані. Не закривайте WestPlay, поки граєте.',
+        text: 'Увімкніть електрику, і MaxDevMod з’явиться на екрані. Не закривайте MaxDevMod, поки граєте.',
       },
     ],
   },

@@ -6,7 +6,7 @@ export const words: Words = {
   continue: '続ける',
   welcome: {
     title: 'キャビンに CarPlay を',
-    sub: 'WestPlay は、American Truck Simulator のトラックの画面に CarPlay を表示します。設定は数分で終わります。',
+    sub: 'MaxDevMod は、American Truck Simulator のトラックの画面に CarPlay を表示します。設定は数分で終わります。',
     start: 'はじめる',
   },
   summary: {
@@ -20,10 +20,10 @@ export const words: Words = {
   game: {
     title: 'あなたのゲーム',
     titleMissing: 'ゲームはどこですか？',
-    found: 'WestPlay がこの PC で American Truck Simulator を見つけました。',
+    found: 'MaxDevMod がこの PC で American Truck Simulator を見つけました。',
     foundMany: 'American Truck Simulator が複数の場所にインストールされています。プレイしているものを選んでください。',
     missing:
-      'WestPlay は American Truck Simulator を見つけられませんでした。インストールしたフォルダ（base.scs が入っているフォルダ）を選んでください。',
+      'MaxDevMod は American Truck Simulator を見つけられませんでした。インストールしたフォルダ（base.scs が入っているフォルダ）を選んでください。',
     chooseAnother: '別のフォルダを使う…',
     chooseFolder: 'フォルダを選ぶ…',
     picker: 'American Truck Simulator のフォルダを選んでください',
@@ -33,7 +33,7 @@ export const words: Words = {
     gameGone: 'ゲームはもうこのフォルダにありません。',
     closeToGoOn: {
       title: 'ゲームを終了してください。',
-      text: 'WestPlay の設定は、American Truck Simulator が起動していないときにだけ行えます。',
+      text: 'MaxDevMod の設定は、American Truck Simulator が起動していないときにだけ行えます。',
     },
   },
   check: {
@@ -44,17 +44,17 @@ export const words: Words = {
     notYet: 'まだ対応していません',
     title: 'あなたの環境',
     titleNotYet: 'まだ対応していません',
-    cantInstall: 'WestPlay はこのバージョンのゲームにまだ対応していません。',
+    cantInstall: 'MaxDevMod はこのバージョンのゲームにまだ対応していません。',
     version: 'バージョン',
     unknown: '不明',
     dlcs: 'DLC',
     mapDlcs: 'マップ DLC',
     noMapDlcs: 'なし',
     untested:
-      'WestPlay はバージョン 1.61 向けに作られています。お使いのバージョンはまだ試していませんが、おそらく動作します。',
+      'MaxDevMod はバージョン 1.61 向けに作られています。お使いのバージョンはまだ試していませんが、おそらく動作します。',
     otherCarPlay: {
       title: 'YMN One を削除してください',
-      text: '別の CarPlay MOD「YMN One」がゲームにインストールされています（plugins フォルダーの YamanDriveBridge.dll）。トラックの GPS 画面を乗っ取るため、WestPlay がそこに表示されず、YMN One が動いていないときは画面がピンク色になります。ゲームを閉じて、そのファイルを削除してください。',
+      text: '別の CarPlay MOD「YMN One」がゲームにインストールされています（plugins フォルダーの YamanDriveBridge.dll）。トラックの GPS 画面を乗っ取るため、MaxDevMod がそこに表示されず、YMN One が動いていないときは画面がピンク色になります。ゲームを閉じて、そのファイルを削除してください。',
     },
     trucks: 'トラック',
     truckNotYet: 'まだ対応していません',
@@ -63,29 +63,29 @@ export const words: Words = {
     notInGame: 'ゲームに入っていません',
     scania7: 'Scania S・R – 7 インチ画面',
     scaniaSmartDash: 'Scania S・R – Smart Dash',
-    anyTruckTablet: 'すべてのトラック – WestPlay タブレット付き',
+    anyTruckTablet: 'すべてのトラック – MaxDevMod タブレット付き',
     profiles: 'プロフィール',
     profileCount: { other: 'プロフィール {n} 件' },
     noProfiles: 'まだプロフィールがありません',
-    noProfilesDetail: 'WestPlay は、最初に作るプロフィール用にマップを準備します。',
+    noProfilesDetail: 'MaxDevMod は、最初に作るプロフィール用にマップを準備します。',
     baseMap: 'オリジナルマップ',
     withMods: '{map}＋{mods}',
     unreadable: { other: 'マップ MOD {n} 個を読み込めなかったため、その変更は表示されません' },
     mapNote:
-      'WestPlay は、最後にプレイしたプロフィールから順に、プロフィールごとにマップを 1 つずつ準備します。マップはゲームを終了している間に準備されます。',
+      'MaxDevMod は、最後にプレイしたプロフィールから順に、プロフィールごとにマップを 1 つずつ準備します。マップはゲームを終了している間に準備されます。',
   },
   install: {
-    title: 'WestPlay をインストール',
-    titleDone: 'WestPlay をインストールしました',
-    sub: 'WestPlay はゲームにプラグインを追加し、プレイのたびにプラグインが WestPlay のトラック画面を読み込みます。MOD マネージャーで有効にするものはありません。ゲーム本体のファイルには手を加えず、WestPlay をアンインストールするとすべて削除されます。',
+    title: 'MaxDevMod をインストール',
+    titleDone: 'MaxDevMod をインストールしました',
+    sub: 'MaxDevMod はゲームにプラグインを追加し、プレイのたびにプラグインが MaxDevMod のトラック画面を読み込みます。MOD マネージャーで有効にするものはありません。ゲーム本体のファイルには手を加えず、MaxDevMod をアンインストールするとすべて削除されます。',
     install: 'インストール',
     tryAgain: 'もう一度試す',
     asAdministrator: '管理者としてインストール',
     plugin: 'プラグイン',
-    pluginDetail: 'トラックの画面に WestPlay を表示します',
+    pluginDetail: 'トラックの画面に MaxDevMod を表示します',
     banners: {
       installing: { title: 'インストールしています…' },
-      done: { title: 'WestPlay をインストールしました', text: 'ゲームの準備ができました' },
+      done: { title: 'MaxDevMod をインストールしました', text: 'ゲームの準備ができました' },
       permission: { title: '許可が必要です', text: 'Windows が一度だけ確認します' },
       inUse: { title: 'ゲームを終了してください', text: 'プラグインを使用中です' },
       failed: { title: 'インストールが完了しませんでした', text: '詳しくは左側をご覧ください' },
@@ -93,7 +93,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'ゲームを終了してください。',
-      text: 'American Truck Simulator の起動中は WestPlay をインストールできません。',
+      text: 'American Truck Simulator の起動中は MaxDevMod をインストールできません。',
     },
     inUse: {
       title: 'ゲームを終了してください。',
@@ -108,24 +108,24 @@ export const words: Words = {
       text: '許可がないとプラグインをインストールできません。もう一度試して「はい」を選んでください。',
     },
     pluginFailed: 'プラグインをインストールできませんでした。',
-    modFailed: 'ゲームから WestPlay のトラック画面を準備できませんでした。',
-    noPlugin: 'この WestPlay にはプラグインが含まれていません。WestPlay を再インストールしてください。',
+    modFailed: 'ゲームから MaxDevMod のトラック画面を準備できませんでした。',
+    noPlugin: 'この MaxDevMod にはプラグインが含まれていません。MaxDevMod を再インストールしてください。',
     noDocuments: 'ドキュメント フォルダが見つかりませんでした。',
   },
   map: {
     title: 'マップを準備しています…',
     titleReady: 'マップの準備ができました',
-    sub: 'WestPlay は、あなたのゲームからマップ DLC やマップ MOD も含めてマップを作ります。1〜2 分かかります。',
+    sub: 'MaxDevMod は、あなたのゲームからマップ DLC やマップ MOD も含めてマップを作ります。1〜2 分かかります。',
     banners: {
       building: 'マップを準備しています',
       ready: { title: 'マップの準備ができました', text: 'DLC とマップ MOD も反映済み' },
       waiting: { title: 'ゲームを終了してください', text: 'マップはゲームの終了中に作られます' },
-      failed: { title: 'マップを準備できませんでした', text: 'WestPlay があとで再試行します' },
+      failed: { title: 'マップを準備できませんでした', text: 'MaxDevMod があとで再試行します' },
       getting: '準備しています…',
     },
     waiting: {
       title: 'ゲームを終了してください。',
-      text: 'マップの準備には多くのメモリが必要なため、WestPlay はゲームが終了するまで待ちます。',
+      text: 'マップの準備には多くのメモリが必要なため、MaxDevMod はゲームが終了するまで待ちます。',
     },
     stages: {
       reading: { now: 'ゲームのマップを読み込んでいます', done: 'マップを読み込みました' },
@@ -148,7 +148,7 @@ export const words: Words = {
   },
   accounts: {
     title: 'YouTube にログイン',
-    sub: '任意です。ログインすると、トラックの画面にあなたのおすすめ、登録チャンネル、履歴が表示されます。Google へのログインは別のウィンドウで行い、WestPlay があなたのアカウントを見ることはありません。',
+    sub: '任意です。ログインすると、トラックの画面にあなたのおすすめ、登録チャンネル、履歴が表示されます。Google へのログインは別のウィンドウで行い、MaxDevMod があなたのアカウントを見ることはありません。',
     signIn: 'ログイン',
     signOut: 'ログアウト',
     signedIn: 'ログイン済み',
@@ -159,13 +159,13 @@ export const words: Words = {
   },
   spotify: {
     title: 'Spotify にログイン',
-    sub: '任意です。ログインすると、トラックの画面で自分のプレイリストやライブラリから Spotify を聴けます。Spotify へのログインは別のウィンドウで行い、WestPlay があなたのアカウントを見ることはありません。',
+    sub: '任意です。ログインすると、トラックの画面で自分のプレイリストやライブラリから Spotify を聴けます。Spotify へのログインは別のウィンドウで行い、MaxDevMod があなたのアカウントを見ることはありません。',
     finishInWindow: 'Spotify のウィンドウでログインを完了してください',
     signingIn: { title: 'Spotify にログインしています', text: 'Spotify のウィンドウで続けてください' },
   },
   appleMusic: {
     title: 'Apple Music にログイン',
-    sub: '任意です。ログインすると、トラックの画面で自分のプレイリストやライブラリから Apple Music を聴けます。Apple Music へのログインは別のウィンドウで行い、WestPlay があなたのアカウントを見ることはありません。',
+    sub: '任意です。ログインすると、トラックの画面で自分のプレイリストやライブラリから Apple Music を聴けます。Apple Music へのログインは別のウィンドウで行い、MaxDevMod があなたのアカウントを見ることはありません。',
     finishInWindow: 'Apple Music のウィンドウでログインを完了してください',
     signingIn: { title: 'Apple Music にログインしています', text: 'Apple Music のウィンドウで続けてください' },
   },
@@ -175,11 +175,11 @@ export const words: Words = {
     steps: [
       {
         title: 'ゲームを起動',
-        text: '「高度な SDK 機能の使用リクエストが検出されました.」と表示されたら「OK」を選んでください。これが WestPlay です。',
+        text: '「高度な SDK 機能の使用リクエストが検出されました.」と表示されたら「OK」を選んでください。これが MaxDevMod です。',
       },
       {
         title: 'トラックに乗り込む',
-        text: '電源を入れると、画面に WestPlay が表示されます。プレイ中は WestPlay を開いたままにしてください。',
+        text: '電源を入れると、画面に MaxDevMod が表示されます。プレイ中は MaxDevMod を開いたままにしてください。',
       },
     ],
   },

@@ -72,3 +72,54 @@ chegar, mande o `app.log` (Documentos\WestPlay\logs): as linhas `[tiktok]` dizem
 Os arquivos de antes estão em `%LOCALAPPDATA%\WestPlay` com o final `.antes-tiktok-real` (`westplay.exe`,
 `westplay.dll` e a pasta `ui`), e a DLL de cada jogo em `bin\win_x64\plugins` com o mesmo final. Com o jogo e o
 WestPlay fechados, apague os novos e tire o `.antes-tiktok-real` do nome dos antigos.
+
+- [ ] (2026-11-12) Notificação de presente/seguidor: o celular sobe o suficiente para mostrar a barra de status e o aviso inteiro (antes cortava pela metade).
+
+
+## Aba LIVE sem a barra lateral (2026-11-12)
+
+Antes, na aba **LIVE** do TikTok no celular, a coluna da esquerda (ícone do TikTok, voltar, perfil, câmera,
+"Seguindo" com os avatares, "Criadores de LIVE") ficava fixa e espremia as LIVEs para a direita, cortadas.
+Agora essa coluna é escondida só na aba LIVE e a lista ocupa a largura toda. Não deu para testar com a conta
+logada (sem login o TikTok manda para a tela de entrar), então confira:
+
+- [ ] Aba **LIVE**: sem a coluna da esquerda; as abas "Seguindo / Jogos / Estilo de vida" e as LIVEs ocupam a
+  largura do celular, sem corte à direita.
+- [ ] Rolar a lista de LIVEs e tocar numa LIVE: abre normal.
+- [ ] Voltar para **Para você**, **Seguindo**, **Explorar** e **Perfil**: continuam como antes.
+- [ ] A barra de baixo do celular (Voltar / Para você / Seguindo / Explorar / LIVE / Perfil) continua funcionando.
+
+Se a coluna ainda aparecer, mande um print: o TikTok pode ter mudado o desenho da página.
+
+Voltar atrás: em `%LOCALAPPDATA%\WestPlay` os arquivos de antes têm o final `.antes-tiktok-live-lateral`
+(`westplay.exe` e a pasta `ui`).
+
+
+## Botões de volume na lateral + controles do TikTok de volta (2026-11-21)
+
+Por que tinham sumido: para o vídeo ocupar a tela inteira do celular, a barra de baixo do player do TikTok (onde
+ficam volume, velocidade e rolagem automática) era escondida, ficando só a linha do progresso. Agora o próprio
+WestPlay põe esses controles **no canto de cima à direita** do vídeo. Só o app WestPlay mudou (o jogo não precisa
+reiniciar).
+
+Botões na lateral do celular:
+
+- [ ] Do lado **esquerdo** do celular aparecem dois botões pequenos, como os de volume de um iPhone.
+- [ ] Com o **TikTok aberto**: o de cima aumenta, o de baixo diminui o volume do vídeo; aparece uma barrinha de
+      volume do lado esquerdo e some sozinha.
+- [ ] Com **outro app** (ou a tela inicial) e uma música tocando (Spotify, YouTube Music, YouTube): os botões
+      mudam o volume dela e mostram a barrinha. Sem nada tocando, não fazem nada.
+- [ ] Os botões são fáceis de acertar com o mouse? (Pequenos demais / no lugar errado: mande um print.)
+
+Controles no vídeo do TikTok (canto de cima, à direita):
+
+- [ ] **Alto-falante**: abre um controle deslizante de volume; tocar de novo nele com o controle aberto silencia
+      (e de novo volta o som).
+- [ ] **1x**: cada toque muda a velocidade (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x). Vale para os próximos vídeos também.
+- [ ] **Auto** (fica vermelho ligado): quando o vídeo termina, passa sozinho para o próximo.
+- [ ] Volume, velocidade e Auto continuam como estavam depois de fechar e abrir o TikTok.
+- [ ] Nas LIVEs só aparece o volume (velocidade e Auto não servem para live).
+- [ ] Os controles não ficam em cima de nada importante do TikTok?
+
+Voltar atrás: em `%LOCALAPPDATA%\MaxDevMod` os arquivos de antes têm o final `.antes-teclas-volume`
+(`westplay.exe` e a pasta `ui`).

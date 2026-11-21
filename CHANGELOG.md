@@ -3,6 +3,35 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.0 (beta, 2026-11-21)
+- Reversing camera: put the truck in reverse and WestPlay's screen becomes a reversing camera, on the trailer's rear
+  with one coupled, else on the truck's. Its picture is drawn from your game's map (roads at their real width,
+  buildings in 3D, other TruckersMP players' trucks), mirrored as a real one is; it isn't the game's own picture.
+  Guide lines on the ground (red, yellow, green, marked at 1, 2 and 3 m) bend with the steering wheel, the trailer
+  swinging the other way as it does. Parking sensors beep slower far off, quicker and louder as the rear nears
+  something, and hold a steady tone right against it, with the distance beside the picture. In single player they
+  ask the game's own physics what's behind: whatever the truck would bump into (walls, posts, the map's scenery, the
+  traffic, trailers), on any map; under TruckersMP, the map's buildings and other players' trucks only. The cab's
+  Settings has its page: the camera, its beeps and its guide lines, each on or off. A card covers the screen while
+  the camera comes up and while it goes, so the game's map and the plain mirror no longer flash.
+- Suspensão, a phone app for the truck's and the trailer's air suspension: up, down, highest, level, lowest, each
+  axle or the trailer, with the springs' heights drawn live. A lower front than the game allows, firmer dampers and
+  cab, and a warning when the engine is off. Automatic suspension: lower on the motorway, up on rough roads (each
+  axle measured on its own, lowered trucks too), the rear levelled under a load, a little up while braking long;
+  every move undone back to the height you chose.
+- Phone as a steering wheel: your own phone's gyroscope steers, with on-screen throttle and brake, an animated wheel
+  in the middle and settings for sensitivity, smoothing, dead zone, pedal size and more.
+- Coupling by hand as in real life: the trailer's legs cranked down and up, and the fifth wheel's lock pulled to
+  uncouple or pushed to couple, each a small game with its own sounds.
+- On foot: a thinner body that fits between the truck and things, a third-person camera that comes closer instead
+  of going into walls and the truck, bumping into the game's traffic, and when a car carries you off, a short fade
+  and you're back by the truck. A new person, the engineer; the stout man is set aside for now.
+- The phone: Nupay, truck and job notifications, a bigger home bar, the mouse dot's size in Settings, all people on
+  the Personagem app, a new Suspensão icon, and the Commands app without the suspension (it has its own app now).
+- Fixes: black flashes after "engine only off", the truck's screen no longer showing the game's panel for a moment,
+  and the floating screen (first prototype).
+- Private build: the people's animations are Mixamo's, so this build isn't for handing out.
+
 ## 2.3.0 (beta, 2026-11-07)
 - Modo Personagem (complete in ETS2; ATS doesn't have all of it yet): get out of the truck (F8, stopped) and walk
   about in first or third person, as one of WestPlay's own people (the tattooed man, the woman or the cowboy, chosen

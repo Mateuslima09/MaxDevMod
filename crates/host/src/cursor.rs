@@ -38,6 +38,18 @@ use crate::gpu::Gpu;
 /// The dot's radius, its ring's width inside its edge, its shadow's offset down and blur (CSS's blur radius:
 /// a Gaussian of half of it), page pixels (`shell.css`, `.cursor-dot`).
 const RADIUS: f32 = 22.0;
+
+/// How big the player wants the dot (owner 2026-11-19: a setting for its size): times the sizes above, f32 bits.
+static SIZE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+
+/// Sets the dot's size (`settings::CursorSize::factor`).
+pub fn set_size(factor: f32) {
+    SIZE.store(factor.clamp(0.5, 2.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn size() -> f32 {
+    f32::from_bits(SIZE.load(std::sync::atomic::Ordering::Relaxed))
+}
 const RING: f32 = 2.0;
 const SHADOW_DOWN: f32 = 4.0;
 const SHADOW_BLUR: f32 = 16.0;
@@ -305,9 +317,10 @@ impl Painter {
     /// Draws `look` over what the frame holds, the page squeezed into it `squeeze` times its height.
     pub fn draw(&self, look: &Look, squeeze: f32) -> Result<()> {
         let (fill, ring, shadow) = colours(look);
-        let radius = RADIUS * look.scale;
-        let down = SHADOW_DOWN * look.scale;
-        let sigma = SHADOW_BLUR / 2.0 * look.scale;
+        let scale = look.scale * size();
+        let radius = RADIUS * scale;
+        let down = SHADOW_DOWN * scale;
+        let sigma = SHADOW_BLUR / 2.0 * scale;
         let centre = Vector2 { X: look.x, Y: look.y };
         let dot = D2D1_ELLIPSE { point: centre, radiusX: radius, radiusY: radius };
         // SAFETY: plain Direct2D calls on the live context and its target; brushes, geometries and layer
@@ -362,7 +375,7 @@ impl Painter {
             // The dot, and its ring just inside its edge.
             let brush = context.CreateSolidColorBrush(&straight(fill), None)?;
             context.FillEllipse(&dot, &brush);
-            let width = RING * look.scale;
+            let width = RING * scale;
             let rim = D2D1_ELLIPSE { point: centre, radiusX: radius - width / 2.0, radiusY: radius - width / 2.0 };
             let brush = context.CreateSolidColorBrush(&straight(ring), None)?;
             context.DrawEllipse(&rim, &brush, width, None);

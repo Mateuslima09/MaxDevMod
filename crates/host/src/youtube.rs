@@ -726,6 +726,11 @@ impl YouTube {
         })
     }
 
+    /// Its picture put away while the reversing camera shows (`OffscreenWebView::cover`).
+    pub fn cover(&self, covered: bool) -> windows::core::Result<()> {
+        self.view.cover(covered)
+    }
+
     /// Carries out the page's command (`Close` is the caller's: [`YouTube::close`]).
     pub fn command(&self, command: &Command) -> windows::core::Result<()> {
         match command {

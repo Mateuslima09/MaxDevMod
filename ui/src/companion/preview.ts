@@ -11,13 +11,13 @@ import type { Settings } from './useSettings'
  *
  * - `?onboarding`: the first run, from its start.
  * - `?game=off|on|live|unsupported`: the game not running, running (the cab not on the screen), the screen live, or
- *   the player in a truck WestPlay doesn't show in.
+ *   the player in a truck MaxDevMod doesn't show in.
  * - `?map=building|ready|waiting|failed`: the map's state (`building` runs to `ready`).
  * - `?update`: an update found (its sheet offers it; installing it downloads, then stays installing).
  * - `?custom`: some wallpapers and an icon set of the player's (adding gives more, with a file left out).
  * - `?leftOut`: the played profile's map made without a map mod it couldn't read.
- * - `?elevated`: the game run as administrator (WestPlay can't read its route, guidance or weather).
- * - `?updated` (or `?updated=admin`): WestPlay updated since it was set up: the new plugin goes into the game
+ * - `?elevated`: the game run as administrator (MaxDevMod can't read its route, guidance or weather).
+ * - `?updated` (or `?updated=admin`): MaxDevMod updated since it was set up: the new plugin goes into the game
  *   once it's closed (with `admin`, Windows' permission is asked for first).
  *
  * Nothing here is ever in the app.
@@ -82,10 +82,20 @@ let settings: Settings = {
   screen: { truckStrip: 'auto', split: 'off' },
   look: { wallpaper: null, iconSet: null, iconStyle: 'auto' },
   graphics: { gpu: null },
-  character: { enabled: true, sensitivity: 50, key: 0x77, person: 0, hints: true, hintsKey: 0 },
+  character: {
+    enabled: true,
+    sensitivity: 50,
+    key: 0x77,
+    person: 0,
+    hints: true,
+    hintsKey: 0,
+    papers: true,
+    refuel: true,
+    payAttendant: true,
+  },
 }
 
-// The player's own, made up from WestPlay's files (the preview's address: `FILES_BASE` is `/` here).
+// The player's own, made up from MaxDevMod's files (the preview's address: `FILES_BASE` is `/` here).
 const custom: Customizations = query.has('custom')
   ? {
       wallpapers: [{ id: 'custom:Logo', name: 'Logo', dark: 'westplay.png', light: 'westplay.png' }],
@@ -139,7 +149,7 @@ function status(): HostStatus {
   return {
     webviewVersion: '141.0.3537.71',
     adapter: gameState === 'off' ? null : ADAPTERS[0].name,
-    // The one chosen, or WestPlay's pick: the game's.
+    // The one chosen, or MaxDevMod's pick: the game's.
     cabAdapter: (ADAPTERS.find((adapter) => adapter.id === settings.graphics.gpu) ?? ADAPTERS[0]).name,
     gameAdapter: gameState === 'off' ? null : ADAPTERS[0].name,
     adapters: ADAPTERS,
@@ -149,7 +159,7 @@ function status(): HostStatus {
     game: query.get('played') === 'ets2' ? 'ets2' : 'ats',
     gameConnected: gameState !== 'off',
     screenDrawing: live,
-    // `?game=unsupported`: in a truck WestPlay doesn't show in.
+    // `?game=unsupported`: in a truck MaxDevMod doesn't show in.
     truckSupported: gameState === 'unsupported' ? false : live ? true : null,
     gameElevated: gameState !== 'off' && query.has('elevated'),
     westplayOpen: live ? westplayOpen : null,
@@ -168,6 +178,8 @@ function status(): HostStatus {
     phoneQr: null,
     handsetUrl: null,
     handsetQr: null,
+    wheelUrl: null,
+    wheelQr: null,
     // The played profile's map, then the other profile's: made after it, or waiting its turn.
     profileMaps: [
       {
@@ -254,7 +266,7 @@ const CHECK: GameCheck = {
     { id: 'renault-t-2024', name: 'Renault T (2024)', fit: 'ready', fromMod: false },
     { id: 'volvo-fh-2021', name: 'Volvo FH (2021)', fit: 'ready', fromMod: false },
     { id: 'volvo-fh-2024', name: 'Volvo FH (2024)', fit: 'ready', fromMod: false },
-    { id: 'any-truck-tablet', name: 'Any truck â€“ with the WestPlay tablet', fit: 'ready', fromMod: false },
+    { id: 'any-truck-tablet', name: 'Any truck â€“ with the MaxDevMod tablet', fit: 'ready', fromMod: false },
   ],
   modProblem: null,
   plugin: 'current',
@@ -349,7 +361,7 @@ export function answer(command: string, args?: Record<string, unknown>): Promise
       }, 1200)
       return later(undefined)
     case 'open_support_page':
-      window.open('https://kreosus.com/enes-less', '_blank', 'noopener')
+      window.open('https://github.com/Mateuslima09/ETS-ATS-CarPlay', '_blank', 'noopener')
       return later(undefined)
     case 'app_log_place':
       return later('C:\\Users\\Player\\Documents\\WestPlay\\logs\\app.log')

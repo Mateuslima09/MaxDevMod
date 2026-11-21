@@ -275,6 +275,7 @@ impl RouteReader {
             let waypoints = read_waypoints(memory, global, navigator, fields.waypoints).unwrap_or_default();
             updates.push(RouteUpdate::Route { id: self.number, nodes: nodes.clone(), waypoints });
             self.route = Some((key, nodes, after));
+            note_junction_points(memory, &header);
         }
         let Some((_, nodes, after)) = &self.route else { return updates };
         let next = after.get(header.next_index).copied().unwrap_or(nodes.len() - 1);
@@ -446,6 +447,50 @@ fn read_waypoints(memory: &impl Memory, global: usize, navigator: usize, waypoin
             memory.read(pointer, &mut map_node).then(|| map_node_of(&map_node).uid)
         })
         .collect()
+}
+
+/// A look at the route's points inside junctions (its nodes of type 1), which aren't read yet (owner 2026-11-11:
+/// with a map mod WestPlay can't read, the route runs straight through a roundabout; the game's own route has
+/// the way): the first of them, and the map nodes beside them, as they lie in the game's memory, with what each
+/// points to, kept beside the log (`route-junction-points.txt`, written anew with every route) to work their
+/// layout out from. Only the game's own route: nothing of the player's.
+fn note_junction_points(memory: &impl Memory, header: &Header) {
+    const SHOWN: usize = 40;
+    const POINTED: usize = 0x80;
+    let Some(dir) = crate::log::place().and_then(Path::parent) else { return };
+    let mut raw = vec![0u8; header.count * header.node_size];
+    if !memory.read(header.array, &mut raw) {
+        return;
+    }
+    let hex = |bytes: &[u8]| bytes.iter().map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().join(" ");
+    let kinds: Vec<u32> =
+        raw.chunks_exact(header.node_size).map(|node| u32::from_le_bytes(node[0..4].try_into().unwrap())).collect();
+    let points = kinds.iter().filter(|&&kind| kind == 1).count();
+    let mut text = format!(
+        "route {}: {} nodes of {:#x} bytes at {:#x}, {points} of them points inside junctions\n",
+        header.id, header.count, header.node_size, header.array
+    );
+    let mut shown = 0;
+    for (index, node) in raw.chunks_exact(header.node_size).enumerate() {
+        let beside = (index > 0 && kinds[index - 1] == 1) || kinds.get(index + 1) == Some(&1);
+        if (kinds[index] == 1 && shown >= SHOWN) || (kinds[index] != 1 && !beside) {
+            continue;
+        }
+        shown += usize::from(kinds[index] == 1);
+        text.push_str(&format!("\n#{index} kind {}\n  node:    {}\n", kinds[index], hex(node)));
+        let pointer = u64::from_le_bytes(node[8..16].try_into().unwrap()) as usize;
+        let mut pointed = [0u8; POINTED];
+        if pointer != 0 && memory.read(pointer, &mut pointed) {
+            text.push_str(&format!("  at +8 ({pointer:#x}): {}\n", hex(&pointed)));
+            if kinds[index] == 0 {
+                let map_node = map_node_of(pointed[..MAP_NODE_SIZE].try_into().unwrap());
+                text.push_str(&format!("  map node {:#x} at {:?}\n", map_node.uid, map_node.position));
+            }
+        }
+    }
+    if let Err(error) = std::fs::write(dir.join("route-junction-points.txt"), text) {
+        log!("route: its junction points couldn't be noted: {error}");
+    }
 }
 
 /// The route's map nodes, and for each of its nodes in memory, the map node at or after it (where the truck

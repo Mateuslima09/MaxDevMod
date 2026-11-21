@@ -51,6 +51,9 @@ export interface HostStatus {
   /** The phone in the game's page on the player's phone, as `phoneUrl` and `phoneQr` the panel's. */
   handsetUrl: string | null
   handsetQr: string | null
+  /** The wheel page (the player's phone as a steering wheel), over HTTPS (crates/host wheel.rs). */
+  wheelUrl: string | null
+  wheelQr: string | null
   /** Every profile's map (mirrors `westplay_host::maps::ProfileMap`): WestPlay makes one for each, one by
    * one, the profile played first. */
   profileMaps: ProfileMap[]

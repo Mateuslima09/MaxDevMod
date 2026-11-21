@@ -9,17 +9,33 @@ mod camera;
 mod character;
 mod commands;
 mod d3d;
+mod fade;
+mod float_screen;
 mod frame;
+mod fuel_meter;
 mod handset;
 mod hints;
+mod hires;
 mod hooks;
+mod hud;
 mod input;
 mod keybinds;
 mod keyboard;
 mod log;
+mod hide_virtual;
+mod mirror;
+mod mirror_camera_probe;
+mod mirror_memory_scan;
+mod mirror_probe;
+mod mirror_stack;
+mod query_probe;
+mod rear_camera;
+mod virtual_toggle;
 mod mod_mount;
 mod money;
 mod navigation;
+mod ray;
+mod reversing;
 mod screens;
 mod scs;
 mod telemetry;
@@ -144,6 +160,8 @@ unsafe fn shutdown() {
         d3d::on_unload();
     }
     log!("hooks removed");
+    // Rays being tested didn't close the game: their guard says so (ray.rs).
+    crate::ray::shutdown();
     if let Some(bridge) = bridge::get() {
         // Tell the app the game is gone.
         bridge.plugin.pid.store(0, std::sync::atomic::Ordering::Release);

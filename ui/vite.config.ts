@@ -107,6 +107,8 @@ export default defineConfig({
         phone: resolve(import.meta.dirname, 'phone.html'),
         // The phone in the game, drawn over the game's picture by the plugin (crates/plugin handset.rs).
         handset: resolve(import.meta.dirname, 'handset.html'),
+        // The player's phone as the truck's steering wheel, served by the host over HTTPS (crates/host wheel.rs).
+        wheel: resolve(import.meta.dirname, 'wheel.html'),
       },
     },
   },

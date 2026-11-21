@@ -1,0 +1,295 @@
+/* The reversing camera (ReversingCamera.tsx): over the CarPlay area, under the cursor (40). */
+.reversing {
+  position: absolute;
+  inset: 0 0 var(--oem-bottom, 0px) var(--oem-left, 0px);
+  z-index: 30;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* The card covering the switch into reverse and out (ReversingCamera.tsx `Cover`): over the picture and the
+   panel, until the camera is ready. */
+.reversing-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 40%, #1c1f24, #07080a 70%);
+  opacity: 1;
+  transition: opacity 200ms ease-out;
+}
+
+.reversing-cover.gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reversing-cover-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  font-size: 18px;
+  color: rgb(255 255 255 / 0.9);
+}
+
+.reversing-cover-card svg {
+  width: 34px;
+  height: 34px;
+  color: #ffd60a;
+}
+
+.reversing-cover-bar {
+  position: relative;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.12);
+}
+
+.reversing-cover-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 2px;
+  background: #ffd60a;
+  animation: reversing-cover-run 0.9s ease-in-out infinite;
+}
+
+@keyframes reversing-cover-run {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.reversing-host,
+.reversing-picture,
+.reversing-map,
+.reversing-guides {
+  position: absolute;
+  inset: 0;
+}
+
+/* Mirrored, as a real reversing camera's picture is: the screen's left is the driver's left. */
+.reversing-picture {
+  transform: scaleX(-1);
+}
+
+.reversing-guides {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.reversing-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  font-size: calc(18px * var(--ui-scale, 1));
+}
+
+.reversing-where {
+  opacity: 0.7;
+}
+
+.reversing-caution {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 30%;
+  text-align: center;
+  font-size: calc(17px * var(--ui-scale, 1));
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.8);
+}
+
+.reversing-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: 26%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 24px;
+  background: rgb(18 18 20 / 0.78);
+}
+
+.reversing-mute {
+  align-self: flex-end;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
+.reversing-mute.off {
+  color: var(--apple-red, #ff4245);
+}
+
+/* The panel's buttons in a row: adjusting the camera, its sound. */
+.reversing-panel-buttons {
+  align-self: stretch;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.reversing-adjust.on {
+  background: var(--apple-blue, #0a84ff);
+}
+
+/* Moving the camera by hand, in the sensors' place. */
+.reversing-adjust-pad {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #fff;
+  font-size: calc(15px * var(--ui-scale, 1));
+  text-align: center;
+}
+
+.reversing-adjust-pad button {
+  min-height: calc(40px * var(--ui-scale, 1));
+  border: 0;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.16);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+}
+
+.reversing-adjust-pad button.quiet {
+  flex: 1;
+  background: rgb(255 255 255 / 0.08);
+  font-weight: 500;
+}
+
+.reversing-adjust-row {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.reversing-adjust-value {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.reversing-adjust-pad small {
+  opacity: 0.6;
+  font-size: calc(12px * var(--ui-scale, 1));
+}
+
+.reversing-diagram {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.reversing-diagram .body {
+  fill: rgb(255 255 255 / 0.85);
+}
+
+.reversing-diagram .body.truck {
+  fill: rgb(255 255 255 / 0.55);
+}
+
+.reversing-diagram .band {
+  fill: rgb(255 255 255 / 0.1);
+}
+
+.reversing-diagram .band.beyond {
+  fill: rgb(255 255 255 / 0.04);
+}
+
+.reversing-diagram .band.lit.red {
+  fill: var(--apple-red, #ff4245);
+}
+
+.reversing-diagram .band.lit.yellow {
+  fill: var(--apple-yellow, #ffd600);
+}
+
+.reversing-diagram .band.lit.green {
+  fill: var(--apple-green, #30d158);
+}
+
+.reversing-distance {
+  font-size: calc(34px * var(--ui-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.reversing-distance.clear {
+  opacity: 0.4;
+}
+
+.reversing-distance.red {
+  color: var(--apple-red, #ff4245);
+}
+
+.reversing-distance.yellow {
+  color: var(--apple-yellow, #ffd600);
+}
+
+.reversing-distance.green {
+  color: var(--apple-green, #30d158);
+}
+
+/* The game's own mirrors in the picture's place (ReversingCamera.tsx MirrorHole): the page see-through where they
+   show, left of the sensors' panel, black beside it; the CarPlay area under the camera hidden, and nothing behind
+   the page (the fitted screen's black), so the plugin's picture shows through. */
+html.mirror-camera,
+html.mirror-camera body,
+html.mirror-camera #root,
+html.mirror-camera .shell {
+  background: transparent !important;
+}
+
+html.mirror-camera .carplay {
+  visibility: hidden;
+}
+
+/* Our camera over the whole screen, the sensors' panel over it, see-through (owner 2026-11-14). */
+.reversing.mirror {
+  background: transparent;
+}
+
+.reversing.mirror .reversing-panel {
+  background: rgb(18 18 20 / 0.28);
+  backdrop-filter: none;
+}
+
+.reversing.mirror .reversing-host {
+  visibility: hidden;
+}
+
+.reversing-mirror {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}

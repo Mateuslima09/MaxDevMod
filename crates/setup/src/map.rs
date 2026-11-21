@@ -43,11 +43,13 @@ use crate::profiles::{Mod, Profile};
 /// 14 (after 1.2.0): the tunnels, the roads' `tunnel` (area.rs mark_tunnels). 15 (after 2.0.3): map mods read
 /// that were left out (sectors of 895, environment areas before 901, emptied directories in protected
 /// archives) and older mods' prefabs (from version 22, skipped before); only a map that left a mod out is
-/// built again for it ([`SAME_BUT_LEFT_OUT`]).
-pub const BUILDER_VERSION: u32 = 15;
+/// built again for it ([`SAME_BUT_LEFT_OUT`]). 16 (2026-11-11): every fuel pump's own point (pumps.json beside the
+/// tiles), for refuelling by hand.
+pub const BUILDER_VERSION: u32 = 16;
 /// The oldest builder whose maps are today's but for the mods they left out: one of those that left none out
 /// is kept (a mod's old prefabs it skipped are drawn once it's built again for another reason).
-const SAME_BUT_LEFT_OUT: u32 = 14;
+/// Today's own number since 16: every earlier map lacks the pumps, so all are built again.
+const SAME_BUT_LEFT_OUT: u32 = 16;
 
 /// The folder of the map `profile` plays, in `maps` (WestPlay's maps folder): one per map and its map mods.
 pub fn folder(maps: &Path, profile: &Profile) -> PathBuf {
@@ -409,9 +411,11 @@ mod tests {
         let mut updated = source.clone();
         updated["game"] = json!("1.62.0.1");
         assert!(needs_building(&dir, &updated));
-        // A mod left out: built again, to read it now.
+        // A mod left out by an earlier builder of the same maps: built again, to read it now (none such while
+        // today's builder is the first of its maps).
+        let earlier_same = SAME_BUT_LEFT_OUT < BUILDER_VERSION;
         std::fs::write(dir.join(LEFT_OUT_FILE), r#"[{"name":"Sud de France","error":"unknown item type"}]"#).unwrap();
-        assert!(needs_building(&dir, &source));
+        assert_eq!(needs_building(&dir, &source), earlier_same);
         std::fs::remove_file(dir.join(LEFT_OUT_FILE)).unwrap();
         // Older still: built.
         built_by(SAME_BUT_LEFT_OUT - 1);

@@ -13,6 +13,7 @@ export function CharacterApp({ words }: { words: CharacterWords }) {
     <>
       <div className="handset-people">
         {PEOPLE.map((person, place) => {
+          if ('off' in person && person.off) return null
           const here = chosen === place
           return (
             <button
@@ -63,6 +64,12 @@ const PEOPLE = [
   { picture: '/characters/wt.png', kind: 'man' },
   { picture: '/characters/wm.png', kind: 'woman' },
   { picture: '/characters/wc.png', kind: 'man' },
+  // The man in black with the hat and the stout man (owner 2026-11-19: only three showed in the game's phone).
+  { picture: '/characters/wh.png', kind: 'man' },
+  // Off for now (owner 2026-11-19: his animation to be polished): not offered (the app's PEOPLE_OFF).
+  { picture: '/characters/wg.png', kind: 'man', off: true },
+  // The woman in the hard hat and safety vest (owner 2026-11-20).
+  { picture: '/characters/wo.png', kind: 'woman' },
 ] as const
 
 /** "Man 1", "Woman 1"… each kind numbered from 1. */

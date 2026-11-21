@@ -16,12 +16,26 @@ export const words: CompanionWords = {
     person: 'Quién camina',
     man: 'Hombre {n}',
     woman: 'Mujer {n}',
+    names: {
+      tattooed: 'Tatuado',
+      madam: 'Madame',
+      farmer: 'Granjero',
+      gunslinger: 'Pistolero',
+      stout: 'Gordito',
+      builder: 'Ingeniera',
+    },
     personNote: 'Se aplica la próxima vez que bajes.',
     restartNote: 'El juego está abierto: reinícialo para que se aplique el cambio de personaje.',
     hints: 'Barra de teclas en el juego',
     hintsDetail: 'Muestra abajo en la pantalla las teclas de lo que puedes hacer ahora: bajar, subir, el celular y la pantalla.',
     hintsKey: 'Tecla para mostrar y ocultar',
     hintsKeyDetail: 'Retroceso quita la tecla.',
+    papers: 'Factura y enganche a mano',
+    papersDetail: 'En los trabajos con tu camión: firmar la factura con el empleado y enganchar el remolque a pie (E). Desactivado, el juego lo hace como siempre.',
+    refuel: 'Repostar a mano',
+    refuelDetail: 'En el surtidor: bajar y repostar por el depósito del camión, con la manguera en la mano (E). Desactivado, Enter en la cabina reposta como siempre.',
+    payAttendant: 'Pagar al empleado',
+    payAttendantDetail: 'Después de repostar a pie, pagar al empleado delante del camión, con Nupay en el móvil (E). Desactivado, queda pagado.',
     noKey: 'Ninguna',
   },
   screen: {
@@ -29,7 +43,7 @@ export const words: CompanionWords = {
     titles: { ...spain.screen.titles, stopped: 'Algo falló' },
     subs: {
       ...spain.screen.subs,
-      stopped: 'El motor de WestPlay se detuvo. Tienes los detalles en Información.',
+      stopped: 'El motor de MaxDevMod se detuvo. Tienes los detalles en Información.',
     },
   },
   controls: {
@@ -45,7 +59,7 @@ export const words: CompanionWords = {
   },
   accounts: {
     ...spain.accounts,
-    sub: 'Inicia sesión para ver tu música y tus videos en la pantalla del camión. Inicias sesión en cada servicio en su propia ventana, y WestPlay nunca ve tu cuenta.',
+    sub: 'Inicia sesión para ver tu música y tus videos en la pantalla del camión. Inicias sesión en cada servicio en su propia ventana, y MaxDevMod nunca ve tu cuenta.',
   },
   map: {
     ...spain.map,
@@ -72,9 +86,9 @@ export const words: CompanionWords = {
   },
   uninstall: {
     ...spain.uninstall,
-    text: 'WestPlay se quita de tu juego y de tus perfiles, y se elimina de esta computadora junto con tus inicios de sesión y sus registros.',
-    steps: { ...spain.uninstall.steps, data: 'Eliminando WestPlay de esta computadora' },
+    text: 'MaxDevMod se quita de tu juego y de tus perfiles, y se elimina de esta computadora junto con tus inicios de sesión y sus registros.',
+    steps: { ...spain.uninstall.steps, data: 'Eliminando MaxDevMod de esta computadora' },
     profilesFailed:
-      'No se pudieron cambiar {n} de tus perfiles y todavía incluyen WestPlay. Quítalo allí en el Gestor de mods.',
+      'No se pudieron cambiar {n} de tus perfiles y todavía incluyen MaxDevMod. Quítalo allí en el Gestor de mods.',
   },
 }

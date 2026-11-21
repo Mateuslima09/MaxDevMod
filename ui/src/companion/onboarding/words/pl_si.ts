@@ -10,14 +10,14 @@ export const words: Words = {
   ...polish,
   install: {
     ...polish.install,
-    sub: 'WestPlay dodaje do gry wtyczkę, która przy każdej grze sama wczytuje ekrany WestPlay dla ciężarówek: w menu „Mynedżer modōw” nie trzeba niczego włączać. Pliki samej gry pozostają nietknięte, a odinstalowanie WestPlay usuwa wszystko.',
+    sub: 'MaxDevMod dodaje do gry wtyczkę, która przy każdej grze sama wczytuje ekrany MaxDevMod dla ciężarówek: w menu „Mynedżer modōw” nie trzeba niczego włączać. Pliki samej gry pozostają nietknięte, a odinstalowanie MaxDevMod usuwa wszystko.',
   },
   launch: {
     ...polish.launch,
     steps: [
       {
         title: polish.launch.steps[0].title,
-        text: 'Gdy pojawi się komunikat „Wykrytŏ prōbã skorzistaniŏ ze zaawansowanych nŏczyniōw deweloperskich.”, wybierz „Ok”. To WestPlay.',
+        text: 'Gdy pojawi się komunikat „Wykrytŏ prōbã skorzistaniŏ ze zaawansowanych nŏczyniōw deweloperskich.”, wybierz „Ok”. To MaxDevMod.',
       },
       polish.launch.steps[1],
     ],

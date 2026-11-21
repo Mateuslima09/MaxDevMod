@@ -80,6 +80,9 @@ pub fn init() {
     START.get_or_init(Instant::now);
     let dir = log_dir();
     let _ = fs::create_dir_all(dir);
+    // The last game's lines kept beside it (owner 2026-11-11: the game closed on its own, opened again, and what
+    // the plugin did as it closed was gone with the new log).
+    let _ = fs::copy(dir.join("plugin.log"), dir.join("plugin.anterior.log"));
     let Ok(file) = OpenOptions::new().create(true).write(true).truncate(true).open(dir.join("plugin.log")) else {
         return;
     };

@@ -94,6 +94,120 @@ pub fn split_current(built: &Path) -> bool {
     }
 }
 
+/// Target render-target resolution (`gps_drawable_size`) for in-cabin GPS displays.
+/// Scales up low-resolution `256 x 256` / `512 x 256` / `1024 x 512` targets while preserving their aspect ratio.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScreenResolution {
+    Standard,
+    #[default]
+    High,
+    Ultra,
+    GameDefault,
+}
+
+impl ScreenResolution {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::High => "high",
+            Self::Ultra => "ultra",
+            Self::GameDefault => "gameDefault",
+        }
+    }
+
+    pub fn max_edge(self) -> Option<u32> {
+        match self {
+            Self::Standard => Some(1024),
+            Self::High => Some(2048),
+            Self::Ultra => Some(2048),
+            Self::GameDefault => None,
+        }
+    }
+}
+
+static RESOLUTION: AtomicU8 = AtomicU8::new(1);
+
+/// Sets the target screen resolution tier for subsequent mod builds.
+pub fn set_resolution(res: ScreenResolution) {
+    let code = match res {
+        ScreenResolution::Standard => 0,
+        ScreenResolution::High => 1,
+        ScreenResolution::Ultra => 2,
+        ScreenResolution::GameDefault => 3,
+    };
+    RESOLUTION.store(code, Ordering::Release);
+}
+
+/// Current target screen resolution tier for mod builds.
+pub fn resolution() -> ScreenResolution {
+    match RESOLUTION.load(Ordering::Acquire) {
+        0 => ScreenResolution::Standard,
+        2 => ScreenResolution::Ultra,
+        3 => ScreenResolution::GameDefault,
+        _ => ScreenResolution::High,
+    }
+}
+
+const RESOLUTION_FILE: &str = "westplay/resolution_v3.txt";
+
+/// Whether the built mod at `built` matches the current [`resolution`] setting and v1 auto-screen format.
+pub fn resolution_current(built: &Path) -> bool {
+    let Ok(archive) = Archive::open(built) else { return false };
+    let ours = GameFiles::new(vec![Mount::Archive(archive)]);
+    ours.read(RESOLUTION_FILE).ok().flatten().as_deref() == Some(resolution().id().as_bytes())
+}
+
+/// Scales `(width, height)` proportionally by power-of-two multiplier so its longer side reaches `res.max_edge()`,
+/// guaranteeing that both dimensions stay strict powers of two (required by SCS Prism3D engine D3D11 render targets).
+/// Returns `None` when `res == ScreenResolution::GameDefault`.
+pub fn scaled_drawable_size(width: u32, height: u32, res: ScreenResolution) -> Option<(u32, u32)> {
+    let target = res.max_edge()?;
+    let longest = width.max(height).max(1);
+    if longest >= target {
+        return Some((width, height));
+    }
+    let mult = (target / longest).next_power_of_two().max(1);
+    Some((width * mult, height * mult))
+}
+
+/// Formats `gps_drawable_size: (W, H)` scaled from `(width, height)` under `res`.
+pub fn drawable_size_line(width: u32, height: u32, res: ScreenResolution) -> Option<String> {
+    let (w, h) = scaled_drawable_size(width, height, res)?;
+    Some(format!("gps_drawable_size: ({w}, {h})"))
+}
+
+/// Parses `(width, height)` from a `gps_drawable_size: (1024, 512)` line.
+pub fn parse_drawable_size(line: &str) -> Option<(u32, u32)> {
+    let inside = line.split_once('(')?.1.split_once(')')?.0;
+    let (w, h) = inside.split_once(',')?;
+    Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
+}
+
+/// Upgrades an existing `gps_drawable_size: (w, h)` line in `text` proportionally to [`resolution`].
+pub fn upgrade_drawable_size_in_text(text: &str) -> Option<String> {
+    let res = resolution();
+    res.max_edge()?;
+    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut changed = false;
+    let lines: Vec<String> = text
+        .split(newline)
+        .map(|line| {
+            if line.trim_start().starts_with("gps_drawable_size")
+                && let Some((w, h)) = parse_drawable_size(line)
+                && let Some((nw, nh)) = scaled_drawable_size(w, h, res)
+                && (nw, nh) != (w, h)
+            {
+                changed = true;
+                let indent = &line[..line.len() - line.trim_start().len()];
+                return format!("{indent}gps_drawable_size: ({nw}, {nh})");
+            }
+            line.to_owned()
+        })
+        .collect();
+    changed.then(|| lines.join(newline))
+}
+
 /// The game's map in a GPS script (`text`, patched: WestPlay's image over `[left, right]` of its screen) squeezed into
 /// one half of that (`split`'s), not stretched: each element showing the map (`bare_map.mat`) goes to that half, and
 /// shows as much less of the map across, round the same middle (the truck), so the map keeps its scale.
@@ -203,13 +317,14 @@ pub struct ShownPart {
     pub bottom: f64,
 }
 
-/// The parts shown, by layout. The stock GPS screen (`ui/gps.sii`, a 256 x 256 square) is WestPlay's only in
-/// the Scania S and R's 7" display, which shows the square's full width (0.5%-99.5%) and rows 12.2%-73.5%
-/// from its top: 254 x 157 of it, 1.615:1, as the interior's model maps its screen piece
-/// (`scania_2016/interior/model.pmg`, piece 80, `gps.tobj`: PLAN.md section C). Stretched over the whole
-/// square, the frame lost its bottom and top and was drawn 1.3 times too tall (owner 2026-10-21).
+/// The parts shown, by layout. `scania-7` (`ui/dashboard/westplay_scania_7_gps.sii`) is copied from `ui/gps.sii`
+/// for the Scania S/R and S BEV 7" display, which shows rows 12.2%-73.5% from its top (254 x 157, 1.615:1).
+/// `generic` (`ui/gps.sii`) is left unrestricted so MaxDevMod covers 100% of the stock square on fallback trucks
+/// without leaking the stock GPS underneath.
 const SHOWN_PARTS: &[(&str, ShownPart)] =
-    &[("generic", ShownPart { left: 0.005, right: 0.995, top: 0.122, bottom: 0.735 })];
+    &[("scania-7", ShownPart { left: 0.005, right: 0.995, top: 0.122, bottom: 0.735 })];
+
+const SCANIA_7_GPS: &str = "ui/dashboard/westplay_scania_7_gps.sii";
 
 /// A mod vehicle's own screen WestPlay draws on (owner 2026-10-24, Oyuncuyusbis' coaches: "directly in their
 /// screen"), from the installed mod that brings the vehicle: the layout's script (its one, in
@@ -402,8 +517,12 @@ pub fn layouts_current(built: &Path) -> bool {
             .all(|layout| ours.read(&format!("{SCREEN_DIR}/{}.mat", texture_name(layout))).ok().flatten().is_some())
         // And the flashlight as this version makes it (added in one: owner 2026-11-05).
         && crate::flashlight::files().iter().all(|(path, bytes)| ours.read(path).ok().flatten().as_ref() == Some(bytes))
+        // And the pump's nozzle (owner 2026-11-12).
+        && crate::nozzle::files().iter().all(|(path, bytes)| ours.read(path).ok().flatten().as_ref() == Some(bytes))
         // And WestPlay's own person as its files are now (put there or changed: owner 2026-11-05).
         && crate::own_character::files().iter().all(|(path, bytes)| ours.read(path).ok().flatten().as_ref() == Some(bytes))
+        // And the clerk as the game's workers, with the advice to couple (owner 2026-11-11).
+        && crate::clerk::movers_current(ours.read(crate::clerk::MOVERS_FILE).ok().flatten().as_deref())
 }
 
 /// The screen layouts a mod was made with, in it (`screen_layouts.txt`'s copy).
@@ -420,9 +539,9 @@ fn quoted(text: &str, name: &str) -> Option<String> {
     found.next().is_none().then_some(first)
 }
 
-/// An interior's definition naming `script` (WestPlay's) as its screen, drawn at [`SHARP_SIZE`]: its `gps_path`
-/// line changed, its `gps_drawable_size` line (if it has one) replaced, or one added after `gps_path`.
-fn own_screen_interior(text: &str, script: &str) -> Result<Vec<u8>, String> {
+/// An interior's definition naming `script` (WestPlay's) as its screen, drawn sharp at [`resolution`]: its `gps_path`
+/// line changed, its `gps_drawable_size` line scaled or inserted after `gps_path`.
+pub(crate) fn own_screen_interior(text: &str, script: &str) -> Result<Vec<u8>, String> {
     let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
     let mut lines: Vec<String> = text.split(newline).map(str::to_owned).collect();
     let at = |name: &str, lines: &[String]| -> Vec<usize> {
@@ -431,45 +550,45 @@ fn own_screen_interior(text: &str, script: &str) -> Result<Vec<u8>, String> {
     let [path] = at("gps_path", &lines)[..] else { return Err("not one gps_path line".into()) };
     let indent = lines[path][..lines[path].len() - lines[path].trim_start().len()].to_owned();
     lines[path] = format!("{indent}gps_path: \"/{script}\"");
+    let res = resolution();
     match at("gps_drawable_size", &lines)[..] {
-        [] => lines.insert(path + 1, format!("{indent}{SHARP_SIZE}")),
-        [size] => lines[size] = format!("{indent}{SHARP_SIZE}"),
+        [] => {
+            if let Some(size_line) = drawable_size_line(256, 256, res) {
+                lines.insert(path + 1, format!("{indent}{size_line}"));
+            }
+        }
+        [size] => {
+            let (w, h) = parse_drawable_size(&lines[size]).unwrap_or((256, 256));
+            if let Some(size_line) = drawable_size_line(w, h, res) {
+                lines[size] = format!("{indent}{size_line}");
+            }
+        }
         _ => return Err("more than one gps_drawable_size line".into()),
     }
     Ok(lines.join(newline).into_bytes())
 }
 
-/// The 7" Scania's screen drawn sharp. The interiors naming no GPS screen of their own (all but the Smart
-/// Dash's) get the stock one at the game's default size: a 256 x 256 target (the 7" model's `gps.tobj` piece
-/// was drawn with one: PLAN.md section C), into which WestPlay's 1280 x 720 frame was shrunk five times over,
-/// and of which only 254 x 157 pixels show (owner 2026-10-21: "wtf is this resolution"). At 1024 x 1024
-/// (square still, so the display shows the same part of it), about 1016 x 628 show, near the frame's own size.
-/// Set as the Smart Dash's screens file sets its own (`gps_drawable_size`).
+/// The 7" Scania's screen drawn sharp on its own `scania-7` layout (`SCANIA_7_GPS`).
 const SHARP_INTERIORS: &[&str] =
     &["def/vehicle/truck/scania.s_2016/interior", "def/vehicle/truck/scania.r_2016/interior"];
 /// The interiors with a screen of their own, left as they are.
 const SHARP_SKIP: &str = "smartdash";
 /// Screens files that set the 7" screen's size themselves (`gps_drawable_size: (256, 256)` beside the stock
-/// `gps_path`), included by every interior of their truck: the Scania S BEV's (the S's 7" display, its own
-/// interiors: owner 2026-10-26). Each made [`SHARP_SIZE`] on its own (`sharp_screens_file`), apart from the S
-/// and R's, so neither stops the other.
+/// `gps_path`), included by every interior of their truck: the Scania S BEV's.
 const SHARP_SCREENS: &[&str] = &["def/vehicle/truck/scania.s_2024e/interior/computers.sui"];
-const SHARP_SIZE: &str = "gps_drawable_size: (1024, 1024)";
 /// The stock GPS screen's script.
-const STOCK_GPS: &str = "ui/gps.sii";
+pub(crate) const STOCK_GPS: &str = "ui/gps.sii";
 
-/// The 7" interiors' definitions, each the player's own with [`SHARP_SIZE`] added after its `dashboard_path`.
-/// Whole or not at all: an interior not as read (naming a GPS screen or its size already: a game update)
-/// leaves them all at the game's size.
+/// The 7" interiors' definitions, each pointing to `SCANIA_7_GPS` and scaled to [`resolution`].
 fn sharp_screen_files(game: &GameFiles) -> Result<Vec<(String, Vec<u8>)>, String> {
     let mut files = Vec::new();
+    let res = resolution();
     for dir in SHARP_INTERIORS {
         let names = game.list(dir).map_err(|error| error.to_string())?;
         for name in names.iter().filter(|name| name.ends_with(".sii") && !name.contains(SHARP_SKIP)) {
             let path = format!("{dir}/{name}");
             let bytes = game.read(&path).map_err(|error| error.to_string())?.ok_or(format!("no {path}"))?;
             let text = String::from_utf8(bytes).map_err(|_| format!("{path}: not UTF-8 text"))?;
-            // The stock screen, named or not (the exclusive interiors, brown, wood and V8, name it).
             let other_screen = text.lines().any(|line| {
                 let line = line.trim_start();
                 line.starts_with("gps_path") && !line.contains(&format!("\"/{STOCK_GPS}\""))
@@ -485,7 +604,25 @@ fn sharp_screen_files(game: &GameFiles) -> Result<Vec<(String, Vec<u8>)>, String
                 return Err(format!("{path}: {} dashboard_path lines, not one", found.len()));
             };
             let indent = lines[at][..lines[at].len() - lines[at].trim_start().len()].to_owned();
-            lines.insert(at + 1, format!("{indent}{SHARP_SIZE}"));
+            let gps_lines: Vec<usize> =
+                (0..lines.len()).filter(|&i| lines[i].trim_start().starts_with("gps_path")).collect();
+            match gps_lines[..] {
+                [] => {
+                    let mut insert_at = at + 1;
+                    lines.insert(insert_at, format!("{indent}gps_path: \"/{SCANIA_7_GPS}\""));
+                    insert_at += 1;
+                    if let Some(size_line) = drawable_size_line(256, 256, res) {
+                        lines.insert(insert_at, format!("{indent}{size_line}"));
+                    }
+                }
+                [gps_at] => {
+                    lines[gps_at] = format!("{indent}gps_path: \"/{SCANIA_7_GPS}\"");
+                    if let Some(size_line) = drawable_size_line(256, 256, res) {
+                        lines.insert(at + 1, format!("{indent}{size_line}"));
+                    }
+                }
+                _ => return Err(format!("{path}: multiple gps_path lines")),
+            }
             files.push((path, lines.join(newline).into_bytes()));
         }
     }
@@ -495,9 +632,7 @@ fn sharp_screen_files(game: &GameFiles) -> Result<Vec<(String, Vec<u8>)>, String
     Ok(files)
 }
 
-/// A screens file of [`SHARP_SCREENS`] with its one stock-screen size made [`SHARP_SIZE`]; `None` if the game
-/// hasn't it (its DLC not owned). Not as read (another screen named, or no size or two): an error, the file
-/// left as the game has it.
+/// A screens file of [`SHARP_SCREENS`] pointing to `SCANIA_7_GPS` and scaled to [`resolution`].
 fn sharp_screens_file(game: &GameFiles, path: &str) -> Result<Option<Vec<u8>>, String> {
     let Some(bytes) = game.read(path).map_err(|error| error.to_string())? else { return Ok(None) };
     let text = String::from_utf8(bytes).map_err(|_| format!("{path}: not UTF-8 text"))?;
@@ -517,9 +652,46 @@ fn sharp_screens_file(game: &GameFiles, path: &str) -> Result<Option<Vec<u8>>, S
     if !lines[*screen].contains(&format!("\"/{STOCK_GPS}\"")) {
         return Err(format!("{path}: names a GPS screen of its own"));
     }
-    let indent = lines[*size][..lines[*size].len() - lines[*size].trim_start().len()].to_owned();
-    lines[*size] = format!("{indent}{SHARP_SIZE}");
+    let screen_indent = lines[*screen][..lines[*screen].len() - lines[*screen].trim_start().len()].to_owned();
+    lines[*screen] = format!("{screen_indent}gps_path: \"/{SCANIA_7_GPS}\"");
+    if let Some(size_line) = drawable_size_line(256, 256, resolution()) {
+        let indent = lines[*size][..lines[*size].len() - lines[*size].trim_start().len()].to_owned();
+        lines[*size] = format!("{indent}{size_line}");
+    }
     Ok(Some(lines.join(newline).into_bytes()))
+}
+
+/// Upgrades `gps_drawable_size` across all vanilla truck and car `interior/*.sui` screen include files in `game`
+/// (except `SHARP_SCREENS`, which [`sharp_screens_file`] already handles) so `1024 x 512` and `512 x 256` displays
+/// also render sharply at [`resolution`].
+fn sharp_custom_sui_files(game: &GameFiles) -> Vec<(String, Vec<u8>)> {
+    if resolution().max_edge().is_none() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for root in ["def/vehicle/truck", "def/vehicle/car"] {
+        let Ok(vehicles) = game.dirs(root) else { continue };
+        for vehicle in vehicles {
+            let dir = format!("{root}/{vehicle}/interior");
+            let Ok(names) = game.list(&dir) else { continue };
+            for name in names.iter().filter(|n| n.ends_with(".sui")) {
+                let path = format!("{dir}/{name}");
+                if SHARP_SCREENS.contains(&path.as_str()) {
+                    continue;
+                }
+                let Some(bytes) = game.read(&path).ok().flatten() else { continue };
+                let Ok(text) = String::from_utf8(bytes) else { continue };
+                // Leave stock-GPS `.sui` files to `mod_screens` if they also remap `gps_path`.
+                if text.contains(&format!("\"/{STOCK_GPS}\"")) {
+                    continue;
+                }
+                if let Some(upgraded) = upgrade_drawable_size_in_text(&text) {
+                    out.push((path, upgraded.into_bytes()));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// An own screen's files (`own`, its layout's `script`, its texture `texture`), from `game`: the script's
@@ -544,12 +716,15 @@ fn own_screen_files(
     let mut interiors = 0;
     for dir in own.interiors {
         let screens_path = format!("{dir}/{}", own.screens);
-        let screens = replace_once(
+        let mut screens = replace_once(
             &read(&screens_path)?,
             &format!("\"/{}\"", own.source),
             &format!("\"/{script}\""),
             &screens_path,
         )?;
+        if let Some(upgraded) = upgrade_drawable_size_in_text(&screens) {
+            screens = upgraded;
+        }
         files.push((format!("{dir}/{}", own.own_screens), screens.into_bytes()));
         let names = game.list(dir).map_err(|error| error.to_string())?;
         for name in names.iter().filter(|name| name.contains(own.marker) && name.ends_with(".sii")) {
@@ -620,12 +795,17 @@ pub fn build_with(
 ) -> Result<(Vec<u8>, Built), BuildError> {
     let mut files: Vec<(String, Vec<u8>)> = vec![
         ("manifest.sii".into(), manifest().into_bytes()),
-        ("description.txt".into(), b"WestPlay screens. Requires the WestPlay app and plugin.\n".to_vec()),
+        ("description.txt".into(), b"MaxDevMod screens. Requires the MaxDevMod app and plugin.\n".to_vec()),
     ];
     // The Modo Personagem's flashlight: a light of the game's on a speck of WestPlay's (`flashlight`).
     files.extend(crate::flashlight::files());
+    // The pump's nozzle in the hand, filling the tank on foot (`nozzle`).
+    files.extend(crate::nozzle::files());
     // WestPlay's own person, if its converted files are on this PC (`own_character`).
     files.extend(crate::own_character::files());
+    // The clerk by the trailer, as the game's own workers, and the game's advice to couple told as it's done now
+    // (`clerk`).
+    files.extend(crate::clerk::files(game));
     let mut built = Built::default();
     for (index, layout) in screen_layouts().iter().enumerate() {
         let texture = texture_name(layout);
@@ -689,12 +869,13 @@ pub fn build_with(
             }
             continue;
         }
-        // Each of its scripts the game has (a layout whose scripts it has none of is missing); a window screen's,
-        // WestPlay's own window where the game has none.
+        // Each of its scripts the game has (a layout whose scripts it has none of is missing); `scania-7` copies
+        // the stock `ui/gps.sii`; a window screen uses WestPlay's own window where the game has none.
         let window = WINDOW_SCREENS.iter().find(|screen| screen.layout == layout.id);
         let mut any = false;
         for &script in layout.gps_scripts {
-            let original = game.read(script).map_err(|error| BuildError::Read(error.to_string()))?;
+            let source_path = if layout.id == "scania-7" { STOCK_GPS } else { script };
+            let original = game.read(source_path).map_err(|error| BuildError::Read(error.to_string()))?;
             let text = match (original, window) {
                 (Some(original), _) => String::from_utf8(original)
                     .map_err(|_| BuildError::Script { script, problem: "not UTF-8 text".into() })?,
@@ -716,11 +897,12 @@ pub fn build_with(
             built.missing.push(layout.id);
         }
     }
-    // The mod vehicles' own screens found, each in its slot (its texture made with the slot's), listed.
+    // The mod & auto-measured vehicles' own screens found, each in its slot (its texture made with the slot's), listed.
     for screen in &mod_screens.screens {
         files.push((screen.script.clone(), screen.text.clone()));
         built.patched.push(screen.layout);
     }
+    files.extend(mod_screens.extra_files.iter().cloned());
     files.push((crate::mod_screens::LIST.to_owned(), mod_screens.list().into_bytes()));
     // The cab's mark: its texture, fully transparent, and the dashboard scripts with it, listed.
     let mark = cab_mark::TEXTURE;
@@ -729,9 +911,12 @@ pub fn build_with(
     files.push((format!("{SCREEN_DIR}/{mark}.dds"), transparent_dds(CAB_MARK_WIDTH, CAB_MARK_HEIGHT)));
     files.push((cab_mark::LIST.to_owned(), cab_marks.list().into_bytes()));
     files.push((SPLIT_FILE.to_owned(), split().id().as_bytes().to_vec()));
+    files.push((RESOLUTION_FILE.to_owned(), resolution().id().as_bytes().to_vec()));
     files.push((LAYOUTS_FILE.to_owned(), westplay_shared::SCREEN_LAYOUTS_TEXT.as_bytes().to_vec()));
     files.extend(cab_marks.scripts.iter().cloned());
     built.cab_marks = cab_marks.scripts.len();
+    // Upgrade custom dashboard `.sui` screen targets (e.g. 1024x512 -> 1536x768) across vanilla trucks & cars.
+    files.extend(sharp_custom_sui_files(game));
     // The 7" screen at a size it shows sharp, if its interiors are as read (else the game's size stays, and
     // the build says why).
     match sharp_screen_files(game) {
@@ -747,7 +932,12 @@ pub fn build_with(
             }
         }
     }
-    files.sort_by(|a, b| a.0.cmp(&b.0));
+    // Keep the last entry for any path if both a general pass and a specific override produced it, sorted by path.
+    let mut unique = std::collections::BTreeMap::new();
+    for (path, content) in files {
+        unique.insert(path, content);
+    }
+    let files: Vec<(String, Vec<u8>)> = unique.into_iter().collect();
     Ok((zip(&files), built))
 }
 
@@ -764,8 +954,27 @@ pub fn install(bytes: &[u8], mod_dir: &Path) -> std::io::Result<PathBuf> {
     let path = mod_dir.join(FILE_NAME);
     let partial = mod_dir.join(format!("{FILE_NAME}.partial"));
     std::fs::write(&partial, bytes).map_err(step("writing", &partial))?;
-    std::fs::rename(&partial, &path).map_err(step("moving it over", &path))?;
-    Ok(path)
+    if std::fs::rename(&partial, &path).is_ok() {
+        // The next one, if one was waiting, is this one now.
+        let _ = std::fs::remove_file(next_path(mod_dir));
+        return Ok(path);
+    }
+    // The game has it open (it mounts it while it runs): beside it, for the plugin to put in its place as the game
+    // starts again (owner 2026-11-11: the game opened again before WestPlay could make it, the changes never in it).
+    let next = next_path(mod_dir);
+    std::fs::rename(&partial, &next).map_err(step("moving it beside", &next))?;
+    Ok(next)
+}
+
+/// Where a mod made while the game had the last one open waits (`install`): the plugin puts it in its place.
+pub fn next_path(mod_dir: &Path) -> PathBuf {
+    mod_dir.join(format!("{FILE_NAME}.next"))
+}
+
+/// The mod as the game will mount it next: the one waiting beside it, if one is, else the one in place.
+pub fn upcoming(mod_dir: &Path) -> PathBuf {
+    let next = next_path(mod_dir);
+    if next.is_file() { next } else { mod_dir.join(FILE_NAME) }
 }
 
 /// A layout's screen texture's name: `screen_daf_2021`.
@@ -777,7 +986,7 @@ pub fn texture_name(layout: &ScreenLayout) -> String {
 /// player's own truck screen, so players with and without it join each other's convoys.
 fn manifest() -> String {
     format!(
-        "SiiNunit\n{{\nmod_package : .package_name\n{{\n\tpackage_version: \"{}\"\n\tdisplay_name: \"WestPlay\"\n\tauthor: \"Western\"\n\tcategory[]: \"ui\"\n\tdescription_file: \"description.txt\"\n\tmp_mod_optional: true\n}}\n}}\n",
+        "SiiNunit\n{{\nmod_package : .package_name\n{{\n\tpackage_version: \"{}\"\n\tdisplay_name: \"MaxDevMod\"\n\tauthor: \"MaxDevMod\"\n\tcategory[]: \"ui\"\n\tdescription_file: \"description.txt\"\n\tmp_mod_optional: true\n}}\n}}\n",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -880,8 +1089,14 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) ->
         .iter()
         .find(|block| block.kind == "ui::group" && field(&lines, block, "id") == Some(SCREEN_ON_GROUP))
         .ok_or("no group with id 100")?;
+    // Attach to the root `ui::window` (always drawn, even when `id: 100` is hidden with truck electrics off)
+    // so the plugin can either keep WestPlay on or make it transparent to show the game's `id: 200` off-screen.
+    let parent = blocks
+        .iter()
+        .find(|block| block.kind == "ui::window" && field(&lines, block, "my_children").is_some())
+        .unwrap_or(group);
     let count: usize =
-        field(&lines, group, "my_children").unwrap_or("0").parse().map_err(|_| "my_children isn't a count")?;
+        field(&lines, parent, "my_children").unwrap_or("0").parse().map_err(|_| "my_children isn't a count")?;
     let coord = |name| field(&lines, group, name).ok_or_else(|| format!("the group has no {name}"));
     let (left, right, top, bottom) = (coord("coords_l")?, coord("coords_r")?, coord("coords_t")?, coord("coords_b")?);
     let boxed = |block: &Block| -> Option<[f64; 4]> {
@@ -920,7 +1135,7 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) ->
     let element = "_nameless.westplay.screen";
 
     let mut body = Vec::new();
-    for line in &lines[group.start + 1..group.end] {
+    for line in &lines[parent.start + 1..parent.end] {
         let trimmed = line.trim();
         let line = if trimmed.starts_with("my_children:") {
             format!(" my_children: {}", count + 1)
@@ -953,13 +1168,13 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) ->
         format!(" layer: {SCREEN_LAYER}"),
         " tab: -1".into(),
         " pointer: -1".into(),
-        format!(" my_parent: {}", group.name),
+        format!(" my_parent: {}", parent.name),
         "}".into(),
     ];
     let last_end = blocks.last().map(|block| block.end).ok_or("no blocks")?;
-    let mut patched: Vec<String> = lines[..=group.start].iter().map(|line| (*line).to_owned()).collect();
+    let mut patched: Vec<String> = lines[..=parent.start].iter().map(|line| (*line).to_owned()).collect();
     patched.extend(body);
-    patched.extend(lines[group.end..=last_end].iter().map(|line| (*line).to_owned()));
+    patched.extend(lines[parent.end..=last_end].iter().map(|line| (*line).to_owned()));
     patched.extend(screen);
     patched.extend(lines[last_end + 1..].iter().map(|line| (*line).to_owned()));
     let patched = patched.join(newline);
@@ -1191,6 +1406,18 @@ mod tests {
         // A file where the folder should be: the step and its path in the error.
         let blocked = root.join("blocked");
         std::fs::write(&blocked, b"").unwrap();
+        // The one in place open (the game's): beside it, then put in place by the next install that can.
+        assert_eq!(upcoming(&mod_dir), path);
+        let open = std::fs::File::open(&path).unwrap();
+        let next = install(b"mod 2", &mod_dir);
+        if let Ok(next) = &next
+            && *next != path
+        {
+            assert_eq!(upcoming(&mod_dir), *next);
+            drop(open);
+            assert_eq!(install(b"mod 3", &mod_dir).unwrap(), path);
+            assert!(!next_path(&mod_dir).exists());
+        }
         let error = install(b"mod", &blocked.join("mod")).unwrap_err().to_string();
         assert!(error.starts_with("making the folder ") && error.contains("blocked"), "{error}");
         let _ = std::fs::remove_dir_all(&root);
@@ -1210,20 +1437,21 @@ mod tests {
     #[test]
     fn adds_the_screen_on_top_of_the_screen_on_group() {
         let patched = patch_gps_script(SCRIPT, "screen_generic", None).unwrap();
-        assert!(patched.contains(" my_children: 3\n my_children[0]: _nameless.3\n my_children[1]: _nameless.4\n my_children[2]: _nameless.westplay.screen\n"));
+        assert!(patched.contains(" my_children: 2\n my_children[0]: _nameless.2\n my_children[1]: _nameless.westplay.screen\n"));
         assert!(patched.contains("ui::text : _nameless.westplay.screen {\n text: \"<img src=/material/ui/westplay/screen_generic.mat xscale=stretch yscale=stretch>\"\n coords_l: 0\n coords_r: 1279\n coords_t: 719\n coords_b: 0\n"));
-        assert!(patched.contains(" layer: 100\n tab: -1\n pointer: -1\n my_parent: _nameless.2\n}\n\n}\n"));
-        // The window still has its one child; the rest is as it was.
-        assert!(patched.starts_with("SiiNunit\n{\nui::window : _nameless.1 {\n my_children: 1\n"));
+        assert!(patched.contains(" layer: 100\n tab: -1\n pointer: -1\n my_parent: _nameless.1\n}\n\n}\n"));
+        // The screen-on group still keeps its two original children untouched.
+        assert!(patched.contains(" id: 100\n my_children: 2\n my_children[0]: _nameless.3\n my_children[1]: _nameless.4\n"));
     }
 
     #[test]
     fn puts_the_screen_on_the_part_the_display_shows() {
-        // The 7" Scania's: the stock square's full width, rows 12.2%-73.5% from its top.
+        // The 7" Scania's: the stock square's full width, rows 12.2%-73.5% from its top; `generic` covers all of it.
         let square = SCRIPT.replace("coords_r: 1279", "coords_r: 256").replace("coords_t: 719", "coords_t: 256");
-        let shown = SHOWN_PARTS.iter().find(|(id, _)| *id == "generic").map(|(_, part)| part);
-        let patched = patch_gps_script(&square, "screen_generic", shown).unwrap();
-        let placed = "screen_generic.mat xscale=stretch yscale=stretch>\"\n coords_l: 1\n coords_r: 255\n coords_t: 225\n coords_b: 68\n";
+        assert!(SHOWN_PARTS.iter().find(|(id, _)| *id == "generic").is_none());
+        let shown = SHOWN_PARTS.iter().find(|(id, _)| *id == "scania-7").map(|(_, part)| part);
+        let patched = patch_gps_script(&square, "screen_scania_7", shown).unwrap();
+        let placed = "screen_scania_7.mat xscale=stretch yscale=stretch>\"\n coords_l: 1\n coords_r: 255\n coords_t: 225\n coords_b: 68\n";
         assert!(patched.contains(placed), "{patched}");
         // The group itself keeps its coordinates.
         assert!(patched.contains(" coords_r: 256\n coords_t: 256\n coords_b: 0\n id: 100\n"));
@@ -1266,7 +1494,12 @@ mod tests {
         let stock = "\tdashboard_path: \"/ui/dashboard/scania_s_2024e.sii\"\r\n\r\n\tgps_path: \"/ui/gps.sii\"\r\n\tgps_drawable_size: (256, 256)\r\n";
         std::fs::write(root.join(path), stock).unwrap();
         let sharp = String::from_utf8(sharp_screens_file(&files, path).unwrap().unwrap()).unwrap();
-        assert_eq!(sharp, stock.replace("(256, 256)", "(1024, 1024)"));
+        assert_eq!(
+            sharp,
+            stock
+                .replace("/ui/gps.sii", "/ui/dashboard/westplay_scania_7_gps.sii")
+                .replace("(256, 256)", "(2048, 2048)")
+        );
         // Another screen named: left as the game has it.
         std::fs::write(root.join(path), stock.replace("/ui/gps.sii", "/ui/dashboard/other_gps.sii")).unwrap();
         assert!(sharp_screens_file(&files, path).is_err());
@@ -1299,12 +1532,12 @@ mod tests {
         for truck in ["s", "r"] {
             let dir = format!("def/vehicle/truck/scania.{truck}_2016/interior");
             let interior = text(&format!("{dir}/cab_{truck}_high_black_dark.sii")).unwrap();
-            let sized = "\tdashboard_path: \"/ui/dashboard/scania_2016_std.sii\"\r\n\tgps_drawable_size: (1024, 1024)\r\n\r\n\tglass_panes[]: x\r\n";
+            let sized = "\tdashboard_path: \"/ui/dashboard/scania_2016_std.sii\"\r\n\tgps_path: \"/ui/dashboard/westplay_scania_7_gps.sii\"\r\n\tgps_drawable_size: (2048, 2048)\r\n\r\n\tglass_panes[]: x\r\n";
             assert!(interior.contains(sized), "{interior}");
             let v8 = text(&format!("{dir}/cab_{truck}_high_v8.sii")).unwrap();
-            let sized = "exc.sii\"\r\n\tgps_drawable_size: (1024, 1024)\r\n\tgps_path: \"/ui/gps.sii\"\r\n";
+            let sized = "exc.sii\"\r\n\tgps_drawable_size: (2048, 2048)\r\n\tgps_path: \"/ui/dashboard/westplay_scania_7_gps.sii\"\r\n";
             assert!(v8.contains(sized), "{v8}");
-            // The Smart Dash's own screens are left as they are.
+            // The Smart Dash's own interior `.sii` isn't touched (`computers_2025.sui` is upgraded separately).
             assert_eq!(text(&format!("{dir}/cab_{truck}_high_smartdash_dark.sii")), None);
         }
         drop(archive);
@@ -1334,7 +1567,7 @@ mod tests {
     #[test]
     fn keeps_a_scripts_windows_line_endings() {
         let patched = patch_gps_script(&SCRIPT.replace('\n', "\r\n"), "screen_generic", None).unwrap();
-        assert!(patched.contains(" my_children[2]: _nameless.westplay.screen\r\n") && !patched.contains("\r\r"));
+        assert!(patched.contains(" my_children[1]: _nameless.westplay.screen\r\n") && !patched.contains("\r\r"));
     }
 
     #[test]
@@ -1442,7 +1675,7 @@ mod tests {
             let screens = text(&format!("{dir}/westplay_computers_2025_advanced.sui")).unwrap();
             assert_eq!(
                 screens,
-                "\tgps_path:\"/ui/dashboard/westplay_scania_2025_advanced_gps.sii\"\r\n\tgps_drawable_size: (1024, 512)\r\n"
+                "\tgps_path:\"/ui/dashboard/westplay_scania_2025_advanced_gps.sii\"\r\n\tgps_drawable_size: (2048, 1024)\r\n"
             );
             let advanced = text(&format!("{dir}/cab_{truck}_high_smartdash_advanced_dark.sii")).unwrap();
             assert!(advanced.contains("@include \"westplay_computers_2025_advanced.sui\"\r\n"), "{advanced}");
@@ -1570,7 +1803,7 @@ mod tests {
         let standard = text(&format!("{dir}/standard.sii")).unwrap();
         assert!(
             standard.contains(
-                "\tgps_path: \"/ui/dashboard/westplay_travego_16_gps.sii\"\r\n\tgps_drawable_size: (1024, 1024)\r\n"
+                "\tgps_path: \"/ui/dashboard/westplay_travego_16_gps.sii\"\r\n\tgps_drawable_size: (2048, 2048)\r\n"
             ),
             "{standard}"
         );
@@ -1582,7 +1815,7 @@ mod tests {
         let setra_std = text("def/vehicle/truck/setradt531/interior/standard.sii").unwrap();
         assert_eq!(setra_std.matches("gps_drawable_size").count(), 1);
         assert!(
-            setra_std.contains("gps_drawable_size: (1024, 1024)") && setra_std.contains("westplay_setra_531_gps.sii")
+            setra_std.contains("gps_drawable_size: (2048, 2048)") && setra_std.contains("westplay_setra_531_gps.sii")
         );
         // Nothing of the coaches' own scripts: WestPlay's names its own.
         assert_eq!(text("ui/dashboard/actros_gps.sii"), None);

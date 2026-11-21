@@ -1,14 +1,6 @@
-//! Mod vehicles' own screens, found (owner 2026-11-02: "identify the screen in mods automatically, rather than
-//! one by one"): each installed mod's vehicles' interiors name the GPS script their screen draws (`gps_path`), and
-//! a script WestPlay has no way of its own with (`game_mod::own_scripts`) gets a slot of
-//! `westplay_shared::screen_layouts`' `mod-1`... and WestPlay's image over its whole "screen on" group, as the game's
-//! screens do. The page is laid out at the group's shape, told the app by `westplay_shared::MOD_SCREENS_FILE`; what
-//! the display cuts off of it the player fits from Adjust Screen (the UI's `state/screenFit.ts`).
-//!
-//! A script is the mod's or the game's, and one path may be in several installed mods (two trucks' mods bringing one
-//! script, a mod and its older copy): which the game uses depends on the profile played. So, as with the cab's mark
-//! (`cab_mark`), a script is patched only where every copy installed is the same, and left as it is otherwise; nor
-//! are the mods whose vehicles WestPlay keeps out of (`tablet::set_apart`) looked into.
+//! Mod vehicles' screens, measured and assigned slots automatically:
+//! Custom GPS scripts brought by installed mods (`gps_path` not in `game_mod::own_scripts`) get a `mod-N` slot,
+//! using the vehicle's 3D `gps.tobj` screen mesh (`screen_mesh`) when readable, or the whole "screen on" group.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -19,19 +11,21 @@ use westplay_mapdata::sii;
 use westplay_shared::{MOD_PAGE_HEIGHTS, MOD_SCREENS_FILE, SCREEN_WIDTH, is_mod_slot, screen_layouts};
 
 use crate::game_mod::{self, patch_gps_script, texture_name};
+use crate::screen_mesh::{EDGE_BLEED, MeshCache, ScreenMesh};
 
 /// The slots in use and their pages' heights, a slot a line, kept in the mod: what [`current`] compares.
 pub(crate) const LIST: &str = "material/ui/westplay/mod_screens.txt";
 
-/// The mod screens found, and the scripts left as they are.
+/// The mod screens found, any extra files (none by default to keep mod interiors untouched), and scripts left as they are.
 #[derive(Debug, Default, PartialEq)]
 pub struct ModScreens {
     pub screens: Vec<ModScreen>,
+    pub extra_files: Vec<(String, Vec<u8>)>,
     /// A script left as it is: its path and why.
     pub left: Vec<(String, String)>,
 }
 
-/// One mod screen: its script, the slot it's in, the script with WestPlay's image, and the page's height on it.
+/// One allocated `mod-N` screen: its script path in `westplay.scs`, slot id, patched script bytes, and page height.
 #[derive(Debug, PartialEq)]
 pub struct ModScreen {
     pub script: String,
@@ -49,37 +43,52 @@ impl ModScreens {
     }
 }
 
-/// The mod screens of `mods` (the installed mods' files, archives or folders, active in a profile or not), their
-/// scripts read from them and from `game` (the installed game mounted).
+fn page_height_for_mesh(mesh: &ScreenMesh) -> u32 {
+    ((f64::from(SCREEN_WIDTH) / mesh.aspect()).round() as u32).clamp(MOD_PAGE_HEIGHTS.0, MOD_PAGE_HEIGHTS.1)
+}
+
+/// Discovers custom mod GPS screens and measures them using their 3D screen mesh.
 pub fn find(game: &GameFiles, mods: &[PathBuf]) -> ModScreens {
-    let mods: Vec<(PathBuf, GameFiles)> =
-        mods.iter().filter_map(|path| mounted(path).map(|files| (path.clone(), files))).collect();
+    let active_mods: Vec<(PathBuf, GameFiles)> = mods
+        .iter()
+        .filter_map(|path| {
+            let files = mounted(path)?;
+            (!crate::tablet::set_apart(path, &files)).then_some((path.clone(), files))
+        })
+        .collect();
     let own: BTreeSet<&str> = game_mod::own_scripts().collect();
     let own_vehicles: BTreeSet<&str> = game_mod::mod_screen_trucks().collect();
-    // Each script, and the vehicles naming it.
+    let mut mesh_cache = MeshCache::default();
+
+    // Custom GPS scripts brought by installed mods (`gps_path` not in `own_scripts`).
     let mut named: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (path, files) in &mods {
-        if crate::tablet::set_apart(path, files) {
-            continue;
-        }
+    let mut script_meshes: BTreeMap<String, Vec<ScreenMesh>> = BTreeMap::new();
+    for (_, files) in &active_mods {
         for kind in ["truck", "car"] {
             for vehicle in files.dirs(&format!("def/vehicle/{kind}")).unwrap_or_default() {
                 if own_vehicles.contains(vehicle.as_str()) {
                     continue;
                 }
-                for script in gps_paths(files, &format!("def/vehicle/{kind}/{vehicle}/interior")) {
+                let int_dir = format!("def/vehicle/{kind}/{vehicle}/interior");
+                for info in read_interiors(files, Some(game), &int_dir, &mut mesh_cache) {
+                    let Some(script) = info.gps_script else { continue };
                     if !own.contains(script.as_str()) {
-                        named.entry(script).or_default().insert(vehicle.clone());
+                        named.entry(script.clone()).or_default().insert(vehicle.clone());
+                        if let Some(mesh) = info.mesh {
+                            script_meshes.entry(script).or_default().push(mesh);
+                        }
                     }
                 }
             }
         }
     }
+
     let mut slots = screen_layouts().iter().filter(|layout| is_mod_slot(layout.id));
     let mut found = ModScreens::default();
+
     for (script, vehicles) in named {
         let copies: Vec<Vec<u8>> = std::iter::once(game)
-            .chain(mods.iter().map(|(_, files)| files))
+            .chain(active_mods.iter().map(|(_, files)| files))
             .filter_map(|files| files.read(&script).ok().flatten())
             .collect();
         let Some(first) = copies.first() else {
@@ -94,49 +103,120 @@ pub fn find(game: &GameFiles, mods: &[PathBuf]) -> ModScreens {
             found.left.push((script, "not UTF-8 text".into()));
             continue;
         };
-        // A slot is taken only by a script made: the next one's left free for the next script.
         let Some(slot) = slots.clone().next() else {
             found.left.push((script, "no slot left".into()));
             continue;
         };
-        match patch_gps_script(&text, &texture_name(slot), None) {
+        // If the mod's 3D interior mesh shows a specific band of a square/custom script, crop to that band!
+        let measured = script_meshes.get(&script).and_then(|meshes| consistent_mesh(meshes));
+        let shown_opt = measured.filter(|m| !m.covers_whole_canvas()).map(|m| m.padded_shown(EDGE_BLEED));
+        match patch_gps_script(&text, &texture_name(slot), shown_opt.as_ref()) {
             Ok(patched) => {
                 slots.next();
+                let height = measured.map_or_else(|| page_height(&patched), |m| page_height_for_mesh(&m));
                 found.screens.push(ModScreen {
-                    page_height: page_height(&patched),
-                    script,
+                    page_height: height,
+                    script: script.clone(),
                     layout: slot.id,
                     text: patched.into_bytes(),
-                    vehicles: vehicles.into_iter().collect(),
+                    vehicles: vehicles.iter().cloned().collect(),
                 });
             }
             Err(why) => found.left.push((script, why)),
         }
     }
+
     found
+}
+
+struct InteriorInfo {
+    gps_script: Option<String>,
+    mesh: Option<ScreenMesh>,
+}
+
+fn read_interiors(
+    files: &GameFiles,
+    fallback: Option<&GameFiles>,
+    int_dir: &str,
+    cache: &mut MeshCache,
+) -> Vec<InteriorInfo> {
+    let mut out = Vec::new();
+    for name in files.list(int_dir).unwrap_or_default().iter().filter(|n| n.ends_with(".sii")) {
+        if let Some(info) = inspect_single_interior(files, fallback, int_dir, name, cache) {
+            out.push(info);
+        }
+    }
+    out
+}
+
+fn inspect_single_interior(
+    files: &GameFiles,
+    fallback: Option<&GameFiles>,
+    int_dir: &str,
+    name: &str,
+    cache: &mut MeshCache,
+) -> Option<InteriorInfo> {
+    let path = format!("{int_dir}/{name}");
+    let units = sii::read_units(files, &path).ok().filter(|u| !u.is_empty()).or_else(|| {
+        read_units_with_fallback(files, fallback?, &path)
+    })?;
+    let unit = units.iter().find(|u| u.class == "accessory_interior_data")?;
+    let gps_script = unit
+        .get("gps_path")
+        .map(|s| s.trim().trim_matches('"').trim_start_matches('/').to_owned())
+        .filter(|s| !s.is_empty());
+    let variant = unit.get("variant");
+    let model = unit.get("model");
+    let anim = unit.get("animated_model");
+    let mesh = model
+        .and_then(|m| cache.lookup(files, fallback, m, variant))
+        .or_else(|| anim.and_then(|a| cache.lookup(files, fallback, a, variant)));
+    Some(InteriorInfo { gps_script, mesh })
+}
+
+fn read_units_with_fallback(primary: &GameFiles, fallback: &GameFiles, path: &str) -> Option<Vec<sii::Unit>> {
+    let bytes = primary.read(path).ok().flatten()?;
+    let text = String::from_utf8(bytes).ok()?;
+    let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+    let mut expanded = String::new();
+    for line in text.lines() {
+        if let Some(inc) = line.trim().strip_prefix("@include")
+            && let Some(inc_file) = inc.split('"').nth(1)
+        {
+            let inc_path = if let Some(abs) = inc_file.strip_prefix('/') {
+                abs.to_owned()
+            } else {
+                format!("{dir}/{inc_file}")
+            };
+            if let Some(ib) = primary.read(&inc_path).ok().flatten().or_else(|| fallback.read(&inc_path).ok().flatten())
+                && let Ok(inc_text) = String::from_utf8(ib)
+            {
+                expanded.push_str(&inc_text);
+                expanded.push('\n');
+                continue;
+            }
+        }
+        expanded.push_str(line);
+        expanded.push('\n');
+    }
+    Some(sii::parse(&expanded))
+}
+
+fn consistent_mesh(meshes: &[ScreenMesh]) -> Option<ScreenMesh> {
+    let first = *meshes.first()?;
+    let agree = meshes.iter().all(|m| {
+        (m.shown.top - first.shown.top).abs() < 0.04
+            && (m.shown.bottom - first.shown.bottom).abs() < 0.04
+            && (m.shown.left - first.shown.left).abs() < 0.04
+            && (m.shown.right - first.shown.right).abs() < 0.04
+    });
+    agree.then_some(first)
 }
 
 /// A mod's files, mounted alone; `None` if it can't be opened.
 fn mounted(path: &Path) -> Option<GameFiles> {
     let mount = if path.is_dir() { Mount::Folder(path.to_owned()) } else { Mount::Archive(Archive::open(path).ok()?) };
     Some(GameFiles::new(vec![mount]))
-}
-
-/// The GPS scripts (game paths, no leading slash) the interiors in `dir` of `files` name, their includes followed.
-/// Definitions that aren't text (encrypted) name none.
-fn gps_paths(files: &GameFiles, dir: &str) -> BTreeSet<String> {
-    let mut paths = BTreeSet::new();
-    for name in files.list(dir).unwrap_or_default().iter().filter(|name| name.ends_with(".sii")) {
-        for unit in sii::read_units(files, &format!("{dir}/{name}")).unwrap_or_default() {
-            if let Some(script) = unit.get("gps_path") {
-                let script = script.trim().trim_matches('"').trim_start_matches('/');
-                if !script.is_empty() {
-                    paths.insert(script.to_owned());
-                }
-            }
-        }
-    }
-    paths
 }
 
 /// The height the page is laid out at on a screen of `patched`'s shape (its WestPlay image's, the whole of its
@@ -159,14 +239,15 @@ fn page_height(patched: &str) -> u32 {
     ((SCREEN_WIDTH as f64 * height / width).round() as u32).clamp(MOD_PAGE_HEIGHTS.0, MOD_PAGE_HEIGHTS.1)
 }
 
-/// Whether the mod built at `built` (WestPlay's `.scs`) has `screens` as they are: the same slots, each script the
-/// same.
+/// Whether the mod built at `built` (WestPlay's `.scs`) has `screens` as they are: the same slots, scripts, and
+/// rewritten interior definitions.
 pub fn current(screens: &ModScreens, built: &Path) -> bool {
     let Ok(archive) = Archive::open(built) else { return false };
     let ours = GameFiles::new(vec![Mount::Archive(archive)]);
     let read = |path: &str| ours.read(path).ok().flatten();
     read(LIST).as_deref() == Some(screens.list().as_bytes())
         && screens.screens.iter().all(|screen| read(&screen.script).as_ref() == Some(&screen.text))
+        && screens.extra_files.iter().all(|(path, bytes)| read(path).as_ref() == Some(bytes))
 }
 
 /// Writes `screens`' slots and heights ([`ModScreens::list`]) into WestPlay's own folder `dir`, beside the mod, for

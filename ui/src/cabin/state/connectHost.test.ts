@@ -127,6 +127,27 @@ describe('connectHost', () => {
     disconnect()
   })
 
+  it('stays on through a moment without electrics (the key off and back on), and goes off when they stay off', async () => {
+    vi.useFakeTimers()
+    const webview = fakeWebView()
+    vi.stubGlobal('window', { chrome: { webview: webview.bridge } })
+    const { connectHost, useCabin } = await import('./store')
+    const disconnect = connectHost(() => 0)
+    const electrics = (on: boolean) => ({ electricEnabled: on, paused: false }) as Telemetry
+    webview.send({ type: 'telemetry', data: electrics(true) })
+    const on = useCabin.getState().power
+    webview.send({ type: 'telemetry', data: electrics(false) })
+    vi.advanceTimersByTime(700)
+    webview.send({ type: 'telemetry', data: electrics(true) })
+    vi.advanceTimersByTime(3000)
+    expect(useCabin.getState().power).toBe(on)
+    webview.send({ type: 'telemetry', data: electrics(false) })
+    vi.advanceTimersByTime(3000)
+    expect(useCabin.getState().power.phase).toBe('off')
+    disconnect()
+    vi.useRealTimers()
+  })
+
   it("keeps TruckersMP's players around the player, and forgets them when the game isn't under it", async () => {
     const webview = fakeWebView()
     vi.stubGlobal('window', { chrome: { webview: webview.bridge } })

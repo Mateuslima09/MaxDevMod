@@ -236,7 +236,7 @@ pub const TRUCKS: &[Truck] = &[
     // Any other truck, with WestPlay's tablet on its dashboard (owner 2026-10-24).
     Truck {
         id: "any-truck-tablet",
-        name: "Any truck – with the WestPlay tablet",
+        name: "Any truck – with the MaxDevMod tablet",
         source: Source::Any,
         layout: Some("tablet"),
     },

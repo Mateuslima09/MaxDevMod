@@ -6,7 +6,7 @@ export const words: Words = {
   continue: 'Fortsett',
   welcome: {
     title: 'CarPlay i førerhuset ditt',
-    sub: 'WestPlay bringer CarPlay til skjermen i lastebilen din i American Truck Simulator. Oppsettet tar bare noen minutter.',
+    sub: 'MaxDevMod bringer CarPlay til skjermen i lastebilen din i American Truck Simulator. Oppsettet tar bare noen minutter.',
     start: 'Kom i gang',
   },
   summary: {
@@ -20,9 +20,9 @@ export const words: Words = {
   game: {
     title: 'Spillet ditt',
     titleMissing: 'Hvor er spillet ditt?',
-    found: 'WestPlay fant American Truck Simulator på denne PC-en.',
+    found: 'MaxDevMod fant American Truck Simulator på denne PC-en.',
     foundMany: 'American Truck Simulator er installert flere steder. Velg det du spiller.',
-    missing: 'WestPlay fant ikke American Truck Simulator. Velg mappen du installerte det i – den med base.scs.',
+    missing: 'MaxDevMod fant ikke American Truck Simulator. Velg mappen du installerte det i – den med base.scs.',
     chooseAnother: 'Bruk en annen mappe …',
     chooseFolder: 'Velg mappe …',
     picker: 'Velg mappen for American Truck Simulator',
@@ -31,7 +31,7 @@ export const words: Words = {
     gameGone: 'Spillet ligger ikke lenger i denne mappen.',
     closeToGoOn: {
       title: 'Lukk spillet.',
-      text: 'WestPlay kan bare sette seg opp når American Truck Simulator ikke kjører.',
+      text: 'MaxDevMod kan bare sette seg opp når American Truck Simulator ikke kjører.',
     },
   },
   check: {
@@ -42,16 +42,16 @@ export const words: Words = {
     notYet: 'Støttes ikke ennå',
     title: 'Dette er oppsettet ditt',
     titleNotYet: 'Støttes ikke ennå',
-    cantInstall: 'WestPlay støtter ikke denne versjonen av spillet ennå.',
+    cantInstall: 'MaxDevMod støtter ikke denne versjonen av spillet ennå.',
     version: 'Versjon',
     unknown: 'Ukjent',
     dlcs: 'DLC-er',
     mapDlcs: 'Kart-DLC-er',
     noMapDlcs: 'Ingen',
-    untested: 'WestPlay er laget for versjon 1.61. Din er ikke testet ennå, men den fungerer mest sannsynlig.',
+    untested: 'MaxDevMod er laget for versjon 1.61. Din er ikke testet ennå, men den fungerer mest sannsynlig.',
     otherCarPlay: {
       title: 'Fjern YMN One',
-      text: 'En annen CarPlay-mod, YMN One, er installert i spillet ditt (YamanDriveBridge.dll i mappen plugins). Den tar over GPS-skjermen i lastebilen: WestPlay kan ikke vises der, og skjermen blir rosa når YMN One ikke kjører. Lukk spillet og slett den filen.',
+      text: 'En annen CarPlay-mod, YMN One, er installert i spillet ditt (YamanDriveBridge.dll i mappen plugins). Den tar over GPS-skjermen i lastebilen: MaxDevMod kan ikke vises der, og skjermen blir rosa når YMN One ikke kjører. Lukk spillet og slett den filen.',
     },
     trucks: 'Lastebiler',
     truckNotYet: 'Støttes ikke ennå',
@@ -60,11 +60,11 @@ export const words: Words = {
     notInGame: 'Ikke i spillet ditt',
     scania7: 'Scania S og R – 7"-skjerm',
     scaniaSmartDash: 'Scania S og R – Smart Dash',
-    anyTruckTablet: 'Alle lastebiler – med WestPlay-nettbrettet',
+    anyTruckTablet: 'Alle lastebiler – med MaxDevMod-nettbrettet',
     profiles: 'Profiler',
     profileCount: { one: '{n} profil', other: '{n} profiler' },
     noProfiles: 'Ingen profiler ennå',
-    noProfilesDetail: 'WestPlay gjør kartet klart for den første profilen du oppretter.',
+    noProfilesDetail: 'MaxDevMod gjør kartet klart for den første profilen du oppretter.',
     baseMap: 'Originalkart',
     withMods: '{map} med {mods}',
     unreadable: {
@@ -72,20 +72,20 @@ export const words: Words = {
       other: '{n} kartmodifikasjoner kunne ikke leses, så endringene i dem vises ikke',
     },
     mapNote:
-      'WestPlay gjør et kart klart for hver av profilene dine, ett etter ett, først den du spilte sist. Kartene gjøres klare mens spillet er lukket.',
+      'MaxDevMod gjør et kart klart for hver av profilene dine, ett etter ett, først den du spilte sist. Kartene gjøres klare mens spillet er lukket.',
   },
   install: {
-    title: 'Installer WestPlay',
-    titleDone: 'WestPlay er installert',
-    sub: 'WestPlay legger til et programtillegg i spillet ditt, som selv laster inn WestPlays lastebilskjermer hver gang du spiller: det er ingenting å slå på i Modifikasjonsoversikt. Spillets egne filer blir ikke rørt, og når du avinstallerer WestPlay, fjernes alt.',
+    title: 'Installer MaxDevMod',
+    titleDone: 'MaxDevMod er installert',
+    sub: 'MaxDevMod legger til et programtillegg i spillet ditt, som selv laster inn MaxDevMods lastebilskjermer hver gang du spiller: det er ingenting å slå på i Modifikasjonsoversikt. Spillets egne filer blir ikke rørt, og når du avinstallerer MaxDevMod, fjernes alt.',
     install: 'Installer',
     tryAgain: 'Prøv igjen',
     asAdministrator: 'Installer som administrator',
     plugin: 'Programtillegg',
-    pluginDetail: 'Viser WestPlay på skjermen i lastebilen din',
+    pluginDetail: 'Viser MaxDevMod på skjermen i lastebilen din',
     banners: {
       installing: { title: 'Installerer …' },
-      done: { title: 'WestPlay er installert', text: 'Spillet ditt er klart' },
+      done: { title: 'MaxDevMod er installert', text: 'Spillet ditt er klart' },
       permission: { title: 'Tillatelse trengs', text: 'Windows spør én gang' },
       inUse: { title: 'Lukk spillet', text: 'Det bruker programtillegget' },
       failed: { title: 'Installasjonen ble ikke fullført', text: 'Se detaljene til venstre' },
@@ -93,7 +93,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'Lukk spillet.',
-      text: 'WestPlay kan ikke installeres mens American Truck Simulator kjører.',
+      text: 'MaxDevMod kan ikke installeres mens American Truck Simulator kjører.',
     },
     inUse: {
       title: 'Lukk spillet.',
@@ -108,24 +108,24 @@ export const words: Words = {
       text: 'Uten den kan programtillegget ikke installeres. Prøv igjen, og velg «Ja».',
     },
     pluginFailed: 'Programtillegget kunne ikke installeres.',
-    modFailed: 'WestPlays lastebilskjermer kunne ikke lages fra spillet ditt.',
-    noPlugin: 'Denne kopien av WestPlay mangler programtillegget. Installer WestPlay på nytt.',
+    modFailed: 'MaxDevMods lastebilskjermer kunne ikke lages fra spillet ditt.',
+    noPlugin: 'Denne kopien av MaxDevMod mangler programtillegget. Installer MaxDevMod på nytt.',
     noDocuments: 'Fant ikke Dokumenter-mappen.',
   },
   map: {
     title: 'Kartet ditt gjøres klart …',
     titleReady: 'Kartet ditt er klart',
-    sub: 'WestPlay lager kartet sitt fra ditt eget spill, med kart-DLC-ene og kartmodifikasjonene dine. Det tar et minutt eller to.',
+    sub: 'MaxDevMod lager kartet sitt fra ditt eget spill, med kart-DLC-ene og kartmodifikasjonene dine. Det tar et minutt eller to.',
     banners: {
       building: 'Kartet ditt gjøres klart',
       ready: { title: 'Kartet ditt er klart', text: 'Med DLC-ene og kartmodifikasjonene dine' },
       waiting: { title: 'Lukk spillet', text: 'Kartet lages mens det er lukket' },
-      failed: { title: 'Kartet kunne ikke lages', text: 'WestPlay prøver igjen senere' },
+      failed: { title: 'Kartet kunne ikke lages', text: 'MaxDevMod prøver igjen senere' },
       getting: 'Gjør klart …',
     },
     waiting: {
       title: 'Lukk spillet.',
-      text: 'Å lage kartet krever mye minne, så WestPlay venter til spillet ikke kjører.',
+      text: 'Å lage kartet krever mye minne, så MaxDevMod venter til spillet ikke kjører.',
     },
     stages: {
       reading: { now: 'Leser kartet i spillet ditt', done: 'Kartet er lest fra spillet ditt' },
@@ -148,7 +148,7 @@ export const words: Words = {
   },
   accounts: {
     title: 'Logg på YouTube',
-    sub: 'Valgfritt. Logg på for å se dine egne anbefalinger, abonnementer og historikk på skjermen i lastebilen. Du logger på med Google i et eget vindu, og WestPlay ser aldri kontoen din.',
+    sub: 'Valgfritt. Logg på for å se dine egne anbefalinger, abonnementer og historikk på skjermen i lastebilen. Du logger på med Google i et eget vindu, og MaxDevMod ser aldri kontoen din.',
     signIn: 'Logg på',
     signOut: 'Logg av',
     signedIn: 'Pålogget',
@@ -159,13 +159,13 @@ export const words: Words = {
   },
   spotify: {
     title: 'Logg på Spotify',
-    sub: 'Valgfritt. Logg på for å høre Spotify på skjermen i lastebilen, med dine egne spillelister og ditt bibliotek. Du logger på Spotify i et eget vindu, og WestPlay ser aldri kontoen din.',
+    sub: 'Valgfritt. Logg på for å høre Spotify på skjermen i lastebilen, med dine egne spillelister og ditt bibliotek. Du logger på Spotify i et eget vindu, og MaxDevMod ser aldri kontoen din.',
     finishInWindow: 'Fullfør påloggingen i Spotify-vinduet',
     signingIn: { title: 'Logger på Spotify', text: 'Fortsett i Spotify-vinduet' },
   },
   appleMusic: {
     title: 'Logg på Apple Music',
-    sub: 'Valgfritt. Logg på for å høre Apple Music på skjermen i lastebilen, med dine egne spillelister og ditt bibliotek. Du logger på Apple Music i et eget vindu, og WestPlay ser aldri kontoen din.',
+    sub: 'Valgfritt. Logg på for å høre Apple Music på skjermen i lastebilen, med dine egne spillelister og ditt bibliotek. Du logger på Apple Music i et eget vindu, og MaxDevMod ser aldri kontoen din.',
     finishInWindow: 'Fullfør påloggingen i Apple Music-vinduet',
     signingIn: { title: 'Logger på Apple Music', text: 'Fortsett i Apple Music-vinduet' },
   },
@@ -175,11 +175,11 @@ export const words: Words = {
     steps: [
       {
         title: 'Start spillet',
-        text: 'Når det står «Forespørsel om å bruke avanserte SDK-funksjoner er oppdaget.», velger du «Ok». Det er WestPlay.',
+        text: 'Når det står «Forespørsel om å bruke avanserte SDK-funksjoner er oppdaget.», velger du «Ok». Det er MaxDevMod.',
       },
       {
         title: 'Sett deg i lastebilen',
-        text: 'Slå på strømmen, så dukker WestPlay opp på skjermen. La WestPlay være åpent mens du spiller.',
+        text: 'Slå på strømmen, så dukker MaxDevMod opp på skjermen. La MaxDevMod være åpent mens du spiller.',
       },
     ],
   },

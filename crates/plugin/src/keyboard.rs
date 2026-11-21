@@ -125,6 +125,12 @@ fn hidden(key: u32) -> bool {
 /// into `WM_NULL`, each press queued as what it types; and a bound key's presses while its binding counts.
 fn filter(msg: &mut MSG) {
     let key = msg.wParam.0 as u32;
+    // Each key the game's window is sent down or up, its side's (`input::interaction_key_down`).
+    match msg.message {
+        WM_KEYDOWN | WM_SYSKEYDOWN => crate::input::note_key(keybinds::sided(key, msg.lParam.0), true),
+        WM_KEYUP | WM_SYSKEYUP => crate::input::note_key(keybinds::sided(key, msg.lParam.0), false),
+        _ => {}
+    }
     let typed = typing::typing()
         && matches!(
             msg.message,

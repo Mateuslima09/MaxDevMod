@@ -11,19 +11,22 @@ import type { CommandWords } from './commandWords'
 export function CommandsApp({ words }: { words: CommandWords }) {
   return (
     <>
+      {/* The key, as it turns (owner 2026-11-11): on (the electrics), the start (held until it runs), off. */}
+      <Group title={words.ignition} tone="red">
+        <Hold command="ignitionon" label={words.ignitionOn} glyph={KEY} />
+        <Hold command="ignitionstrt" label={words.ignitionStart} glyph={START} />
+        {/* The engine alone (owner 2026-11-18: E again cuts the key, the electrics and the screen with it): the key
+            off, then back on. */}
+        <Steps steps={ENGINE_ONLY_OFF} label={words.engineOnlyOff} glyph={ENGINE} />
+        <Hold command="ignitionoff" label={words.ignitionOff} glyph={OFF} />
+      </Group>
       <Group title={words.windows} tone="blue">
         <Hold command="lwinopen" label={words.leftDown} glyph={DOWN} />
         <Hold command="lwinclose" label={words.leftUp} glyph={UP} />
         <Hold command="rwinopen" label={words.rightDown} glyph={DOWN} />
         <Hold command="rwinclose" label={words.rightUp} glyph={UP} />
       </Group>
-      <Group title={words.suspension} tone="green">
-        <Hold command="frontsuspup" label={words.frontUp} glyph={UP} />
-        <Hold command="frontsuspdwn" label={words.frontDown} glyph={DOWN} />
-        <Hold command="rearsuspup" label={words.rearUp} glyph={UP} />
-        <Hold command="rearsuspdwn" label={words.rearDown} glyph={DOWN} />
-        <Hold command="suspreset" label={words.reset} glyph={RESET} wide />
-      </Group>
+      {/* The suspension has its own app now (owner 2026-11-19: "take the suspension out of the commands"). */}
       <Group title={words.truck} tone="orange">
         <Hold command="beacon" label={words.beacon} glyph={BEACON} />
         <Hold command="flasher4way" label={words.hazard} glyph={HAZARD} />
@@ -36,6 +39,40 @@ export function CommandsApp({ words }: { words: CommandWords }) {
         <Hold command="attach" label={words.attach} glyph={HOOK} wide />
       </Group>
     </>
+  )
+}
+
+/** The key turned off, then back on: the engine stops, the electrics (and the screen) stay. Each command held this
+ * long (ms), then the next after a moment (the game takes a press a frame or two later). */
+const ENGINE_ONLY_OFF: [string, number][] = [
+  ['ignitionoff', 200],
+  ['ignitionon', 200],
+]
+const STEP_GAP_MS = 500
+
+/** Commands one after another at a tap (`ENGINE_ONLY_OFF`), each pressed and let go. */
+function Steps({ steps, label, glyph }: { steps: [string, number][]; label: string; glyph: ReactNode }) {
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
+  const run = () => {
+    timers.current.forEach(clearTimeout)
+    timers.current = []
+    let at = 0
+    for (const [command, hold] of steps) {
+      timers.current.push(setTimeout(() => postToHost({ type: 'truckCommand', command, down: true }), at))
+      timers.current.push(setTimeout(() => postToHost({ type: 'truckCommand', command, down: false }), at + hold))
+      at += hold + STEP_GAP_MS
+    }
+  }
+  return (
+    <button type="button" className="handset-command" onClick={run} onContextMenu={(event) => event.preventDefault()}>
+      <span className="handset-command-icon">
+        <svg viewBox="0 0 24 24" aria-hidden>
+          {glyph}
+        </svg>
+      </span>
+      <span className="handset-command-label">{label}</span>
+    </button>
   )
 }
 
@@ -97,19 +134,31 @@ export function Hold({
   )
 }
 
-const UP = <path d="M12 5v14M6 11l6-6 6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-const DOWN = (
-  <path d="M12 19V5M6 13l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-)
-const RESET = (
+const KEY = (
   <path
-    d="M5 12a7 7 0 1 0 2-5M5 4v4h4"
+    d="M8 15a4 4 0 1 1 3.5-6H21v3h-2v2h-3v-2h-4.5A4 4 0 0 1 8 15Zm0-2.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"
+    fillRule="evenodd"
+  />
+)
+const START = (
+  <>
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path d="M10 8v8l6-4Z" />
+  </>
+)
+const OFF = (
+  <path
+    d="M12 3v8M7 6.3a7.5 7.5 0 1 0 10 0"
     fill="none"
     stroke="currentColor"
     strokeWidth="2.2"
     strokeLinecap="round"
-    strokeLinejoin="round"
   />
+)
+const ENGINE = <path d="M4 9h3l2-2h5v2h3l2 2h2v6h-2l-2 2H8l-2-2H4Z" />
+const UP = <path d="M12 5v14M6 11l6-6 6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+const DOWN = (
+  <path d="M12 19V5M6 13l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
 )
 const BEACON = <path d="M7 18v-6a5 5 0 0 1 10 0v6ZM5 18h14v3H5ZM12 2v3M4 6l2 2M20 6l-2 2" />
 const HAZARD = <path d="M12 3 22 20H2Zm0 5-5.5 9.5h11Z" fillRule="evenodd" />

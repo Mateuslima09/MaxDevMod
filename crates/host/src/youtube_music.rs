@@ -924,6 +924,11 @@ impl YouTubeMusic {
         Ok(())
     }
 
+    /// Its picture put away while the reversing camera shows (`OffscreenWebView::cover`).
+    pub fn cover(&self, covered: bool) -> windows::core::Result<()> {
+        self.view.cover(covered)
+    }
+
     pub fn command(&self, command: &Command) -> windows::core::Result<()> {
         match command {
             Command::SignIn => {

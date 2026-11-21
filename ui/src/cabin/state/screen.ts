@@ -2,7 +2,7 @@ import type { TruckInfo } from '../../shared/host'
 import type { OemStripId } from './oem'
 
 /**
- * The kinds of in-cabin screen WestPlay is drawn on: the game's GPS layouts the mod patches, in the order of
+ * The kinds of in-cabin screen MaxDevMod is drawn on: the game's GPS layouts the mod patches, in the order of
  * crates/shared/screen_layouts.txt (the order sets each layout's screen texture size; a test checks it). The
  * plugin reports which one the game is drawing.
  */
@@ -28,7 +28,8 @@ export const SCREEN_LAYOUT_IDS = [
   'westernstar-57x',
   'ford-cars',
   'man-tgx-2020',
-  // Mod vehicles' own screens, found by setup (crates/setup mod_screens.rs): which is in each slot is setup's.
+  'scania-7',
+  // Mod & auto-measured vehicles' own screens, found by setup (crates/setup mod_screens.rs): which is in each slot is setup's.
   'mod-1',
   'mod-2',
   'mod-3',
@@ -45,6 +46,38 @@ export const SCREEN_LAYOUT_IDS = [
   'mod-14',
   'mod-15',
   'mod-16',
+  'mod-17',
+  'mod-18',
+  'mod-19',
+  'mod-20',
+  'mod-21',
+  'mod-22',
+  'mod-23',
+  'mod-24',
+  'mod-25',
+  'mod-26',
+  'mod-27',
+  'mod-28',
+  'mod-29',
+  'mod-30',
+  'mod-31',
+  'mod-32',
+  'mod-33',
+  'mod-34',
+  'mod-35',
+  'mod-36',
+  'mod-37',
+  'mod-38',
+  'mod-39',
+  'mod-40',
+  'mod-41',
+  'mod-42',
+  'mod-43',
+  'mod-44',
+  'mod-45',
+  'mod-46',
+  'mod-47',
+  'mod-48',
 ] as const
 
 export type ScreenLayoutId = (typeof SCREEN_LAYOUT_IDS)[number]
@@ -70,7 +103,7 @@ export function frameRowAt(y: number, layout: ScreenLayoutId | null): number {
   return Math.ceil((y * rows) / SCREEN_HEIGHT)
 }
 
-/** How WestPlay fits one truck's screen. */
+/** How MaxDevMod fits one truck's screen. */
 export interface ScreenProfile {
   /** For development notices, e.g. "Scania Smart Dash". */
   name: string
@@ -85,7 +118,7 @@ export interface ScreenProfile {
    * one's for fewer. */
   recents?: number
   /**
-   * Where WestPlay's button sits while the screen is handed to the truck (its centre, in frame pixels), if
+   * Where MaxDevMod's button sits while the screen is handed to the truck (its centre, in frame pixels), if
    * the default spot (the CarPlay area's top-left corner) covers part of the truck's own screen.
    */
   returnButton?: { x: number; y: number }
@@ -102,11 +135,11 @@ export interface ScreenProfile {
   edge?: number
 }
 
-/** The WestPlay button's size, and its margin from the CarPlay area's corner (shell.css --edge). */
+/** The MaxDevMod button's size, and its margin from the CarPlay area's corner (shell.css --edge). */
 export const RETURN_BUTTON_SIZE = 72
 const RETURN_BUTTON_MARGIN = 32
 
-/** The WestPlay button's centre while the screen is handed to the truck. `areaLeft`: where CarPlay starts. */
+/** The MaxDevMod button's centre while the screen is handed to the truck. `areaLeft`: where CarPlay starts. */
 export function returnButtonCentre(profile: ScreenProfile, areaLeft: number): { x: number; y: number } {
   const half = RETURN_BUTTON_SIZE / 2
   return profile.returnButton ?? { x: areaLeft + RETURN_BUTTON_MARGIN + half, y: RETURN_BUTTON_MARGIN + half }
@@ -126,7 +159,7 @@ const SMART_DASH: ScreenProfile = {
   // A larger display than the DAF's: everything a little smaller, so the Home grid gets a fifth column.
   scale: 0.9,
   // The stock map has round buttons in a column right of the strip (menu and search at the top, recentre
-  // below; ui/dashboard/scania_2025_gps.sii, x 137-197 of 1440): WestPlay's goes in the free stretch
+  // below; ui/dashboard/scania_2025_gps.sii, x 137-197 of 1440): MaxDevMod's goes in the free stretch
   // between them, like one of the dash's own.
   returnButton: { x: 148, y: 308 },
   // Its rim (the screen beyond the image) in the colour of the dash's own strip below the screen
@@ -141,8 +174,18 @@ const SMART_DASH: ScreenProfile = {
 const PROFILES: readonly ProfileEntry[] = [
   { layout: 'daf-2021', profile: { name: 'DAF 2021', oemStrip: 'daf-2021', scale: 1 } },
   {
+    layout: 'scania-7',
+    profile: {
+      name: 'Scania 7"',
+      oemStrip: null,
+      scale: 1.7,
+      recents: 2,
+      edge: 16,
+    },
+  },
+  {
     layout: 'generic',
-    models: ['scania.s_2016', 'scania.r_2016'],
+    models: ['scania.s_2016', 'scania.r_2016', 'scania.s_2024e'],
     profile: {
       name: 'Scania 7"',
       oemStrip: null,
@@ -169,10 +212,10 @@ const PROFILES: readonly ProfileEntry[] = [
   },
   // Volvo FH 2021 and 2024: the whole screen, at the DAF's sizing until tuned in the cab (owner 2026-10-21).
   { layout: 'volvo-fh', profile: { name: 'Volvo FH', oemStrip: null, scale: 1 } },
-  // WestPlay's tablet, in any truck: an iPad Air's glass, 23.2 x 16.3 cm, the page laid out at its 1.425:1
+  // MaxDevMod's tablet, in any truck: an iPad Air's glass, 23.2 x 16.3 cm, the page laid out at its 1.425:1
   // (crates/shared page_height), at the DAF's sizing until tuned in the cab. Its glass shows the frame whole: the
   // 7"'s small margin (owner 2026-10-27: "too much margin").
-  { layout: 'tablet', profile: { name: 'WestPlay tablet', oemStrip: null, scale: 1, edge: 14 } },
+  { layout: 'tablet', profile: { name: 'MaxDevMod tablet', oemStrip: null, scale: 1, edge: 14 } },
   // Oyuncuyusbis' coaches (mods, owner 2026-10-24), each on its own screen, about 15-16 x 9-10 cm (the Setra S 516
   // HD/2 on its tablet part, 20.1 x 12.2 cm: owner 2026-10-26), the page laid out at its display's shape (crates/shared
   // page_height): at the DAF's sizing until tuned in the cab.
@@ -192,11 +235,51 @@ const PROFILES: readonly ProfileEntry[] = [
   { layout: 'man-tgx-2020', profile: { name: 'MAN TGX (2020)', oemStrip: null, scale: 0.75 } },
 ]
 
+/** Tuned UI scale & margins for auto-measured ETS2 & ATS stock-GPS screens (`mod-*` slots). */
+const AUTO_STOCK_PROFILES: readonly { models: readonly string[]; profile: ScreenProfile }[] = [
+  {
+    models: ['mercedes.actros2014'],
+    profile: { name: 'Mercedes-Benz Actros (2014)', oemStrip: null, scale: 1.15, edge: 16 },
+  },
+  {
+    models: ['daf.xf_euro6', 'peterbilt.579'],
+    profile: { name: 'Compact Dash GPS', oemStrip: null, scale: 1.35, recents: 2, edge: 14 },
+  },
+  {
+    models: ['iveco.stralis', 'man.tgx', 'scania.r', 'scania.streamline', 'volvo.vnl'],
+    profile: { name: 'Wide Classic GPS', oemStrip: null, scale: 1.15, recents: 2, edge: 14 },
+  },
+  {
+    models: [
+      'daf.xf',
+      'iveco.hiway',
+      'man.tgx_euro6',
+      'renault.t',
+      'volvo.fh16',
+      'volvo.fh16_2012',
+      'intnational.lonestar',
+      'intnational.lt',
+      'kenworth.t680',
+      'kenworth.w900',
+      'mack.anthem',
+      'mack.pinnacle',
+      'peterbilt.389',
+      'westernstar.49x',
+    ],
+    profile: { name: 'Factory Dash GPS', oemStrip: null, scale: 1.15, edge: 16 },
+  },
+]
+
 /** Screens not tuned yet: CarPlay on the whole screen, its layout adapting to the space (responsive). */
 export const FALLBACK_PROFILE: ScreenProfile = { name: 'Default', oemStrip: null, scale: 1 }
 
-/** The profile for the screen the game draws WestPlay on (`layout` is null until it has drawn one). */
+/** The profile for the screen the game draws MaxDevMod on (`layout` is null until it has drawn one). */
 export function screenProfile(layout: ScreenLayoutId | null, truck: TruckInfo | null): ScreenProfile {
+  if (layout?.startsWith('mod-') && truck) {
+    const model = modelId(truck)
+    const tuned = AUTO_STOCK_PROFILES.find((entry) => entry.models.includes(model))
+    if (tuned) return tuned.profile
+  }
   return findProfile(PROFILES, layout, truck)
 }
 

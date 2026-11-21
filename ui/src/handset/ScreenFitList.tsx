@@ -1,6 +1,14 @@
 import { useEffect } from 'react'
 import { postToHost } from '../shared/host'
-import { FIT_LIMITS, isFitted, type ScreenFit, useShownFit } from '../cabin/state/screenFit'
+import {
+  activeFitPreset,
+  FIT_LIMITS,
+  isFitted,
+  SCREEN_FIT_PRESETS,
+  type ScreenFit,
+  type ScreenFitPresetId,
+  useShownFit,
+} from '../cabin/state/screenFit'
 import { List, Row } from './ios'
 
 export interface ScreenFitWords {
@@ -14,17 +22,26 @@ export interface ScreenFitWords {
   proportion: string
   fitSize: string
   restoreFit: string
+  fitPresets?: Record<ScreenFitPresetId, string> & { title: string }
+}
+
+const DEFAULT_PRESET_LABELS: Record<ScreenFitPresetId, string> & { title: string } = {
+  title: 'Formato rápido (Manual)',
+  auto: 'Automático',
+  widescreen: '16:9 Widescreen',
+  sixteenTen: '16:10 Médio',
+  classic: '4:3 Clássico',
+  ultrawide: '21:9 Ultrawide',
+  bandCenter: 'Faixa Central (Mod)',
 }
 
 /**
- * The cab's screen's Adjust Screen on the phone (owner 2026-11-02: "and if it opens so small I can't reach Settings
- * to adjust it?"): each setting a step down or up at a touch, sent to the cab's page through the host
- * (cabin/state/screenFit.ts), which tells back what it is now.
+ * The cab's screen's Adjust Screen on the phone: quick manual format presets for unmapped modded trucks plus fine
+ * edge/proportion/size steppers, sent live to the cab's page through the host.
  */
 export function ScreenFitList({ words }: { words: ScreenFitWords }) {
   const key = useShownFit((state) => state.key)
   const fit = useShownFit((state) => state.fit)
-  // What the cab's is, opened: it tells it as it changes, perhaps before this page was.
   useEffect(() => postToHost({ type: 'screenFit' }), [])
   if (key === null) {
     return (
@@ -33,6 +50,8 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
       </List>
     )
   }
+  const presets = words.fitPresets ?? DEFAULT_PRESET_LABELS
+  const activePreset = activeFitPreset(fit)
   const settings: [keyof ScreenFit, string, { min: number; max: number; step: number }][] = [
     ['top', words.edgeTop, FIT_LIMITS.edge],
     ['bottom', words.edgeBottom, FIT_LIMITS.edge],
@@ -42,30 +61,53 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
     ['size', words.fitSize, FIT_LIMITS.size],
   ]
   return (
-    <List header={words.screenFit} footer={words.screenFitHint}>
-      {settings.map(([name, label, limits]) => (
-        <Row
-          key={name}
-          label={label}
-          value={
-            <Stepper
-              label={label}
-              value={fit[name]}
-              limits={limits}
-              onChange={(value) => postToHost({ type: 'screenFit', change: { [name]: value } })}
-            />
-          }
-        />
-      ))}
-      <button
-        type="button"
-        className="ios-row ios-row-action"
-        disabled={!isFitted(fit)}
-        onClick={() => postToHost({ type: 'screenFit', reset: true })}
-      >
-        {words.restoreFit}
-      </button>
-    </List>
+    <>
+      <List header={presets.title}>
+        {SCREEN_FIT_PRESETS.map((preset) => {
+          const on = activePreset === preset.id
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              className="ios-row"
+              aria-pressed={on}
+              onClick={() =>
+                preset.id === 'auto'
+                  ? postToHost({ type: 'screenFit', reset: true })
+                  : postToHost({ type: 'screenFit', change: preset.fit })
+              }
+            >
+              <span className="ios-row-label">{presets[preset.id]}</span>
+              <span className="ios-row-value">{on ? '✓' : ''}</span>
+            </button>
+          )
+        })}
+      </List>
+      <List header={words.screenFit} footer={words.screenFitHint}>
+        {settings.map(([name, label, limits]) => (
+          <Row
+            key={name}
+            label={label}
+            value={
+              <Stepper
+                label={label}
+                value={fit[name]}
+                limits={limits}
+                onChange={(value) => postToHost({ type: 'screenFit', change: { [name]: value } })}
+              />
+            }
+          />
+        ))}
+        <button
+          type="button"
+          className="ios-row ios-row-action"
+          disabled={!isFitted(fit)}
+          onClick={() => postToHost({ type: 'screenFit', reset: true })}
+        >
+          {words.restoreFit}
+        </button>
+      </List>
+    </>
   )
 }
 

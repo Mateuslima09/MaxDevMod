@@ -6,7 +6,7 @@ export const words: Words = {
   continue: 'Tęsti',
   welcome: {
     title: 'CarPlay tavo kabinoje',
-    sub: 'WestPlay perkelia CarPlay į tavo sunkvežimio ekraną žaidime American Truck Simulator. Sąranka užtrunka vos kelias minutes.',
+    sub: 'MaxDevMod perkelia CarPlay į tavo sunkvežimio ekraną žaidime American Truck Simulator. Sąranka užtrunka vos kelias minutes.',
     start: 'Pradėti',
   },
   summary: {
@@ -20,10 +20,10 @@ export const words: Words = {
   game: {
     title: 'Tavo žaidimas',
     titleMissing: 'Kur tavo žaidimas?',
-    found: 'WestPlay rado American Truck Simulator šiame kompiuteryje.',
+    found: 'MaxDevMod rado American Truck Simulator šiame kompiuteryje.',
     foundMany: 'American Truck Simulator įdiegtas keliose vietose. Pasirink tą, kurį žaidi.',
     missing:
-      'WestPlay nerado American Truck Simulator. Pasirink aplanką, į kurį jį įdiegei, – tą, kuriame yra base.scs.',
+      'MaxDevMod nerado American Truck Simulator. Pasirink aplanką, į kurį jį įdiegei, – tą, kuriame yra base.scs.',
     chooseAnother: 'Naudoti kitą aplanką…',
     chooseFolder: 'Pasirinkti aplanką…',
     picker: 'Pasirink American Truck Simulator aplanką',
@@ -32,7 +32,7 @@ export const words: Words = {
     gameGone: 'Žaidimo šiame aplanke nebėra.',
     closeToGoOn: {
       title: 'Uždaryk žaidimą.',
-      text: 'WestPlay gali būti nustatytas tik tada, kai American Truck Simulator neveikia.',
+      text: 'MaxDevMod gali būti nustatytas tik tada, kai American Truck Simulator neveikia.',
     },
   },
   check: {
@@ -43,16 +43,16 @@ export const words: Words = {
     notYet: 'Kol kas nepalaikoma',
     title: 'Štai tavo rinkinys',
     titleNotYet: 'Kol kas nepalaikoma',
-    cantInstall: 'WestPlay kol kas nepalaiko šios žaidimo versijos.',
+    cantInstall: 'MaxDevMod kol kas nepalaiko šios žaidimo versijos.',
     version: 'Versija',
     unknown: 'Nežinoma',
     dlcs: 'DLC',
     mapDlcs: 'Žemėlapio DLC',
     noMapDlcs: 'Nėra',
-    untested: 'WestPlay sukurtas 1.61 versijai. Tavoji dar neišbandyta, bet greičiausiai veiks.',
+    untested: 'MaxDevMod sukurtas 1.61 versijai. Tavoji dar neišbandyta, bet greičiausiai veiks.',
     otherCarPlay: {
       title: 'Pašalink YMN One',
-      text: 'Tavo žaidime įdiegtas kitas CarPlay modas – YMN One (YamanDriveBridge.dll aplanke plugins). Jis perima tavo sunkvežimio GPS ekraną: WestPlay ten negali būti rodomas, o ekranas tampa rožinis, kai YMN One neveikia. Uždaryk žaidimą ir ištrink tą failą.',
+      text: 'Tavo žaidime įdiegtas kitas CarPlay modas – YMN One (YamanDriveBridge.dll aplanke plugins). Jis perima tavo sunkvežimio GPS ekraną: MaxDevMod ten negali būti rodomas, o ekranas tampa rožinis, kai YMN One neveikia. Uždaryk žaidimą ir ištrink tą failą.',
     },
     trucks: 'Sunkvežimiai',
     truckNotYet: 'Kol kas nepalaikoma',
@@ -61,11 +61,11 @@ export const words: Words = {
     notInGame: 'Nėra tavo žaidime',
     scania7: 'Scania S ir R – 7" ekranas',
     scaniaSmartDash: 'Scania S ir R – Smart Dash',
-    anyTruckTablet: 'Bet kuris sunkvežimis – su WestPlay planšete',
+    anyTruckTablet: 'Bet kuris sunkvežimis – su MaxDevMod planšete',
     profiles: 'Profiliai',
     profileCount: { one: '{n} profilis', few: '{n} profiliai', many: '{n} profilio', other: '{n} profilių' },
     noProfiles: 'Profilių dar nėra',
-    noProfilesDetail: 'WestPlay paruoš žemėlapį pirmam profiliui, kurį sukursi.',
+    noProfilesDetail: 'MaxDevMod paruoš žemėlapį pirmam profiliui, kurį sukursi.',
     baseMap: 'Originalus žemėlapis',
     withMods: '{map} su {mods}',
     unreadable: {
@@ -75,20 +75,20 @@ export const words: Words = {
       other: 'Nepavyko nuskaityti {n} žemėlapio modų, todėl jų pakeitimai nebus matomi',
     },
     mapNote:
-      'WestPlay ruošia žemėlapį kiekvienam tavo profiliui, vieną po kito, pradedant tuo, kuriuo žaidei paskutinį kartą. Žemėlapiai ruošiami, kol žaidimas uždarytas.',
+      'MaxDevMod ruošia žemėlapį kiekvienam tavo profiliui, vieną po kito, pradedant tuo, kuriuo žaidei paskutinį kartą. Žemėlapiai ruošiami, kol žaidimas uždarytas.',
   },
   install: {
-    title: 'Įdiegti WestPlay',
-    titleDone: 'WestPlay įdiegtas',
-    sub: 'WestPlay prideda į žaidimą papildinį, kuris kaskart žaidžiant pats įkelia WestPlay sunkvežimių ekranus: „Modų valdyme“ nieko įjungti nereikia. Paties žaidimo failai lieka nepaliesti, o pašalinus WestPlay viskas pašalinama.',
+    title: 'Įdiegti MaxDevMod',
+    titleDone: 'MaxDevMod įdiegtas',
+    sub: 'MaxDevMod prideda į žaidimą papildinį, kuris kaskart žaidžiant pats įkelia MaxDevMod sunkvežimių ekranus: „Modų valdyme“ nieko įjungti nereikia. Paties žaidimo failai lieka nepaliesti, o pašalinus MaxDevMod viskas pašalinama.',
     install: 'Įdiegti',
     tryAgain: 'Bandyti dar kartą',
     asAdministrator: 'Įdiegti kaip administratoriui',
     plugin: 'Papildinys',
-    pluginDetail: 'Rodo WestPlay tavo sunkvežimio ekrane',
+    pluginDetail: 'Rodo MaxDevMod tavo sunkvežimio ekrane',
     banners: {
       installing: { title: 'Diegiama…' },
-      done: { title: 'WestPlay įdiegtas', text: 'Tavo žaidimas paruoštas' },
+      done: { title: 'MaxDevMod įdiegtas', text: 'Tavo žaidimas paruoštas' },
       permission: { title: 'Reikia leidimo', text: 'Windows paklaus vieną kartą' },
       inUse: { title: 'Uždaryk žaidimą', text: 'Jis naudoja papildinį' },
       failed: { title: 'Diegimas nebaigtas', text: 'Išsami informacija kairėje' },
@@ -96,7 +96,7 @@ export const words: Words = {
     },
     closeToInstall: {
       title: 'Uždaryk žaidimą.',
-      text: 'WestPlay negalima įdiegti, kol veikia American Truck Simulator.',
+      text: 'MaxDevMod negalima įdiegti, kol veikia American Truck Simulator.',
     },
     inUse: {
       title: 'Uždaryk žaidimą.',
@@ -111,24 +111,24 @@ export const words: Words = {
       text: 'Be jo papildinio įdiegti negalima. Bandyk dar kartą ir pasirink „Taip“.',
     },
     pluginFailed: 'Nepavyko įdiegti papildinio.',
-    modFailed: 'Nepavyko paruošti WestPlay sunkvežimio ekranų iš tavo žaidimo.',
-    noPlugin: 'Šioje WestPlay kopijoje trūksta papildinio. Įdiek WestPlay iš naujo.',
+    modFailed: 'Nepavyko paruošti MaxDevMod sunkvežimio ekranų iš tavo žaidimo.',
+    noPlugin: 'Šioje MaxDevMod kopijoje trūksta papildinio. Įdiek MaxDevMod iš naujo.',
     noDocuments: 'Nepavyko rasti aplanko „Dokumentai“.',
   },
   map: {
     title: 'Ruošiamas tavo žemėlapis…',
     titleReady: 'Tavo žemėlapis paruoštas',
-    sub: 'WestPlay kuria savo žemėlapį iš tavo žaidimo, įskaitant tavo žemėlapio DLC ir modus. Tai užtrunka minutę ar dvi.',
+    sub: 'MaxDevMod kuria savo žemėlapį iš tavo žaidimo, įskaitant tavo žemėlapio DLC ir modus. Tai užtrunka minutę ar dvi.',
     banners: {
       building: 'Ruošiamas tavo žemėlapis',
       ready: { title: 'Tavo žemėlapis paruoštas', text: 'Su tavo DLC ir žemėlapio modais' },
       waiting: { title: 'Uždaryk žaidimą', text: 'Žemėlapis ruošiamas, kai jis uždarytas' },
-      failed: { title: 'Nepavyko paruošti žemėlapio', text: 'WestPlay bandys vėliau dar kartą' },
+      failed: { title: 'Nepavyko paruošti žemėlapio', text: 'MaxDevMod bandys vėliau dar kartą' },
       getting: 'Ruošiama…',
     },
     waiting: {
       title: 'Uždaryk žaidimą.',
-      text: 'Žemėlapiui paruošti reikia daug atminties, todėl WestPlay laukia, kol žaidimas nebeveiks.',
+      text: 'Žemėlapiui paruošti reikia daug atminties, todėl MaxDevMod laukia, kol žaidimas nebeveiks.',
     },
     stages: {
       reading: { now: 'Skaitomas tavo žaidimo žemėlapis', done: 'Žemėlapis nuskaitytas' },
@@ -151,7 +151,7 @@ export const words: Words = {
   },
   accounts: {
     title: 'Prisijunk prie „YouTube“',
-    sub: 'Neprivaloma. Prisijunk, kad sunkvežimio ekrane matytum savo rekomendacijas, prenumeratas ir istoriją. Prie „Google“ jungiesi atskirame lange, o WestPlay niekada nemato tavo paskyros.',
+    sub: 'Neprivaloma. Prisijunk, kad sunkvežimio ekrane matytum savo rekomendacijas, prenumeratas ir istoriją. Prie „Google“ jungiesi atskirame lange, o MaxDevMod niekada nemato tavo paskyros.',
     signIn: 'Prisijungti',
     signOut: 'Atsijungti',
     signedIn: 'Prisijungta',
@@ -162,13 +162,13 @@ export const words: Words = {
   },
   spotify: {
     title: 'Prisijunk prie „Spotify“',
-    sub: 'Neprivaloma. Prisijunk, kad sunkvežimio ekrane klausytumeisi „Spotify“ su savo grojaraščiais ir biblioteka. Prie „Spotify“ jungiesi atskirame lange, o WestPlay niekada nemato tavo paskyros.',
+    sub: 'Neprivaloma. Prisijunk, kad sunkvežimio ekrane klausytumeisi „Spotify“ su savo grojaraščiais ir biblioteka. Prie „Spotify“ jungiesi atskirame lange, o MaxDevMod niekada nemato tavo paskyros.',
     finishInWindow: 'Užbaik prisijungimą „Spotify“ lange',
     signingIn: { title: 'Jungiamasi prie „Spotify“', text: 'Tęsk „Spotify“ lange' },
   },
   appleMusic: {
     title: 'Prisijunk prie „Apple Music“',
-    sub: 'Neprivaloma. Prisijunk, kad sunkvežimio ekrane klausytumeisi „Apple Music“ su savo grojaraščiais ir biblioteka. Prie „Apple Music“ jungiesi atskirame lange, o WestPlay niekada nemato tavo paskyros.',
+    sub: 'Neprivaloma. Prisijunk, kad sunkvežimio ekrane klausytumeisi „Apple Music“ su savo grojaraščiais ir biblioteka. Prie „Apple Music“ jungiesi atskirame lange, o MaxDevMod niekada nemato tavo paskyros.',
     finishInWindow: 'Užbaik prisijungimą „Apple Music“ lange',
     signingIn: { title: 'Jungiamasi prie „Apple Music“', text: 'Tęsk „Apple Music“ lange' },
   },
@@ -178,11 +178,11 @@ export const words: Words = {
     steps: [
       {
         title: 'Paleisk žaidimą',
-        text: 'Kai pasirodys „Nustatytas prašymas naudotis papildomomis SDK funkcijomis.“, pasirink „Ok“. Tai WestPlay.',
+        text: 'Kai pasirodys „Nustatytas prašymas naudotis papildomomis SDK funkcijomis.“, pasirink „Ok“. Tai MaxDevMod.',
       },
       {
         title: 'Lipk į savo sunkvežimį',
-        text: 'Įjunk elektrą, ir WestPlay atsiras ekrane. Žaisdamas laikyk WestPlay atidarytą.',
+        text: 'Įjunk elektrą, ir MaxDevMod atsiras ekrane. Žaisdamas laikyk MaxDevMod atidarytą.',
       },
     ],
   },

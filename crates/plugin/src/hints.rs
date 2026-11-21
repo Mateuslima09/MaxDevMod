@@ -1,17 +1,14 @@
-//! The key hints bar over the game (owner 2026-11-05: "a HUD for whoever doesn't know which key to press"): at
-//! the bottom of the screen, the keys for what can be done now. The phone's and the screen's (the cab's
-//! "CarPlay") always; getting out once the truck stands on its parking brake; getting back in by the driver's
-//! door. Hidden in the app's settings, or by the player's key in the game (`toggle`).
+//! The contextual interaction HUD over the game: at the bottom centre of the screen, the real configured keys and
+//! concise descriptions for the actions available right now. Rendered in the MAXDEV MOD Liquid Glass style (`hud`),
+//! with smooth entry/exit transitions and key-press feedback.
 //!
-//! The game thread says what's there (`set`, from `character`); the render thread paints it (GDI, into a picture
-//! of its own: only when it changes) and draws it as the phone is drawn (`handset::Quad`).
+//! Hidden in the app's settings, or toggled in the game by the player's key (`toggle`).
 
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
-use windows::Win32::Foundation::RECT;
-use windows::Win32::Foundation::{COLORREF, SIZE};
 use windows::Win32::Graphics::Direct3D::D3D_SRV_DIMENSION_TEXTURE2D;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_BIND_SHADER_RESOURCE, D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0,
@@ -20,16 +17,11 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
-use windows::Win32::Graphics::Gdi::{
-    ANTIALIASED_QUALITY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CLIP_DEFAULT_PRECIS, CreateCompatibleDC,
-    CreateDIBSection, CreateFontW, CreateSolidBrush, DEFAULT_CHARSET, DIB_RGB_COLORS, DeleteDC, DeleteObject, FW_BOLD,
-    FW_SEMIBOLD, FillRect, GdiFlush, GetTextExtentPoint32W, HDC, HFONT, HGDIOBJ, OUT_DEFAULT_PRECIS, SelectObject,
-    SetBkMode, SetTextColor, TRANSPARENT, TextOutW,
-};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyNameTextW, MAPVK_VK_TO_VSC, MapVirtualKeyW};
-use windows::core::{Interface, w};
+use windows::core::Interface;
 
-use crate::handset::{Quad, view_format};
+use crate::handset::view_format;
+use crate::hud::{Animator, HudQuad};
 use crate::{bridge, log};
 
 /// What a key does now.
@@ -45,48 +37,71 @@ pub enum Action {
     Camera,
     /// Ctrl while walking: crouch.
     Crouch,
-    /// The phone out on its Personagem app (owner 2026-11-07).
+    /// The phone out on its Personagem app.
     Character,
-    /// Hiding this bar (owner 2026-11-07: "the key that hides the bar, on the bar").
+    /// Hiding this HUD bar.
     HideBar,
     /// E by the clerk, on foot: the cargo's papers to sign (`character::freight`).
     SignNote,
     /// E at the fifth wheel, on foot: the trailer coupled by hand.
     Couple,
+    /// E beside the truck's tank, on foot, at a pump: the tank filled by hand (`character::refuel`).
+    Refuel,
+    /// E while the tank fills.
+    StopRefuel,
+    /// E at the truck's side, on foot, a trailer coupled: uncoupled by hand.
+    Uncouple,
+    /// E by the pump's attendant, on foot: the fuel filled by hand paid on the phone (`character::refuel`).
+    PayFuel,
+    /// E at the trailer's side, by its legs: cranked down or up (`character::freight`, owner 2026-11-19).
+    LowerLegs,
+    RaiseLegs,
 }
 
 impl Action {
-    /// In the game's language (two letters), English if not one of these.
-    fn words(self, language: &str) -> &'static str {
+    /// Concise action label in the game's language (two letters), English otherwise.
+    pub(crate) fn words(self, language: &str) -> &'static str {
         let i = self as usize;
-        let words: [&str; 12] = match language {
+        let words: [&str; 18] = match language {
             "pt" => [
-                "Descer do caminhão",
+                "Sair do caminhão",
                 "Entrar no caminhão",
-                "Celular",
+                "Abrir celular",
                 "Usar a tela",
                 "Lanterna",
-                "Apagar a lanterna",
+                "Apagar lanterna",
                 "Câmera",
                 "Agachar",
                 "Personagem",
-                "Esconder a barra",
-                "Assinar a nota fiscal",
-                "Engatar a carreta",
+                "Ocultar HUD",
+                "Assinar nota fiscal",
+                "Engatar carreta",
+                "Segure para abastecer",
+                "Solte para parar",
+                "Desengatar carreta",
+                "Pagar combustível",
+                "Baixar os pés da carreta",
+                "Subir os pés da carreta",
             ],
             "es" => [
                 "Bajar del camión",
                 "Subir al camión",
-                "Móvil",
+                "Abrir móvil",
                 "Usar la pantalla",
                 "Linterna",
                 "Apagar la linterna",
                 "Cámara",
                 "Agacharse",
                 "Personaje",
-                "Ocultar la barra",
+                "Ocultar HUD",
                 "Firmar la factura",
                 "Enganchar el remolque",
+                "Mantén para repostar",
+                "Suelta para parar",
+                "Desenganchar el remolque",
+                "Pagar el combustible",
+                "Bajar las patas del remolque",
+                "Subir las patas del remolque",
             ],
             "de" => [
                 "Aussteigen",
@@ -98,9 +113,15 @@ impl Action {
                 "Kamera",
                 "Ducken",
                 "Figur",
-                "Leiste ausblenden",
+                "HUD ausblenden",
                 "Frachtpapiere unterschreiben",
                 "Auflieger ankuppeln",
+                "Tanken",
+                "Tanken beenden",
+                "Auflieger abkuppeln",
+                "Tanken bezahlen",
+                "Stützen absenken",
+                "Stützen hochkurbeln",
             ],
             "fr" => [
                 "Descendre du camion",
@@ -112,9 +133,15 @@ impl Action {
                 "Caméra",
                 "S’accroupir",
                 "Personnage",
-                "Masquer la barre",
+                "Masquer le HUD",
                 "Signer le bon de transport",
                 "Atteler la remorque",
+                "Faire le plein",
+                "Arrêter le plein",
+                "Dételer la remorque",
+                "Payer le carburant",
+                "Descendre les béquilles",
+                "Remonter les béquilles",
             ],
             "it" => [
                 "Scendi dal camion",
@@ -126,9 +153,15 @@ impl Action {
                 "Visuale",
                 "Accovacciati",
                 "Personaggio",
-                "Nascondi la barra",
+                "Nascondi HUD",
                 "Firma la bolla",
                 "Aggancia il rimorchio",
+                "Fai rifornimento",
+                "Ferma il rifornimento",
+                "Sgancia il rimorchio",
+                "Paga il carburante",
+                "Abbassare i piedini",
+                "Alzare i piedini",
             ],
             "pl" => [
                 "Wysiądź",
@@ -140,9 +173,15 @@ impl Action {
                 "Kamera",
                 "Kucnij",
                 "Postać",
-                "Ukryj pasek",
+                "Ukryj HUD",
                 "Podpisz list przewozowy",
                 "Podepnij naczepę",
+                "Zatankuj",
+                "Przerwij tankowanie",
+                "Odepnij naczepę",
+                "Zapłać za paliwo",
+                "Opuść podpory",
+                "Podnieś podpory",
             ],
             "ru" => [
                 "Выйти",
@@ -154,9 +193,15 @@ impl Action {
                 "Камера",
                 "Присесть",
                 "Персонаж",
-                "Скрыть панель",
+                "Скрыть HUD",
                 "Подписать накладную",
                 "Сцепить прицеп",
+                "Заправить",
+                "Остановить заправку",
+                "Отцепить прицеп",
+                "Оплатить топливо",
+                "Опустить опоры",
+                "Поднять опоры",
             ],
             "tr" => [
                 "Tırdan in",
@@ -168,9 +213,15 @@ impl Action {
                 "Kamera",
                 "Çömel",
                 "Karakter",
-                "Çubuğu gizle",
+                "HUD gizle",
                 "İrsaliyeyi imzala",
                 "Dorseyi bağla",
+                "Yakıt al",
+                "Yakıt almayı durdur",
+                "Dorseyi ayır",
+                "Yakıtı öde",
+                "Ayakları indir",
+                "Ayakları kaldır",
             ],
             "nl" => [
                 "Uitstappen",
@@ -182,9 +233,15 @@ impl Action {
                 "Camera",
                 "Bukken",
                 "Personage",
-                "Balk verbergen",
+                "HUD verbergen",
                 "Vrachtbrief tekenen",
                 "Oplegger aankoppelen",
+                "Tanken",
+                "Stoppen met tanken",
+                "Oplegger afkoppelen",
+                "Brandstof betalen",
+                "Poten laten zakken",
+                "Poten omhoog draaien",
             ],
             "cs" => [
                 "Vystoupit",
@@ -196,9 +253,15 @@ impl Action {
                 "Kamera",
                 "Přikrčit se",
                 "Postava",
-                "Skrýt lištu",
+                "Skrýt HUD",
                 "Podepsat nákladní list",
                 "Připojit návěs",
+                "Natankovat",
+                "Přestat tankovat",
+                "Odpojit návěs",
+                "Zaplatit palivo",
+                "Spustit podpěry",
+                "Zvednout podpěry",
             ],
             _ => [
                 "Get out",
@@ -210,28 +273,48 @@ impl Action {
                 "Camera",
                 "Crouch",
                 "Character",
-                "Hide the bar",
+                "Hide HUD",
                 "Sign the papers",
                 "Couple the trailer",
+                "Hold to refuel",
+                "Let go to stop",
+                "Uncouple the trailer",
+                "Pay for fuel",
+                "Lower the trailer's legs",
+                "Raise the trailer's legs",
             ],
         };
         words[i]
     }
 }
 
-/// A key and what it does now.
+/// A real configured shortcut and what it does now.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hint {
     pub key: String,
     pub action: Action,
+    /// Primary virtual-key code for press feedback (`0` if none).
+    pub vk: u32,
+    /// Optional second virtual-key code when bound as a modifier combination (`Alt + 4`, etc.).
+    pub second_vk: u32,
 }
 
-/// What's there now, and a count of its changes (the picture is painted again on one).
+impl Hint {
+    pub fn single(key: String, vk: u32, action: Action) -> Self {
+        Self { key, action, vk, second_vk: 0 }
+    }
+
+    pub fn combo(key: String, first_vk: u32, second_vk: u32, action: Action) -> Self {
+        Self { key, action, vk: first_vk, second_vk }
+    }
+}
+
+/// Active hints and a monotonic version counter incremented only when the list actually changes.
 static HINTS: Mutex<(u64, Vec<Hint>)> = Mutex::new((0, Vec::new()));
 /// Hidden by the player's key in the game.
 static HIDDEN: AtomicBool = AtomicBool::new(false);
 
-/// What the bar shows now (the game thread, each frame).
+/// Updates what the HUD shows now (called from the game thread once per frame).
 pub fn set(hints: Vec<Hint>) {
     let mut now = HINTS.lock().unwrap_or_else(|e| e.into_inner());
     if now.1 != hints {
@@ -240,7 +323,7 @@ pub fn set(hints: Vec<Hint>) {
     }
 }
 
-/// The player's key: the bar hidden, or shown again.
+/// Toggles the HUD bar hidden or visible.
 pub fn toggle() {
     let hidden = !HIDDEN.fetch_xor(true, Ordering::AcqRel);
     log!("hints: {}", if hidden { "hidden" } else { "shown" });
@@ -258,10 +341,9 @@ pub fn key_name(vk: u32) -> String {
         0xa5 => return "Alt Gr".into(),
         _ => {}
     }
-    // SAFETY: plain queries, the buffer a local of its length.
+    // SAFETY: plain Win32 queries with a stack-allocated buffer of exact length.
     let name = unsafe {
         let scancode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
-        // The keys sharing a scancode with the number pad's (arrows, Insert, Home…) are the extended ones.
         let extended = matches!(vk, 0x21..=0x28 | 0x2d | 0x2e | 0x6f | 0x90);
         let lparam = (scancode << 16 | u32::from(extended) << 24) as i32;
         let mut buffer = [0u16; 32];
@@ -271,40 +353,31 @@ pub fn key_name(vk: u32) -> String {
     if name.is_empty() { format!("0x{vk:02X}") } else { name }
 }
 
-/// The bar's look: its letters' height (of the screen's), its gap to the screen's bottom (of the screen's).
-const LETTERS_OF_SCREEN: f32 = 0.0125;
-const BOTTOM_GAP_OF_SCREEN: f32 = 0.008;
-/// Colours (0xBBGGRR, as GDI has them): the bar, a key's box, a key, an action, the line under it; the bar's
-/// opacity.
-const BAR: u32 = 0x1e1814;
-const KEY_BOX: u32 = 0xeeeeee;
-const KEY: u32 = 0x1a1a1a;
-const ACTION: u32 = 0xf2f2f2;
-const LINE: u32 = 0xff9c40;
-const OPACITY: u32 = 226;
-
-/// The picture drawn, for the hints of a change count and a screen height.
+/// Cached GPU texture for a given hint version and resolution.
 struct Painted {
     for_hints: u64,
-    for_height: u32,
+    for_screen: (u32, u32),
     format: DXGI_FORMAT,
     size: (u32, u32),
+    capsules_uv: Vec<[f32; 4]>,
     view: ID3D11ShaderResourceView,
 }
 
 struct Bar {
     device: ID3D11Device,
-    quad: Quad,
+    quad: HudQuad,
     painted: Option<Painted>,
+    animator: Animator,
+    /// Last non-empty hint list, retained so exit fade-out draws smoothly without blinking.
+    last_hints: (u64, Vec<Hint>),
 }
 
-// SAFETY: used only on the game's render thread (Present), the lock only keeping it there.
+// SAFETY: accessed exclusively on the game's D3D11 render thread inside `Present`.
 unsafe impl Send for Bar {}
 
 static BAR_DRAWING: Mutex<Option<Result<Bar, ()>>> = Mutex::new(None);
 
-/// Whether the bar is to be seen: the app open and not hiding it, the player not either, the game not paused
-/// (its menus).
+/// Whether the HUD wants to be visible right now.
 fn seen() -> bool {
     let Some(bridge) = bridge::get() else { return false };
     bridge::host_alive()
@@ -313,38 +386,47 @@ fn seen() -> bool {
         && !crate::telemetry::paused()
 }
 
-/// At each of the game's presents: the bar over its picture, when there's something on it.
+/// At each of the game's `Present` calls: updates transitions and draws the HUD when visible or fading out.
 ///
 /// # Safety
-/// The game's live swap chain, in its `Present`, on its render thread.
+/// `swapchain` is the game's live DXGI swap chain on its render thread.
 pub unsafe fn on_present(swapchain: *mut c_void) {
-    if !seen() {
-        return;
-    }
-    let (version, hints) = {
+    let want_seen = seen();
+    let (version, current_hints) = {
         let now = HINTS.lock().unwrap_or_else(|e| e.into_inner());
-        if now.1.is_empty() {
-            return;
-        }
         (now.0, now.1.clone())
     };
-    // SAFETY: the game's live swap chain, on its render thread (the caller's contract).
+    let want_visible = want_seen && !current_hints.is_empty();
+
+    // SAFETY: `swapchain` is the game's live swap chain on its render thread (caller's contract).
     unsafe {
         let Some(swapchain) = IDXGISwapChain::from_raw_borrowed(&swapchain) else { return };
-        let Ok(device) = swapchain.GetDevice::<ID3D11Device>() else { return };
         let mut bar = BAR_DRAWING.lock().unwrap_or_else(|e| e.into_inner());
+        if !want_visible && bar.as_ref().is_none_or(|res| res.as_ref().is_ok_and(|b| b.painted.is_none())) {
+            return;
+        }
+        let Ok(device) = swapchain.GetDevice::<ID3D11Device>() else { return };
         if matches!(&*bar, Some(Ok(made)) if made.device != device) {
             *bar = None;
         }
         if bar.is_none() {
+            if !want_visible {
+                return;
+            }
             *bar = Some(
-                Quad::new(&device)
-                    .map(|quad| Bar { device: device.clone(), quad, painted: None })
+                HudQuad::new(&device)
+                    .map(|quad| Bar {
+                        device: device.clone(),
+                        quad,
+                        painted: None,
+                        animator: Animator::new(),
+                        last_hints: (0, Vec::new()),
+                    })
                     .map_err(|e| log!("hints: can't be drawn: {e}")),
             );
         }
         let Some(Ok(made)) = bar.as_mut() else { return };
-        if let Err(e) = made.draw(swapchain, version, &hints) {
+        if let Err(e) = made.draw(swapchain, want_visible, version, current_hints) {
             log!("hints: not drawn: {e}");
             *bar = Some(Err(()));
         }
@@ -353,9 +435,26 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
 
 impl Bar {
     /// # Safety
-    /// As [`on_present`]: the game's swap chain, of this drawing's device.
-    unsafe fn draw(&mut self, swapchain: &IDXGISwapChain, version: u64, hints: &[Hint]) -> windows::core::Result<()> {
-        // SAFETY: the game's live device and back buffer, on its render thread.
+    /// `swapchain` belongs to `self.device` on the game's render thread.
+    unsafe fn draw(
+        &mut self,
+        swapchain: &IDXGISwapChain,
+        want_visible: bool,
+        version: u64,
+        current_hints: Vec<Hint>,
+    ) -> windows::core::Result<()> {
+        if !current_hints.is_empty() {
+            self.last_hints = (version, current_hints);
+        }
+        let now = Instant::now();
+        let Some((opacity, slide, pulse_slot)) = self.animator.step(want_visible, &self.last_hints.1, now) else {
+            return Ok(());
+        };
+        if self.last_hints.1.is_empty() {
+            return Ok(());
+        }
+
+        // SAFETY: live device and backbuffer on the render thread.
         unsafe {
             let back: ID3D11Texture2D = swapchain.GetBuffer(0)?;
             let mut back_desc = D3D11_TEXTURE2D_DESC::default();
@@ -363,198 +462,88 @@ impl Bar {
             drop(back);
             let format = view_format(back_desc.Format);
             let (width, height) = (back_desc.Width, back_desc.Height);
-            let fresh = matches!(&self.painted, Some(p) if p.for_hints == version && p.for_height == height && p.format == format);
+            let target_version = self.last_hints.0;
+            let fresh = matches!(
+                &self.painted,
+                Some(p) if p.for_hints == target_version && p.for_screen == (width, height) && p.format == format
+            );
             if !fresh {
-                let letters = ((height as f32 * LETTERS_OF_SCREEN).round() as i32).clamp(10, 40);
                 let language = crate::character::language();
-                let Some((w, h, pixels)) = paint(hints, letters, language) else { return Ok(()) };
-                let view = self.upload(w, h, &pixels, format)?;
-                self.painted = Some(Painted { for_hints: version, for_height: height, format, size: (w, h), view });
+                let Some(hud) = crate::hud::paint(&self.last_hints.1, width, height, language) else {
+                    return Ok(());
+                };
+                let view = upload(&self.device, hud.width, hud.height, &hud.pixels, format)?;
+                self.painted = Some(Painted {
+                    for_hints: target_version,
+                    for_screen: (width, height),
+                    format,
+                    size: (hud.width, hud.height),
+                    capsules_uv: hud.capsules_uv,
+                    view,
+                });
             }
             let Some(painted) = &self.painted else { return Ok(()) };
-            let rect = place_on(width as f32, height as f32, painted.size);
+            let quad_size = self.animator.smooth_quad_size(painted.size, now);
+            let rect = crate::hud::place_on(width as f32, height as f32, quad_size, slide);
+            let active = pulse_slot.and_then(|(idx, strength)| painted.capsules_uv.get(idx).copied().map(|uv| (uv, strength)));
             let context = self.device.GetImmediateContext()?;
-            self.quad.draw(&self.device, &context, swapchain, &painted.view, rect)
-        }
-    }
-
-    /// The painted pixels (BGRA, premultiplied) as a texture's view, read as `format`.
-    unsafe fn upload(
-        &self,
-        w: u32,
-        h: u32,
-        pixels: &[u8],
-        format: DXGI_FORMAT,
-    ) -> windows::core::Result<ID3D11ShaderResourceView> {
-        // SAFETY: the game's live device; the pixels a local of `w * h * 4` bytes.
-        unsafe {
-            let mut texture = None;
-            self.device.CreateTexture2D(
-                &D3D11_TEXTURE2D_DESC {
-                    Width: w,
-                    Height: h,
-                    MipLevels: 1,
-                    ArraySize: 1,
-                    Format: DXGI_FORMAT_B8G8R8A8_TYPELESS,
-                    SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-                    Usage: D3D11_USAGE_DEFAULT,
-                    BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-                    ..Default::default()
-                },
-                Some(&D3D11_SUBRESOURCE_DATA {
-                    pSysMem: pixels.as_ptr().cast(),
-                    SysMemPitch: w * 4,
-                    SysMemSlicePitch: 0,
-                }),
-                Some(&mut texture),
-            )?;
-            let texture = texture.ok_or_else(windows::core::Error::empty)?;
-            let mut view = None;
-            self.device.CreateShaderResourceView(
-                &texture,
-                Some(&D3D11_SHADER_RESOURCE_VIEW_DESC {
-                    Format: format,
-                    ViewDimension: D3D_SRV_DIMENSION_TEXTURE2D,
-                    Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
-                        Texture2D: D3D11_TEX2D_SRV { MostDetailedMip: 0, MipLevels: 1 },
-                    },
-                }),
-                Some(&mut view),
-            )?;
-            view.ok_or_else(windows::core::Error::empty)
+            self.quad.draw(&self.device, &context, swapchain, &painted.view, rect, opacity, active)
         }
     }
 }
 
-/// Where the bar goes on a `width` x `height` screen (clip space: left, top, right, bottom): in the middle,
-/// above the bottom, at its own size in pixels.
-fn place_on(width: f32, height: f32, (w, h): (u32, u32)) -> [f32; 4] {
-    let left = ((width - w as f32) / 2.0).round();
-    let bottom = (height - height * BOTTOM_GAP_OF_SCREEN).round();
-    let top = bottom - h as f32;
-    let right = left + w as f32;
-    [left / width * 2.0 - 1.0, 1.0 - top / height * 2.0, right / width * 2.0 - 1.0, 1.0 - bottom / height * 2.0]
-}
-
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().collect()
-}
-
-/// The bar painted: its width, height and pixels (BGRA, premultiplied, top row first), letters `letters` pixels
-/// high.
-fn paint(hints: &[Hint], letters: i32, language: &str) -> Option<(u32, u32, Vec<u8>)> {
-    let em = letters as f32;
-    let pad_x = (em * 0.9).round() as i32;
-    let pad_y = (em * 0.35).round() as i32;
-    let key_pad = (em * 0.4).round() as i32;
-    let after_key = (em * 0.45).round() as i32;
-    let between = (em * 1.2).round() as i32;
-    let line = ((em / 9.0).round() as i32).max(1);
-    // SAFETY: GDI on objects made and let go of here; the bitmap's bits read while it's alive, after a flush.
+/// Painted pixels (BGRA, premultiplied) as a texture's view on `device`, read as `format` (used by the HUD and
+/// the pump's meter in `fuel_meter`).
+///
+/// # Safety
+/// The game's live device, on its render thread.
+pub(crate) unsafe fn upload(
+    device: &ID3D11Device,
+    w: u32,
+    h: u32,
+    pixels: &[u8],
+    format: DXGI_FORMAT,
+) -> windows::core::Result<ID3D11ShaderResourceView> {
+    // SAFETY: the game's live device; `pixels` holds `w * h * 4` bytes.
     unsafe {
-        let dc = CreateCompatibleDC(None);
-        if dc.is_invalid() {
-            return None;
-        }
-        let font = |weight: i32| -> HFONT {
-            CreateFontW(
-                -letters,
-                0,
-                0,
-                0,
-                weight,
-                0,
-                0,
-                0,
-                DEFAULT_CHARSET,
-                OUT_DEFAULT_PRECIS,
-                CLIP_DEFAULT_PRECIS,
-                ANTIALIASED_QUALITY,
-                0,
-                w!("Segoe UI"),
-            )
-        };
-        let (action_font, key_font) = (font(FW_SEMIBOLD.0 as i32), font(FW_BOLD.0 as i32));
-        let measure = |dc: HDC, font: HFONT, text: &[u16]| -> (i32, i32) {
-            SelectObject(dc, HGDIOBJ(font.0));
-            let mut size = SIZE::default();
-            let _ = GetTextExtentPoint32W(dc, text, &mut size);
-            (size.cx, size.cy)
-        };
-        // The layout: a key's box, its action, the next.
-        let items: Vec<(Vec<u16>, Vec<u16>)> =
-            hints.iter().map(|hint| (wide(&hint.key), wide(hint.action.words(language)))).collect();
-        let mut tall = 0;
-        let mut x = pad_x;
-        let mut places = Vec::new();
-        for (key, action) in &items {
-            let (kw, kh) = measure(dc, key_font, key);
-            let (aw, ah) = measure(dc, action_font, action);
-            tall = tall.max(kh).max(ah);
-            let box_w = (kw + 2 * key_pad).max(kh + key_pad);
-            places.push((x, box_w, kw, aw));
-            x += box_w + after_key + aw + between;
-        }
-        let width = x - between + pad_x;
-        let box_h = tall + (em * 0.2).round() as i32;
-        let height = box_h + 2 * pad_y + line;
-        if width <= 0 || height <= 0 {
-            let _ = DeleteDC(dc);
-            return None;
-        }
-        let info = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: width,
-                biHeight: -height,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
+        let mut texture = None;
+        device.CreateTexture2D(
+            &D3D11_TEXTURE2D_DESC {
+                Width: w,
+                Height: h,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: DXGI_FORMAT_B8G8R8A8_TYPELESS,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Usage: D3D11_USAGE_DEFAULT,
+                BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
                 ..Default::default()
             },
-            ..Default::default()
-        };
-        let mut bits: *mut c_void = std::ptr::null_mut();
-        let Ok(bitmap) = CreateDIBSection(Some(dc), &info, DIB_RGB_COLORS, &mut bits, None, 0) else {
-            let _ = DeleteDC(dc);
-            return None;
-        };
-        let before = SelectObject(dc, HGDIOBJ(bitmap.0));
-        let fill = |rect: RECT, colour: u32| {
-            let brush = CreateSolidBrush(COLORREF(colour));
-            FillRect(dc, &rect, brush);
-            let _ = DeleteObject(HGDIOBJ(brush.0));
-        };
-        fill(RECT { left: 0, top: 0, right: width, bottom: height }, BAR);
-        fill(RECT { left: 0, top: height - line, right: width, bottom: height }, LINE);
-        SetBkMode(dc, TRANSPARENT);
-        for ((key, action), &(x, box_w, kw, _)) in items.iter().zip(&places) {
-            fill(RECT { left: x, top: pad_y, right: x + box_w, bottom: pad_y + box_h }, KEY_BOX);
-            SelectObject(dc, HGDIOBJ(key_font.0));
-            SetTextColor(dc, COLORREF(KEY));
-            let _ = TextOutW(dc, x + (box_w - kw) / 2, pad_y + (box_h - tall) / 2, key);
-            SelectObject(dc, HGDIOBJ(action_font.0));
-            SetTextColor(dc, COLORREF(ACTION));
-            let _ = TextOutW(dc, x + box_w + after_key, pad_y + (box_h - tall) / 2, action);
-        }
-        let _ = GdiFlush();
-        let mut pixels = std::slice::from_raw_parts(bits as *const u8, (width * height * 4) as usize).to_vec();
-        SelectObject(dc, before);
-        let _ = DeleteObject(HGDIOBJ(bitmap.0));
-        let _ = DeleteObject(HGDIOBJ(action_font.0));
-        let _ = DeleteObject(HGDIOBJ(key_font.0));
-        let _ = DeleteDC(dc);
-        let radius = (em * 0.35).max(2.0);
-        opaque_rounded(&mut pixels, width as u32, height as u32, radius);
-        Some((width as u32, height as u32, pixels))
+            Some(&D3D11_SUBRESOURCE_DATA { pSysMem: pixels.as_ptr().cast(), SysMemPitch: w * 4, SysMemSlicePitch: 0 }),
+            Some(&mut texture),
+        )?;
+        let texture = texture.ok_or_else(windows::core::Error::empty)?;
+        let mut view = None;
+        device.CreateShaderResourceView(
+            &texture,
+            Some(&D3D11_SHADER_RESOURCE_VIEW_DESC {
+                Format: format,
+                ViewDimension: D3D_SRV_DIMENSION_TEXTURE2D,
+                Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+                    Texture2D: D3D11_TEX2D_SRV { MostDetailedMip: 0, MipLevels: 1 },
+                },
+            }),
+            Some(&mut view),
+        )?;
+        view.ok_or_else(windows::core::Error::empty)
     }
 }
 
-/// The bar's pixels given their opacity (GDI leaves none), premultiplied, its corners rounded by `radius`.
-fn opaque_rounded(pixels: &mut [u8], width: u32, height: u32, radius: f32) {
+/// Pixels painted by GDI given an `opacity` (GDI leaves none), premultiplied, their corners rounded by `radius`
+/// (shared with `fuel_meter`).
+pub(crate) fn rounded(pixels: &mut [u8], width: u32, height: u32, radius: f32, opacity: u32) {
     for (i, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (x, y) = ((i as u32 % width) as f32 + 0.5, (i as u32 / width) as f32 + 0.5);
-        // Outside a corner's circle: none of it.
         let cx = if x < radius {
             radius
         } else if x > width as f32 - radius {
@@ -570,7 +559,7 @@ fn opaque_rounded(pixels: &mut [u8], width: u32, height: u32, radius: f32) {
             y
         };
         let outside = ((x - cx).hypot(y - cy) - radius + 0.5).clamp(0.0, 1.0);
-        let alpha = (OPACITY as f32 * (1.0 - outside)).round() as u32;
+        let alpha = (opacity as f32 * (1.0 - outside)).round() as u32;
         for c in &mut pixel[..3] {
             *c = (u32::from(*c) * alpha / 255) as u8;
         }
@@ -584,40 +573,20 @@ mod tests {
 
     #[test]
     fn the_bar_is_painted_wider_for_more_hints() {
-        let one = vec![Hint { key: "F8".into(), action: Action::GetOut }];
-        let two = vec![one[0].clone(), Hint { key: "Alt + 4".into(), action: Action::Phone }];
-        let (w1, h1, p1) = paint(&one, 22, "pt").unwrap();
-        let (w2, h2, _) = paint(&two, 22, "pt").unwrap();
-        assert!(w2 > w1 && h1 == h2 && h1 > 22);
-        assert_eq!(p1.len(), (w1 * h1 * 4) as usize);
-        // Opaque in the middle (premultiplied: no colour brighter than its opacity), clear at a corner.
-        let middle = ((h1 / 2 * w1 + w1 / 2) * 4) as usize;
-        assert_eq!(u32::from(p1[middle + 3]), OPACITY);
-        assert!(p1[..3].iter().all(|&c| c <= p1[3]) && p1[3] < 40);
-    }
-
-    /// A look at the bar (`WESTPLAY_BAR` a file: its width, height and pixels).
-    #[test]
-    #[ignore]
-    fn write_a_bar() {
-        let hints = [
-            Hint { key: "F8".into(), action: Action::GetOut },
-            Hint { key: "Alt".into(), action: Action::Screen },
-            Hint { key: "Alt + 4".into(), action: Action::Phone },
-        ];
-        let (w, h, pixels) = paint(&hints, (1080.0 * LETTERS_OF_SCREEN).round() as i32, "pt").unwrap();
-        let mut out = format!(
-            "{w} {h}
-"
-        )
-        .into_bytes();
-        out.extend(pixels);
-        std::fs::write(std::env::var("WESTPLAY_BAR").unwrap(), out).unwrap();
+        let one = vec![Hint::single("F8".into(), 0x77, Action::GetOut)];
+        let two = vec![one[0].clone(), Hint::combo("Alt + 4".into(), 0xa4, 0x34, Action::Phone)];
+        let p1 = crate::hud::paint_at_size(&one, 22, "pt").unwrap();
+        let p2 = crate::hud::paint_at_size(&two, 22, "pt").unwrap();
+        assert!(p2.width > p1.width && p1.height == p2.height && p1.height > 22);
+        assert_eq!(p1.pixels.len(), (p1.width * p1.height * 4) as usize);
+        // Premultiplied invariant holds everywhere, and outer top-left halo corner is transparent.
+        assert!(p1.pixels.chunks_exact(4).all(|px| px[0] <= px[3] && px[1] <= px[3] && px[2] <= px[3]));
+        assert!(p1.pixels[3] < 20);
     }
 
     #[test]
     fn the_bar_stands_in_the_middle_above_the_bottom() {
-        let [left, top, right, bottom] = place_on(1920.0, 1080.0, (400, 40));
+        let [left, top, right, bottom] = crate::hud::place_on(1920.0, 1080.0, (400.0, 48.0), 0.0);
         assert!((left + right).abs() < 0.01);
         assert!(bottom > -1.0 && top > bottom && top < 0.0);
     }
@@ -627,7 +596,7 @@ mod tests {
         assert_eq!(key_name(0x77), "F8");
         assert_eq!(key_name(0xa4), "Alt");
         assert_eq!(key_name(0x05), "Mouse 4");
-        assert_eq!(Action::GetOut.words("pt"), "Descer do caminhão");
+        assert_eq!(Action::GetOut.words("pt"), "Sair do caminhão");
         assert_eq!(Action::Phone.words("xx"), "Phone");
     }
 }

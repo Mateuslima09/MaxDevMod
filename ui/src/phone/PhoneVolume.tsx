@@ -11,7 +11,7 @@ import { useYouTubeMusic } from '../cabin/apps/youtubeMusic/youtubeMusic'
 import { type NowPlayingSource } from '../cabin/dashboard/nowPlaying'
 import { useNowPlaying } from '../cabin/dashboard/useNowPlaying'
 
-const PLAYERS: Record<NowPlayingSource, MusicPlayer> = {
+export const PLAYERS: Record<NowPlayingSource, MusicPlayer> = {
   video: youtubePlayer,
   spotify: spotifyPlayer,
   appleMusic: appleMusicPlayer,

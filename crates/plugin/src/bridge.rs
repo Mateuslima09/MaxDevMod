@@ -62,7 +62,11 @@ pub fn host_alive() -> bool {
 pub fn screen_on() -> bool {
     host_alive()
         && crate::screens::on_supported_truck()
-        && get().is_some_and(|bridge| bridge.host.screen_enabled.load(Ordering::Acquire) == 1)
+        && get().is_some_and(|bridge| {
+            bridge.host.screen_enabled.load(Ordering::Acquire) == 1
+                && (bridge.plugin.telemetry.read().is_none_or(|t| t.electric_enabled)
+                    || bridge.host.keep_screen_on.load(Ordering::Acquire) == 1)
+        })
 }
 
 /// Whether the phone is out (the app running): used with the mouse, typed into, as the screen is, in any truck
@@ -78,9 +82,10 @@ pub fn paper_out() -> bool {
         && get().is_some_and(|bridge| bridge.host.phone_shown.load(Ordering::Acquire) == westplay_shared::PHONE_PAPER)
 }
 
-/// Whether there's WestPlay to use: on the truck's screen, the phone out, or a paper to sign.
+/// Whether there's WestPlay to use: on the truck's screen, the floating screen in the cab (`float_screen`: any truck),
+/// the phone out, or a paper to sign.
 pub fn usable() -> bool {
-    screen_on() || phone_out() || paper_out()
+    screen_on() || (host_alive() && crate::float_screen::showing()) || phone_out() || paper_out()
 }
 
 /// When the phone was last asked away (`put_phone_away`, milliseconds since the plugin's start), so it isn't

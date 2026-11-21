@@ -19,6 +19,10 @@ export interface Settings {
     /** The split screen: the game's map squeezed into one half of its GPS screens (from the game's next start), or
      * off. */
     split: Split
+    /** Render-target resolution tier (`gps_drawable_size`) for in-cabin GPS screens in `westplay.scs`. */
+    resolution?: ScreenResolution
+    /** Keep the in-cabin screen powered on even when the truck's electrics/engine are off. */
+    keepScreenOn?: boolean
   }
   /** How the screen looks (Customize): a wallpaper's id and one of the player's icon sets, by name; `null`:
    * none chosen (the cab's default wallpaper, WestPlay's own icons). */
@@ -45,20 +49,30 @@ export interface Settings {
     /** The key hints bar over the game (shown at first), and the key showing and hiding it there (0: none). */
     hints: boolean
     hintsKey: KeyCode
+    /** The cargo's papers and coupling by hand, refuelling by hand, and paying that fuel at the pump's attendant:
+     * on at first, the phones' Settings the same switches. */
+    papers: boolean
+    refuel: boolean
+    payAttendant: boolean
   }
 }
 
 /** Mirrors the bridge's `CHARACTER_SENSITIVITY` (the app corrects anything outside it). */
 export const CHARACTER_SENSITIVITY = { min: 10, max: 200, step: 10 }
 /** Mirrors the bridge's `CHARACTER_KEY` (F8) and `CHARACTER_PEOPLE`: WestPlay's own people, in its order, each with
- * their picture (`/characters/<prefix>.png`, rendered in Blender) and whether a man or a woman (their name); the
+ * their picture (`/characters/<prefix>.png`, rendered in Blender) whether a man or a woman, and their name on the card (owner 2026-11-14); the
  * default the first. */
 export const CHARACTER_KEY: KeyCode = 0x77
 export const CHARACTER_PEOPLE = {
   people: [
-    { picture: '/characters/wt.png', kind: 'man' },
-    { picture: '/characters/wm.png', kind: 'woman' },
-    { picture: '/characters/wc.png', kind: 'man' },
+    { picture: '/characters/wt.png', kind: 'man', name: 'tattooed' },
+    { picture: '/characters/wm.png', kind: 'woman', name: 'madam' },
+    { picture: '/characters/wc.png', kind: 'man', name: 'farmer' },
+    { picture: '/characters/wh.png', kind: 'man', name: 'gunslinger' },
+    // Off for now (owner 2026-11-19: his animation to be polished): not offered (the app's PEOPLE_OFF).
+    { picture: '/characters/wg.png', kind: 'man', name: 'stout', off: true },
+    // The woman in the hard hat and safety vest (owner 2026-11-20).
+    { picture: '/characters/wo.png', kind: 'woman', name: 'builder' },
   ] as const,
   default: 0,
 }
@@ -67,6 +81,8 @@ export const CHARACTER_PEOPLE = {
 export type TruckStrip = 'auto' | 'off'
 /** Which half of the truck's screen the game's map is squeezed into, WestPlay in the other (`off`: the game's own). */
 export type Split = 'off' | 'mapLeft' | 'mapRight'
+/** Render resolution tier (`gps_drawable_size`) for in-cabin GPS screens. */
+export type ScreenResolution = 'standard' | 'high' | 'ultra' | 'gameDefault'
 
 /** Mirrors `westplay_host::settings::KeyCode`: a key of the keyboard or a button of the mouse, as Windows
  * numbers it (its virtual-key code: 0x05 the mouse's back button, 0x31 the 1 key, 0xA4 Left Alt). */
@@ -90,7 +106,8 @@ export type InteractionMode = 'hold' | 'toggle'
 
 /** Mirrors `westplay_host::settings::Keybinds`: the playing music's volume up and down, play/pause, and the phone in
  * the game out or away. */
-export type KeybindId = 'volumeUp' | 'volumeDown' | 'playPause' | 'phone' | 'character' | 'hints'| 'volumeDown' | 'playPause' | 'phone'
+export type KeybindId =
+  'volumeUp' | 'volumeDown' | 'playPause' | 'phone' | 'character' | 'hints' | 'volumeDown' | 'playPause' | 'phone'
 
 /** In a row as their default keys are (1, 2, 3), as on a stereo: volume down, play/pause, volume up; the phone, 4;
  * the phone's Personagem, 5; the key hints bar over the game, 6. */

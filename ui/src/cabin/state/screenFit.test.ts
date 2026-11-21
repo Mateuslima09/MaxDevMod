@@ -33,11 +33,12 @@ describe('screen fit', () => {
   })
 
   it('keeps each setting within its limits', () => {
-    expect(readFit({ top: 0.9, stretch: 3, size: 0.1, left: 'x' })).toEqual({
+    expect(readFit({ top: 0.9, bottom: -0.5, stretch: 3, size: 0.1, left: 'x' })).toEqual({
       ...NO_FIT,
-      top: 0.35,
-      stretch: 1.35,
-      size: 0.6,
+      top: 0.45,
+      bottom: -0.25,
+      stretch: 2,
+      size: 0.5,
     })
     expect(readFit(null)).toEqual(NO_FIT)
   })

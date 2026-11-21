@@ -650,14 +650,53 @@ fn interaction_key_held() -> bool {
     if toggle_mode() { TOGGLED.load(Ordering::Acquire) } else { interaction_key_down() }
 }
 
-/// Whether the interaction key is down.
+/// Whether the interaction key is down: as Windows says, unless the game's window, by the keys it was sent, says it's
+/// up (owner 2026-11-11: Windows took the left Alt as held long after it was let go, its release lost, and the mouse
+/// stayed the screen's: the camera wouldn't turn, in the cab or on foot).
 pub fn interaction_key_down() -> bool {
     let key = match bridge::get().map(|bridge| bridge.host.interaction_key.load(Ordering::Acquire)) {
         Some(key) if key != 0 => key,
         _ => DEFAULT_INTERACTION_KEY,
     };
     // SAFETY: a plain query, no pointers.
-    unsafe { GetAsyncKeyState(key as i32) as u16 & 0x8000 != 0 }
+    let windows = unsafe { GetAsyncKeyState(key as i32) as u16 & 0x8000 != 0 };
+    windows && keyboard_down(key) != Some(false)
+}
+
+/// The keys the game's window was last sent down (and not up), by virtual key (each side's, `keybinds::sided`), and
+/// whether it was sent any since it last had the keyboard: forgotten whenever it loses it (a key let go meanwhile
+/// is sent to another window).
+static GAME_KEYS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+static GAME_KEYS_KNOWN: AtomicBool = AtomicBool::new(true);
+
+/// A key the game's window was sent down or up (`keyboard`'s message hooks).
+pub fn note_key(vk: u32, down: bool) {
+    let Some(word) = GAME_KEYS.get((vk / 64) as usize) else { return };
+    let bit = 1u64 << (vk % 64);
+    if down {
+        word.fetch_or(bit, Ordering::AcqRel);
+    } else {
+        word.fetch_and(!bit, Ordering::AcqRel);
+    }
+    GAME_KEYS_KNOWN.store(true, Ordering::Release);
+}
+
+/// The game's window lost the keyboard: its keys as sent are known no more.
+fn forget_keys() {
+    // Back with the keyboard, every key as up until it’s sent down again (a stuck one stays up).
+    for word in &GAME_KEYS {
+        word.store(0, Ordering::Release);
+    }
+}
+
+/// Whether `vk` (a virtual key) is down as the game's window was sent it; `None`: not known (no key sent since it
+/// had the keyboard, or not a key).
+fn keyboard_down(vk: u32) -> Option<bool> {
+    if !GAME_KEYS_KNOWN.load(Ordering::Acquire) {
+        return None;
+    }
+    let word = GAME_KEYS.get((vk / 64) as usize)?.load(Ordering::Acquire);
+    Some(word & (1 << (vk % 64)) != 0)
 }
 
 /// Whether the interaction key is pressed once to use the screen and again to stop, rather than held.
@@ -673,6 +712,9 @@ static KEY_WAS_DOWN: AtomicBool = AtomicBool::new(false);
 /// Once a frame: in toggle mode, each press of the interaction key turns using the screen on or off. It's
 /// off whenever WestPlay isn't on the screen, and as the game pauses.
 pub fn on_frame() {
+    if !crate::d3d::game_shown() {
+        forget_keys();
+    }
     let pressed = newly_down(&KEY_WAS_DOWN, interaction_key_down());
     let off = if !toggle_mode() {
         Some("held mode")
@@ -759,6 +801,18 @@ unsafe fn device_kind(device: *mut c_void) -> DeviceKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The game's window sent a key up: up, whatever Windows says; it lost the keyboard: not known.
+    #[test]
+    fn the_keys_the_game_was_sent_say_whether_the_interaction_key_is_down() {
+        note_key(0xa4, true);
+        assert_eq!(keyboard_down(0xa4), Some(true));
+        note_key(0xa4, false);
+        assert_eq!(keyboard_down(0xa4), Some(false));
+        note_key(0xa4, true);
+        forget_keys();
+        assert_eq!(keyboard_down(0xa4), Some(false));
+    }
 
     #[test]
     fn every_press_counts_once_however_many_frames_it_lasts() {

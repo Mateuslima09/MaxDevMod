@@ -43,7 +43,8 @@ const HEIGHT_OF_SCREEN: f32 = 0.62;
 const RIGHT_GAP_OF_SCREEN: f32 = 0.04;
 /// How much of the phone shows while it peeks, of its height (its status bar and a notification under it); and
 /// how long it takes to slide there, or away.
-const PEEK_OF_PHONE: f32 = 0.2;
+/// (A fifth showed half the banner, the gift's words cut: owner 2026-11-12, "the phone is too low".)
+const PEEK_OF_PHONE: f32 = 0.34;
 /// A paper to sign in the phone's frame (`PHONE_PAPER`: the cargo's nota fiscal): its height on the game's screen,
 /// of the screen's, in the middle of it.
 const PAPER_OF_SCREEN: f32 = 0.9;

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { AlertGroup } from '../shared/host'
 
 /**
  * The phone's own settings (its Settings app), kept on the device showing it (the game's WebView2, or the
@@ -22,6 +23,12 @@ export interface Prefs {
   /** The cargo's papers and coupling the trailer by hand (owner 2026-11-11: the nota fiscal signed with the clerk
    * before coupling, the recipient's signature before delivering): on unless the player turns it off. */
   freightPapers: boolean
+  /** Refuelling by hand (owner 2026-11-11: at a pump, the tank is filled on foot at the truck's side): on unless
+   * the player turns it off. */
+  manualRefuel: boolean
+  /** The game's notifications' groups turned off (owner 2026-11-20: payments, fines, the truck, the job): all on
+   * unless the player turns one off. */
+  alertsOff: AlertGroup[]
 }
 
 const KEY = 'westplay-handset-prefs'
@@ -33,6 +40,8 @@ const DEFAULTS: Prefs = {
   tiktokNotifications: true,
   tiktokSignedIn: false,
   freightPapers: true,
+  manualRefuel: true,
+  alertsOff: [],
 }
 
 export type Currency = 'USD' | 'BRL' | 'EUR'

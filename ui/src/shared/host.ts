@@ -1,5 +1,8 @@
 import type { CustomWallpaper, IconSet } from './customize'
 
+/** Live screen sharpness tier applied in D3D11 on the next frame (without restarting the game). */
+export type ScreenResolution = 'gameDefault' | 'standard' | 'high' | 'ultra'
+
 /**
  * Messages from the WestPlay host to the cabin page (WebView2 web messages). Mirrors the Rust side:
  * `westplay_shared::Telemetry`, `westplay_shared::TruckInfo`, the screen layout the game draws WestPlay on
@@ -43,6 +46,52 @@ export interface Telemetry {
   leftBlinker: boolean
   rightBlinker: boolean
   paused: boolean
+  /** The steering as the truck has it (-1 to 1, left positive). */
+  steering: number
+  /** The reversing camera's (cabin/reversing): the steered wheels' turn (radians, left positive), and the truck
+   * laid out in its own space (metres, z back): its steered axle, the axle it turns about, its fifth wheel, its
+   * rear end and its half width (0 until known). */
+  wheelSteering: number
+  frontAxleZ: number
+  rearAxleZ: number
+  hookZ: number
+  rearZ: number
+  halfWidth: number
+  /** The first trailer, coupled: where it is and how it's turned (turns), and laid out in its own space (its
+   * kingpin, its axle, its rear end, its half width). */
+  trailerConnected: boolean
+  trailerX: number
+  trailerY: number
+  trailerZ: number
+  trailerHeading: number
+  trailerHookZ: number
+  trailerAxleZ: number
+  trailerRearZ: number
+  trailerHalfWidth: number
+  /** The parking sensors through the game's own physics (crates/plugin ray.rs): each rear sensor's nearest thing
+   * (metres, in cabin/reversing/sensor.ts SENSORS' order; -1: nothing in range, or not known), and how the rays
+   * are (`rays`: 0 not yet, 1 working, 2 off after the game closed while they were tested, 3 not available). */
+  raySensors: number[]
+  rays: number
+  /** Whether the game drew its rear-view mirrors lately (crates/plugin mirror.rs): the reversing camera shows them. */
+  mirror: boolean
+  /** Whether the plugin's reversing camera is settled and can be shown (the page covers the screen till then). */
+  cameraReady?: boolean
+  /** The reversing camera as the player moved it for this truck or trailer (metres: further back, higher). */
+  cameraBack?: number
+  cameraUp?: number
+  /** And turned (degrees: further up, to the right, how much wider: rear_camera.rs `nudge`). */
+  cameraTilt?: number
+  cameraTurn?: number
+  cameraWide?: number
+  /** MaxDevMod's floating screen (float_screen.rs): switched on, drawn lately (the camera in the cab), and its move in
+   * this truck (metres right, up, forward; degrees turned right, tilted up, rolled right). Missing from an older plugin. */
+  floatOn?: boolean
+  floatSeen?: boolean
+  floatPose?: [number, number, number, number, number, number]
+  /** How far the springs are pressed in (metres): the truck's front axle, its rear axles, the trailer's; -1 not known
+   * (the phone's Suspensão app). Missing from an older plugin. */
+  suspension?: [number, number, number]
 }
 
 /** The time the cab's clock shows (minutes since day 0, 00:00): the game's, or in a Convoy session the
@@ -73,9 +122,20 @@ export type GameCurrency = 'USD' | 'EUR'
 export interface WalletEntry {
   at: number
   gameTime: number | null
-  kind: 'delivered' | 'cancelled' | 'fined' | 'toll' | 'ferry' | 'train' | 'other'
+  kind: 'delivered' | 'cancelled' | 'fined' | 'toll' | 'ferry' | 'train' | 'fuel' | 'other'
   amount: number
   detail: string
+}
+
+/** The fuel filled by hand at a pump (`westplay_shared::FuelBill`): how much (litres, or gallons), its price and
+ * total in the money the pump showed (`sign`). */
+export interface FuelBill {
+  id: number
+  gallons: boolean
+  amount: number
+  price: number
+  total: number
+  sign: string
 }
 
 /** The player's job (`westplay_shared::JobInfo`): names localized by the game. */
@@ -134,6 +194,10 @@ export type HostMessage =
       truckStrip: string
       /** The split screen (`westplay_host::settings::ScreenSettings::split`): `off`, `mapLeft` or `mapRight`. */
       split?: string
+      /** Live screen sharpness tier (`gameDefault`, `standard`, `high`, `ultra`). */
+      screenResolution?: ScreenResolution
+      /** Keep the in-cabin screen powered on even when the truck's electrics/engine are off. */
+      keepScreenOn?: boolean
       wallpaper?: string | null
       iconSet?: string | null
       /** Light or dark icons, or as the screen is (`IconStyle`). */
@@ -143,6 +207,23 @@ export type HostMessage =
       equalizerCustom?: boolean
       /** Who walks in the Modo Personagem (a place in `CHARACTER_PEOPLE`), for the phone's Personagem app. */
       characterPerson?: number
+      /** The Modo Personagem's switches (the app's settings): the cargo's papers and coupling by hand, refuelling
+       * by hand, paying that fuel at the pump's attendant. */
+      freightPapers?: boolean
+      manualRefuel?: boolean
+      payAttendant?: boolean
+      /** Which of the game's virtual mirrors show (the phones' Settings). */
+      virtualMirrors?: VirtualMirrors
+      /** Whether the game sets the suspension back by itself (the phone's Suspensão app). */
+      suspensionAutoReset?: boolean
+      /** The suspension by itself: lowered on the motorway, normal in town (the Suspensão app). */
+      suspensionAuto?: boolean
+      /** How low the front may go (the Suspensão app). */
+      suspensionLowFront?: LowFront
+      /** How firm the dampers are (the Suspensão app). */
+      suspensionDamping?: Damping
+      /** How big the mouse's dot is (the phones' Settings). */
+      cursorSize?: CursorSize
     }
   /** The player's own wallpapers and icon sets (shared/customize.ts), their files at `CABIN_FILES`. */
   | { type: 'customize'; wallpapers: CustomWallpaper[]; iconSets: IconSet[] }
@@ -219,7 +300,12 @@ export type HostMessage =
   | ({ type: 'phoneNotification' } & PhoneNotification)
   /** The cargo's paper for the phone in the game's page to show in place of the phone (crates/host; the plugin's
    * `freight`): the nota fiscal to sign at the pick-up, the recipient's signature at the delivery; `null`: none. */
-  | { type: 'paper'; stage: 'pickup' | 'delivery' | null }
+  | { type: 'paper'; stage: 'pickup' | 'delivery' | 'lockPull' | 'lockPush' | 'legsUp' | 'legsDown' | null }
+  /** Whether the suspension's auto reset is in the games' options as chosen (else: once the games close). */
+  | { type: 'suspensionOption'; applied: boolean }
+  /** The fuel filled by hand at a pump, to pay on the phone's Nupay at its attendant (crates/host; the plugin's
+   * `refuel`); `null`: none. */
+  | { type: 'fuelBill'; bill: FuelBill | null }
   /** A keybind of the player's (the companion's Controls), pressed in the game. */
   | { type: 'keybind'; action: KeybindAction }
   /** A volume the player's phone set (0 to 1), for the cab to show as for a keybind (crates/host remote.rs). */
@@ -330,6 +416,10 @@ export type PageMessage =
   | { type: 'wallpaper'; id: string }
   /** The Vehicle Bar (the truck's strip) kept or not, chosen in Settings › Appearance, kept the same way. */
   | { type: 'truckStrip'; strip: 'auto' | 'off' }
+  /** Live screen sharpness tier chosen in Settings › Adjust Screen, applied immediately on the next frame. */
+  | { type: 'screenResolution'; resolution: ScreenResolution }
+  /** Keep the in-cabin screen powered on even when the truck's electrics/engine are off. */
+  | { type: 'keepScreenOn'; on: boolean }
   /** The players' tone, set in Settings › Equalizer: the player's curve, and whether it plays (Custom) or the
    * speakers as tuned (Recommended); kept with WestPlay's settings and played by every player. */
   | ({ type: 'equalizer'; custom: boolean } & Equalizer)
@@ -373,10 +463,41 @@ export type PageMessage =
   | { type: 'tiktok'; command: TikTokCommand }
   /** Whether a notification is on the phone's screen: put away, its top stays in view meanwhile. */
   | { type: 'phoneBanner'; showing: boolean }
+  /** The game's notifications' groups turned off in the phone's Settings. */
+  | { type: 'alerts'; off: AlertGroup[] }
+  /** One of each of the game's notifications, to see and hear them. */
+  | { type: 'testAlerts' }
   /** The cargo's paper collected, signed and stamped, or put down (`collected` false): the phone in the game's. */
   | { type: 'paperDone'; collected: boolean }
+  /** The fuel's bill paid on Nupay: `amount` in the game's money (negative), about `detail`. */
+  | { type: 'fuelPaid'; id: number; amount: number; detail: string }
+  /** The fuel's bill put down without paying. */
+  | { type: 'fuelPutDown'; id: number }
   /** The cargo's papers and coupling the trailer by hand, on or off (the phone's Settings). */
   | { type: 'freightPapers'; on: boolean }
+  /** Refuelling by hand at the truck's tank, on or off (the phone's Settings). */
+  | { type: 'manualRefuel'; on: boolean }
+  /** Paying the fuel filled by hand at the pump's attendant, on or off (a phone's Settings). */
+  | { type: 'payAttendant'; on: boolean }
+  /** Which of the game's virtual mirrors show on the screen (a phone's Settings, owner 2026-11-18). */
+  | { type: 'virtualMirrors'; which: VirtualMirrors }
+  /** Whether the game sets the suspension back by itself (the phone's Suspensão app). */
+  | { type: 'suspensionAutoReset'; on: boolean }
+  /** The suspension by itself, on or off (the Suspensão app, owner 2026-11-19). */
+  | { type: 'suspensionAuto'; on: boolean }
+  /** How low the front may go (the Suspensão app): counts from the game's next start. */
+  | { type: 'suspensionLowFront'; which: LowFront }
+  /** How firm the dampers are (the Suspensão app): counts from the game's next start. */
+  | { type: 'suspensionDamping'; which: Damping }
+  /** How big the mouse's dot is on the truck's screen and the phone (a phone's Settings, owner 2026-11-19). */
+  | { type: 'cursorSize'; which: CursorSize }
+  /** Where the reversing camera shows the game's mirrors (frame pixels, the page see-through there); width 0: not. */
+  | { type: 'mirrorCamera'; x: number; y: number; width: number; height: number }
+  /** The reversing camera moved by the player on its screen (crates/plugin rear_camera.rs `nudged`), kept for the
+   * truck or trailer it's on. */
+  | { type: 'cameraNudge'; action: CameraNudge }
+  /** MaxDevMod's floating screen in the cab (crates/plugin float_screen.rs): switched on or off, moved, turned. */
+  | { type: 'floatScreen'; action: FloatScreenAction }
 
 /** What the phone's TikTok app asks of TikTok's own site, run by the host under the phone's page
  * (`westplay_host::tiktok::Command`): `show` places it, in the phone's pixels, where the app cuts the page open. */
@@ -386,15 +507,51 @@ export type TikTokCommand =
   | { action: 'hide' }
   | { action: 'go'; page: TikTokPage }
   | { action: 'back' }
+  /** Its videos' volume a step up (1) or down (-1): the phone's side keys. */
+  | { action: 'volume'; step: 1 | -1 }
   /** Whether the account's LIVE is watched for the phone's notifications. */
   | { action: 'notifications'; on: boolean }
   /** A made-up follow, to see and hear a notification. */
   | { action: 'testNotification' }
 
+export type FloatScreenAction =
+  | 'toggle'
+  | 'forward'
+  | 'back'
+  | 'up'
+  | 'down'
+  | 'left'
+  | 'right'
+  | 'turnLeft'
+  | 'turnRight'
+  | 'tiltUp'
+  | 'tiltDown'
+  | 'rollLeft'
+  | 'rollRight'
+  | 'reset'
+  | 'bigger'
+  | 'smaller'
+
+export type CameraNudge =
+  | 'back'
+  | 'forward'
+  | 'up'
+  | 'down'
+  | 'reset'
+  | 'tiltUp'
+  | 'tiltDown'
+  | 'turnLeft'
+  | 'turnRight'
+  | 'wider'
+  | 'narrower'
+
 export type TikTokPage = 'forYou' | 'following' | 'explore' | 'live' | 'profile'
 
-/** A notification on the phone (`westplay_host::tiktok::Event`). */
-export interface PhoneNotification {
+/** A notification on the phone: TikTok's (`westplay_host::tiktok::Event`), or the game's and MaxDevMod's
+ * (`westplay_host::alerts::Alert`: money in and out, the truck, the job). */
+export type PhoneNotification = TikTokNotification | GameNotification
+
+export interface TikTokNotification {
   app: 'tiktok'
   kind: 'follow' | 'gift' | 'share' | 'subscribe'
   /** Who did it, as TikTok shows them. */
@@ -403,6 +560,48 @@ export interface PhoneNotification {
   detail?: string
   count?: number
 }
+
+export interface GameNotification {
+  /** The app it's of: its icon and name on the banner. */
+  app: 'nupay' | 'truck' | 'freight'
+  kind: GameNotificationKind
+  /** A sum in the game's money (`currency`; an expense negative). */
+  amount?: number
+  currency?: GameCurrency
+  /** A number: the damage's percent, minutes, the fuel's range in km. */
+  value?: number
+  /** About what: the cargo and where to, the offence, the truck's part. */
+  detail?: string
+  /** How many of the same, told as one. */
+  count?: number
+  /** A sum in the pump's own money, cents and all (its sign in `detail`): the fuel owed to the attendant. */
+  total?: number
+}
+
+export type GameNotificationKind =
+  | 'payAttendant'
+  | 'delivered'
+  | 'cancelled'
+  | 'fined'
+  | 'toll'
+  | 'ferry'
+  | 'train'
+  | 'fuel'
+  | 'otherIn'
+  | 'otherOut'
+  | 'fuelLow'
+  | 'damage'
+  | 'crash'
+  | 'repaired'
+  | 'rest'
+  | 'restNow'
+  | 'jobNew'
+  | 'jobDeadline'
+  | 'jobLate'
+
+/** The groups of the game's notifications the phone's Settings turn on and off (`westplay_host::alerts::Group`). */
+export const ALERT_GROUPS = ['moneyIn', 'moneyOut', 'fine', 'fuel', 'damage', 'rest', 'job'] as const
+export type AlertGroup = (typeof ALERT_GROUPS)[number]
 
 /** What the Spotify app asks of Spotify's web player (`westplay_host::spotify::Command`), run hidden by the
  * host: its sign-in, a question (answered with `spotifyAnswer` and the same `id`), and the player's controls
@@ -1151,3 +1350,15 @@ export function postToHost(message: PageMessage): void {
 export function hasTruck(truck: TruckInfo | null): truck is TruckInfo {
   return truck !== null && truck.brandId !== ''
 }
+
+/** Which of the game's virtual mirrors show (crates/host settings.rs `VirtualMirrors`): the reversing camera is
+ * made from the left one whatever is chosen. */
+export type VirtualMirrors = 'none' | 'right' | 'left' | 'both'
+
+/** How low the truck's front may go (crates/host settings.rs `LowFront`): the game's own, lower, the lowest. */
+export type LowFront = 'normal' | 'low' | 'lowest'
+
+/** How firm the dampers are (crates/host settings.rs `Damping`). */
+export type Damping = 'soft' | 'normal' | 'firm' | 'firmest'
+/** How big the mouse's dot is (the phones' Settings). */
+export type CursorSize = 'small' | 'normal' | 'large' | 'larger'

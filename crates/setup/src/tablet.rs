@@ -419,7 +419,7 @@ pub fn trucks_in_mod(path: &Path) -> Vec<Spot> {
 fn accessory(spot: &Spot, model: &str) -> String {
     let (truck, slot) = (&spot.truck, spot.slot.folder());
     format!(
-        "SiiNunit\n{{\naccessory_addon_data : {UNIT}.{truck}.{slot}\n{{\n\tname: \"WestPlay tablet\"\n\tprice: 1\n\tunlock: 0\n\ticon: \"{NAME}\"\n\tpart_type: aftermarket\n\n\tinterior_model: \"/{DIR}/{model}.pmd\"\n}}\n}}\n"
+        "SiiNunit\n{{\naccessory_addon_data : {UNIT}.{truck}.{slot}\n{{\n\tname: \"MaxDevMod tablet\"\n\tprice: 1\n\tunlock: 0\n\ticon: \"{NAME}\"\n\tpart_type: aftermarket\n\n\tinterior_model: \"/{DIR}/{model}.pmd\"\n}}\n}}\n"
     )
 }
 
@@ -433,7 +433,7 @@ fn hookup() -> String {
 {{
 accessory_hookup_int_data : {UNIT}.addon_hookup
 {{
-	name: \"WestPlay tablet\"
+	name: \"MaxDevMod tablet\"
 	price: 1
 	unlock: 0
 	icon: \"{NAME}\"

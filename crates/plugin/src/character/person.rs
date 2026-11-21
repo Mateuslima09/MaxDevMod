@@ -371,13 +371,24 @@ const STOPPING: Stop = Stop { from: frame(31.0), length: frame(47.0) };
 /// "Texting" (557 frames: the phone up to the chest by frame 31, then typing) and "Texting And Walking", the
 /// phone in the right hand (the person's phone models).
 const TEXTING: Phone = Phone { back: frame(31.0), length: frame(557.0) };
+/// Working with the hands at something low in front (`tools/personagem/engatar.py`, made in Blender from each
+/// person's own crouch: no Mixamo animation): down on the knee by frame 20, the hands at work to 80, up again by
+/// 100, standing's first frame. Played once, start to end, never sent back nor on (owner 2026-11-11: looped in its
+/// middle, "it crouches three times"); `character::freight` couples as it starts getting up (`WORK_UP`).
+pub(super) const WORK_UP: f32 = frame(80.0);
+const WORK_LENGTH: f32 = frame(100.0);
+/// What the work person is sent of each second: the game played it twice as fast as it was sent (owner 2026-11-11,
+/// filmed twice, 10 pictures a second: down, the hands, up by 1.5 s, down again, the hands, cut at 3.3 s; its file
+/// is 100 frames of 1/30 s, as the crouch's 40). Its person is new each time (from its first frame: nothing sent).
+const WORK_RATE: f32 = 0.5;
+
 /// Walking into standing: pieces of 10 frames (from the first to the last: 0.3 s), into the first man's standing
 /// ("Standing W_Briefcase Idle", 419 frames) or the woman's ("Idle", 500).
 const MAN_SETTLE: Settle = Settle { piece: frame(10.0), idle: frame(419.0) };
 const WOMAN_SETTLE: Settle = Settle { piece: frame(10.0), idle: frame(500.0) };
 
 /// WestPlay's own people, in the order the player chooses among them (`westplay_shared::CHARACTER_PEOPLE`).
-pub(super) const PEOPLE: [Profile; 3] = [
+pub(super) const PEOPLE: [Profile; 6] = [
     // The tattooed man (`wt_`, owner 2026-11-06, in place of the first man, `wp_`): the first man's walking,
     // running and standing (a man's), the woman's other animations (`reaproveitar_animacoes.py`).
     Profile {
@@ -423,6 +434,51 @@ pub(super) const PEOPLE: [Profile; 3] = [
         settle: Some(MAN_SETTLE),
         crouch_walk: Some(CROUCH_WALKING),
     },
+    // The man in black with the wide hat (`wh_`, owner 2026-11-14): made as the cowboy (his own "3 Chain Fingers"
+    // rig, the tattooed man's animations): his timings.
+    Profile {
+        prefix: "wh",
+        eyes: 1.64,
+        walk: MAN_WALK,
+        run: Some(MAN_RUN),
+        jump: None,
+        jumprun: Some(LEAPING),
+        crouch: Some(SQUATTING),
+        stop: Some(STOPPING),
+        phone: Some(TEXTING),
+        settle: Some(MAN_SETTLE),
+        crouch_walk: Some(CROUCH_WALKING),
+    },
+    // The stout man (`wg_`, owner 2026-11-14): made as the man in black (his own "3 Chain Fingers" rig, the
+    // tattooed man's animations): his timings.
+    Profile {
+        prefix: "wg",
+        eyes: 1.64,
+        walk: MAN_WALK,
+        run: Some(MAN_RUN),
+        jump: None,
+        jumprun: Some(LEAPING),
+        crouch: Some(SQUATTING),
+        stop: Some(STOPPING),
+        phone: Some(TEXTING),
+        settle: Some(MAN_SETTLE),
+        crouch_walk: Some(CROUCH_WALKING),
+    },
+    // The woman in the hard hat and safety vest (`wo_`, owner 2026-11-20): her own "2 Chain Fingers" rig at the
+    // woman's height, with the woman's animations (`reaproveitar_animacoes.py`): the woman's timings.
+    Profile {
+        prefix: "wo",
+        eyes: 1.56,
+        walk: WOMAN_WALK,
+        run: Some(WOMAN_RUN),
+        jump: None,
+        jumprun: Some(LEAPING),
+        crouch: Some(SQUATTING),
+        stop: Some(STOPPING),
+        phone: Some(TEXTING),
+        settle: Some(WOMAN_SETTLE),
+        crouch_walk: Some(CROUCH_WALKING),
+    },
 ];
 
 /// The profile of the person walking as `walking` (`<prefix>_walk`), if they're one of WestPlay's own.
@@ -442,6 +498,13 @@ pub(super) struct Body {
     /// it's the jump on the move (`leaping`).
     jump: Option<(f32, bool, bool)>,
     crouching: Option<(Person, Crouch)>,
+    /// Working with the hands (`WORK_DOWN`…), and how far into it while it plays and whether it has started.
+    working: Option<Person>,
+    /// Its mover's name, to make it again each time it works (`place`).
+    work_model: Option<Vec<u8>>,
+    work: Option<(f32, bool)>,
+    /// Whether the person was asked to work last frame: it starts as they're asked, once.
+    work_asked: bool,
     /// The stop (its start and length), how far into it while it plays and whether started, and whether the person
     /// was walking last frame (a stop plays as it stops).
     stopping: Option<(Person, f32, f32)>,
@@ -491,6 +554,7 @@ impl Body {
             self.jumping.is_some(),
             self.leaping.is_some(),
             self.crouching.is_some(),
+            self.working.is_some(),
             self.stopping.is_some(),
             self.texting.is_some(),
             self.txwalking.is_some(),
@@ -763,6 +827,12 @@ unsafe fn show_as(game: &Game, placement: &Placement, walking: &str, first: bool
                 .ok()
                 .map(|person| (person, crouch))
         });
+        let work_model = own.and_then(|_| named("work")).map(|name| mover(&name));
+        let working = own.and_then(|_| named("work")).and_then(|name| {
+            show_one(game, placement, &[mover(&name)])
+                .inspect_err(|why| log!("character: no working person ({name}, crouching instead): {why}"))
+                .ok()
+        });
         let settling = own.and_then(|person| Some((named("settle")?, person.settle?))).and_then(|(name, settle)| {
             show_one(game, placement, &[mover(&name)])
                 .inspect_err(|why| log!("character: no way into standing ({name}): {why}"))
@@ -822,6 +892,10 @@ unsafe fn show_as(game: &Game, placement: &Placement, walking: &str, first: bool
             jump: None,
             crouching,
             crouch: None,
+            working,
+            work_model,
+            work: None,
+            work_asked: false,
             settling,
             crouch_walking,
             crouch_move: None,
@@ -992,6 +1066,53 @@ pub(super) unsafe fn place(
             }
         }
     }
+    // Working with the hands (`super::WORKING`: coupling the trailer), for a person who has it: down, the hands at
+    // work, up, once, as it's asked. The crouch (the eyes go down with it) isn't shown meanwhile, nor left to play
+    // after.
+    let mut work_by = 0.0;
+    let mut worked = false;
+    // Each time on a person made for it, its animation from its first frame: the one kept from the last time was
+    // found elsewhere in it than its clock said (owner 2026-11-11, filmed: it began with the hands, got up, went
+    // down again, "twice"), and sent back to the start from there.
+    let start_work = body.working.is_some()
+        && super::WORKING.load(Ordering::Acquire)
+        && jumping.is_none()
+        && !body.work_asked
+        && body.work.is_none();
+    if start_work && let Some(model) = body.work_model.clone() {
+        // SAFETY: as `place` (the caller's contract): the old one let go as `show_one` made it.
+        match unsafe { show_one(game, placement, &[model]) } {
+            Ok(fresh) => {
+                if let Some(old) = body.working.replace(fresh) {
+                    unsafe { hide_one(game, old) };
+                }
+            }
+            Err(why) => log!("character: no new working person ({why}): the one there plays"),
+        }
+    }
+    if body.working.is_some() {
+        let wanted = super::WORKING.load(Ordering::Acquire) && jumping.is_none();
+        if wanted && !body.work_asked && body.work.is_none() {
+            body.work = Some((0.0, false));
+        }
+        body.work_asked = wanted;
+        if let Some((at, going)) = body.work {
+            let next = if going { at + seconds } else { at };
+            if going && next >= WORK_LENGTH - END_MARGIN {
+                body.work = None;
+                if let (Some(standing), Some((_, settle))) = (body.standing.as_ref(), body.settling.as_ref()) {
+                    stand_by = Some((-standing.clock).rem_euclid(settle.idle));
+                }
+            } else {
+                worked = true;
+                work_by = if going { (next - at).rem_euclid(WORK_LENGTH) * WORK_RATE } else { 0.0 };
+                body.work = Some((next, true));
+                body.crouch = None;
+                body.crouch_move = None;
+                crouched = false;
+            }
+        }
+    }
     // Walking crouched (`CrouchWalk`), down on the knee with Ctrl held: moving, from the knee into the walk, then
     // walking; still again, from the nearest eighth of its cycle into the knee. `crouch_role`: which of them shows.
     let (mut cwalk_by, mut cstart_by, mut csettle_by) = (0.0, 0.0, 0.0);
@@ -1122,6 +1243,8 @@ pub(super) unsafe fn place(
     // there's no standing one, its animation stopped).
     let role: usize = if let Some(leap) = jumping {
         if leap { 4 } else { 3 }
+    } else if worked {
+        13
     } else if crouched {
         crouch_role.unwrap_or(5)
     } else if texting {
@@ -1166,6 +1289,10 @@ pub(super) unsafe fn place(
         let crouch = body.crouching.as_mut().map(|(croucher, _)| {
             place_one(game, croucher, placement, crouch_by);
             croucher.instance(game)
+        });
+        let work = body.working.as_mut().map(|worker| {
+            place_one(game, worker, placement, work_by);
+            worker.instance(game)
         });
         let stop = body.stopping.as_mut().map(|(stopper, ..)| {
             place_one(game, stopper, placement, stop_by);
@@ -1216,7 +1343,8 @@ pub(super) unsafe fn place(
             hide_one(game, a);
             hide_one(game, b);
         }
-        let all = [standing, walking, run, jump, leap, crouch, stop, text, txwalk, settle, cstart, cwalk, csettle];
+        let all =
+            [standing, walking, run, jump, leap, crouch, stop, text, txwalk, settle, cstart, cwalk, csettle, work];
         DRAWN.store(all[role].unwrap_or(0), Ordering::Release);
         // Each switch of the person shown, in the log. One a stop (the owner's test, 2026-11-05): the blink is the
         // switch itself, the one switched to drawn wrong its first frame. So the one switched from is drawn too for
@@ -1242,7 +1370,8 @@ pub(super) unsafe fn place(
                     "settling",
                     "starting to walk crouched",
                     "walking crouched",
-                    "stopping crouched"
+                    "stopping crouched",
+                    "working with the hands"
                 ][role]
             );
         } else if body.overlap > 0 {
@@ -1411,6 +1540,9 @@ pub(super) unsafe fn hide(game: &Game, body: Body) {
         }
         if let Some((crouching, _)) = body.crouching {
             hide_one(game, crouching);
+        }
+        if let Some(working) = body.working {
+            hide_one(game, working);
         }
         if let Some((stopping, ..)) = body.stopping {
             hide_one(game, stopping);

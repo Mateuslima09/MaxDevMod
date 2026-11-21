@@ -10,6 +10,7 @@ import { AppScreen } from './apps/AppScreen'
 import { BootScreen } from './boot/BootScreen'
 import { Dashboard } from './dashboard/Dashboard'
 import { Home } from './home/Home'
+import { ReversingCamera } from './reversing/ReversingCamera'
 import { followTruckersMp } from './maps/truckersmp'
 import { routeClicksDuringTransitions } from './shell/clickThrough'
 import { installDragScroll } from './shell/dragScroll'
@@ -22,6 +23,7 @@ import { meterFrames } from './state/frameMeter'
 import { connectHost, useCabin, useLive } from './state/store'
 import { languageOf } from './state/strings'
 import { followTimeZone } from './state/timeZone'
+import { startReversePreview } from './reversing/preview'
 
 /**
  * Plain browser previews have no truck to power the screen; they show it as if the electrics were on.
@@ -34,6 +36,8 @@ export function CabinApp() {
   const route = useCabin((state) => state.navigation.route)
   const phase = useCabin((state) => state.power.phase)
   useEffect(() => connectHost(), [])
+  // A plain browser's `?reverse`: the reversing camera with a made-up truck backing up (reversing/preview.ts).
+  useEffect(() => startReversePreview(), [])
   // YouTube, Spotify, Apple Music and YouTube Music pause with the game (its menu, tabbing out) and play on after.
   useEffect(() => pauseYouTubeWithGame(), [])
   useEffect(() => pauseSpotifyWithGame(), [])
@@ -69,6 +73,8 @@ export function CabinApp() {
       entering={entering}
       overlay={
         <>
+          {/* In reverse, the reversing camera over the screen (reversing/ReversingCamera.tsx). */}
+          {powered && <ReversingCamera />}
           {FOLLOW_POWER && phase !== 'on' && <BootScreen phase={phase} />}
           {/* In a plain browser the system cursor is there already. */}
           {isInHost() && <Cursor />}
