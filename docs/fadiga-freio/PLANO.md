@@ -104,6 +104,12 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   - Instalada 21/11 18:40 (backup `backups\20261121-183855`), commitada; **não testada no jogo**.
   - **Falta UI**: o celular ainda não tem a tela das opções (as mensagens já existem no app).
 
+- **Teste C feito pelo dono (21/11 18:46–18:50, sem carreta, freadas fortes a 90–124 km/h):** funciona. Modelo
+  chegou a ~420 °C, força 0,36–0,42, plugin mandou `told -0.62` com o pedal no fundo (efetivo = força). Voltou a 1,00.
+- **Resfriamento por velocidade (pedido do dono):** agora uma tabela `WIND` em `brake_fade.rs`: parado ×1,0,
+  30 km/h ×1,15, 60 ×1,35, 90 ×1,6, 120 ×1,9, 140 ×2,1, 180 ×2,4 (retas entre os pontos); `HEAT` subiu de 1,15
+  para 1,4 para compensar (a serra lenta continua o caso perigoso). 9 testes. Instalado só o app (ponte igual).
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

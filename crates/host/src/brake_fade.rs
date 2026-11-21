@@ -19,11 +19,26 @@ use westplay_shared::Telemetry;
 use crate::weather::{Sky, Weather};
 
 /// Heating, °C per second per (brake 0..1 × speed m/s).
-const HEAT: f32 = 1.15;
+const HEAT: f32 = 1.4;
 /// Cooling, per second, of the difference with the air.
 const COOL: f32 = 0.0095;
-/// Cooling with speed (the air through the wheel): + this per m/s.
-const WIND: f32 = 0.005;
+/// Cooling with speed (the air through the wheel; owner 2026-11-21: "by speed: at 90 km/h it cools so much, at 120 a
+/// few percent more, at 140 more"): how many times faster than stopped, at each speed (km/h), straight lines between.
+/// Stronger than the game's own (none), with [`HEAT`] raised to match: down a hill, slow and braking, is what
+/// overheats them.
+const WIND: &[(f32, f32)] = &[(0.0, 1.0), (30.0, 1.15), (60.0, 1.35), (90.0, 1.6), (120.0, 1.9), (140.0, 2.1), (180.0, 2.4)];
+
+/// [`WIND`] at a speed (km/h).
+fn wind(kmh: f32) -> f32 {
+    let kmh = kmh.max(0.0);
+    for pair in WIND.windows(2) {
+        let ((a, fa), (b, fb)) = (pair[0], pair[1]);
+        if kmh <= b {
+            return fa + (fb - fa) * (kmh - a) / (b - a);
+        }
+    }
+    WIND[WIND.len() - 1].1
+}
 /// The air: by day, at night, in the rain (°C).
 const AIR_DAY: f32 = 25.0;
 const AIR_NIGHT: f32 = 15.0;
@@ -132,7 +147,7 @@ impl BrakeFade {
                 AIR_DAY
             };
             let speed = t.speed.abs();
-            let cool = COOL * (1.0 + WIND * speed) * (1.0 + (RAIN - 1.0) * wet) * if dark { NIGHT } else { 1.0 };
+            let cool = COOL * wind(speed * 3.6) * (1.0 + (RAIN - 1.0) * wet) * if dark { NIGHT } else { 1.0 };
             let energy = HEAT * t.brake.clamp(0.0, 1.0) * speed;
             let load = cargo_kg.max(0.0) / 1000.0;
             let step = |disc: f32, share: f32| {
@@ -223,6 +238,23 @@ mod tests {
         fade.truck = 100.0;
         let next = fade.tick(Level::Realistic, Some(&driving(0.0, 0.0)), 0.0, None, start + Duration::from_secs(1));
         assert!(next.strength > first.strength && next.strength < first.strength + 0.03, "{first:?} {next:?}");
+    }
+
+    #[test]
+    fn the_wind_by_speed() {
+        assert_eq!(wind(0.0), 1.0);
+        assert!((wind(90.0) - 1.6).abs() < 1e-4 && (wind(105.0) - 1.75).abs() < 1e-4);
+        assert_eq!(wind(300.0), 2.4);
+    }
+
+    #[test]
+    fn speed_cools_faster() {
+        let start = Instant::now();
+        let cooled = |kmh: f32| {
+            let mut fade = BrakeFade { truck: 300.0, ..Default::default() };
+            run(&mut fade, &driving(kmh, 0.0), None, start, 60).0.truck
+        };
+        assert!(cooled(100.0) < cooled(20.0) - 40.0, "{} {}", cooled(100.0), cooled(20.0));
     }
 
     #[test]
