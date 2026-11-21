@@ -60,6 +60,19 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   (`weather.rs`), não o limpador. **Decidido pelo dono (21/11): o limpador NÃO conta**, fica só a chuva do jogo.
   A noite vem do relógio do jogo (20h–6h), como já está.
 
+- **Sons decididos pelo dono (21/11):**
+  - **Rangido** (freando com o disco quente, ~400 °C ou mais, mais alto quanto mais quente): o trecho **mais alto,
+    de rangido** do [Truck Brakes (Pixabay, freesound_community)](https://pixabay.com/sound-effects/city-truck-brakes-33606/),
+    Licença Pixabay (livre, sem crédito obrigatório). Recortar só esse trecho (pedir ao dono o segundo exato, ou
+    achar o pico de volume) → `brake_squeal.wav`.
+  - **Aviso no painel** quando o freio chega ao **mínimo** (a força no `LEAST`, "perdeu o freio"): o
+    [Warning Chime (designerschoice, Freesound)](https://freesound.org/people/designerschoice/sounds/804728/) →
+    `brake_warning.wav`. **Conferir a licença** na página antes de usar.
+  - **Descartado:** o rangido de carro do WavJunction (soa como cadeira batendo) e o chiado de ar sozinho.
+  - Ajustes: **ligar/desligar e volume do aviso**, separados do rangido. Registrar os dois em
+    `THIRD_PARTY_NOTICES.md`. Os arquivos ficam com o dono baixar (Pixabay/Freesound pedem login); o código deve
+    funcionar em silêncio sem eles.
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
