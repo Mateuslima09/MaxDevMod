@@ -82,6 +82,10 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   **gerados três avisos originais** (sem licença de terceiros) em `docs/fadiga-freio/sons/`: `aviso-A-ding-dong.wav`,
   `aviso-B-bips.wav`, `aviso-C-gongo.wav`. O dono escolhe um → vira `brake_warning.wav`.
 
+- **Regra do rangido (dono, 21/11):** toca **só com o freio no mínimo** (força no `LEAST`, 15 %) **e o pedal
+  pisado**; nunca antes. Aviso: o dono gostou do gongo (C), mas lento; geradas C1–C5 mais rápidas em
+  `docs/fadiga-freio/sons/`, falta ele escolher.
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
