@@ -34,13 +34,21 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   do app a cada 2 s andando (`[brake fade] model: ...`). `last_weather` guardado no laço do `weather_watch`.
   **Ainda não tira força do freio nem passa nada ao plugin.**
 
+- **Teste A2 feito pelo dono (21/11): FUNCIONA.** Com `abackward = -0.4` e o pedal no fundo, o jogo deu
+  `truck.input.brake = 0.60` e `truck.effective.brake = 0.60` (sem a sonda: 1.00). O negativo é somado já no
+  pedal (`input.brake` também cai), então o pedal real do jogador **não é mais visível** enquanto a sonda manda
+  valor: na Fase C, guardar o valor mandado e calcular `pedal_real = input_brake - valor_mandado`. Seguir a
+  seção 3.3 **caminho 1**. Arquivo `fade-probe.txt` apagado.
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
 2. Enquanto isso dá para fazer a **Fase D (HUD)** sem depender de nada: pôr na ponte (`HostBlock`, seção 2.5)
    `brake_temp_truck`, `brake_temp_trailer`, `brake_strength`, `brake_hud`; o app grava o `Fade` neles a cada tick;
    o plugin desenha (seção 4). Ponte vira 55, instala app + plugin juntos.
-3. Com o A2: seção 3 (tirar força) pelo caminho 1 ou 2.
+3. Fase C pelo caminho 1 (seção 3.3): no `commands.rs`, trocar `fade_probe()` por `-(1 - strength) * pedal_real`
+   (com `strength` vindo do app pela ponte, `HostBlock::brake_strength`), só quando `strength < 0,999`; nunca
+   abaixo de -0,85; voltando a 1, mandar 0 uma vez.
 4. **Ao terminar, tirar a sonda `fade_probe()`** do `commands.rs` e baixar os logs (1 s no plugin, 2 s no app) para
    só quando `strength < 1`.
 

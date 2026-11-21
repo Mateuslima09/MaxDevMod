@@ -30,7 +30,11 @@ Instalado 21/11. O **log do app** (`Documentos\WestPlay\logs\app.log`) escreve a
 4. Se der, repita na chuva ou à noite (esfria mais rápido).
 5. Mande o `app.log` e diga se o ritmo parece certo (esquenta rápido/devagar demais?).
 
-## A2. Tirar força do freio (teste) — **ainda não feito**
+## A2. Tirar força do freio (teste)
+
+**Resultado (21/11, log do dono):** com o arquivo (`-0.4`) e o pedal no fundo, `pedal 0.60, effective 0.60` (sem o
+arquivo, o pedal no fundo dava 1.00). O valor negativo **é somado** ao pedal do jogador: dá para tirar freio por aqui.
+✅ feito (arquivo apagado depois).
 
 1. Na pasta `Documentos\WestPlay` (a mesma que tem a pasta `logs`), crie um arquivo de texto chamado
    **`fade-probe.txt`** com o conteúdo `-0.4`.
