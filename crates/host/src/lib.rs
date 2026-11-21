@@ -36,6 +36,7 @@ pub mod startup;
 mod tiktok;
 mod truck_commands;
 mod auto_suspension;
+mod brake_fade;
 mod typing;
 mod wallet;
 mod weather;
@@ -361,6 +362,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // The truck's commands the phones hold, for the plugin's input device.
     let mut truck_commands = truck_commands::TruckCommands::default();
     let mut auto_suspension = auto_suspension::AutoSuspension::default();
+    // Brake fade (brake_fade.rs): only modelled and logged for now (docs/fadiga-freio/PLANO.md, phase B).
+    let mut brake_fade = brake_fade::BrakeFade::default();
+    let mut brake_fade_logged: Option<Instant> = None;
+    let mut last_weather: Option<weather::Weather> = None;
     // The player's account, for the phone's Nupay (wallet.rs).
     let mut wallet_game = westplay_setup::game::current();
     let mut wallet = wallet::Wallet::open(&config.data_dir, wallet_game.sdk_id());
@@ -957,6 +962,24 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         let auto_held =
             auto_suspension.tick(config.settings.get().suspension_auto, last_telemetry.as_ref(), Instant::now());
         host.truck_commands.store(truck_commands.held(Instant::now()) | auto_held, Ordering::Release);
+        // Brake fade: the discs' temperatures and the brake left, logged every 2 s while the truck moves.
+        {
+            let job = bridge.bridge().plugin.job.read().filter(|job| job.active && job.cargo_loaded);
+            let cargo = job.map_or(0.0, |job| job.cargo_mass);
+            let level = brake_fade::Level::Realistic;
+            let fade = brake_fade.tick(level, last_telemetry.as_ref(), cargo, last_weather.as_ref(), Instant::now());
+            let moving = last_telemetry.as_ref().is_some_and(|t| t.speed.abs() > 0.5 || t.brake > 0.01);
+            if moving && brake_fade_logged.is_none_or(|at| at.elapsed() >= Duration::from_secs(2)) {
+                brake_fade_logged = Some(Instant::now());
+                log!(
+                    "[brake fade] model: truck {:.0} C, trailer {}, strength {:.2}, game {:.0} C",
+                    fade.truck,
+                    fade.trailer.map_or("-".to_owned(), |t| format!("{t:.0} C")),
+                    fade.strength,
+                    last_telemetry.as_ref().map_or(0.0, |t| t.brake_temperature)
+                );
+            }
+        }
         // The game played changed (`westplay_setup::game::current`): its own account.
         if westplay_setup::game::current() != wallet_game {
             wallet_game = westplay_setup::game::current();
@@ -1078,6 +1101,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
 
         while let Ok(weather) = weather_watch.updates.try_recv() {
+            last_weather = weather;
             let message = weather_message_for(weather);
             let _ = webview.post_json(&message);
             weather_message = Some(message);

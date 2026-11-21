@@ -19,18 +19,33 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
     `fade_probe()` (sonda A2: arquivo `Documentos\WestPlay\fade-probe.txt` com `-0.4` manda esse valor no eixo
     `abackward` quando o volante do celular não está dirigindo). Chamados em `next_axis()`.
   - Versão 2.4.5 em `Cargo.toml`, `app/tauri.conf.json`, `ui/package.json`, `CHANGELOG.md`.
-  - `docs/fadiga-freio/TESTES.md` escrito (A1 e A2, o que o dono faz e manda).
-- Ver no fim desta seção se a instalação e o commit foram feitos.
+  - `docs/fadiga-freio/TESTES.md` escrito (A1, A2, A3: o que o dono faz e manda).
+  - Instalada 21/11 17:07, commit `0a23ba7`.
+- **Teste A1 feito pelo dono (21/11):** `truck.brake.temperature` funciona (sobe freando, esfria parado), **mas trava
+  em 200 °C** (o `max_brake_temperature` do jogo) e chega lá numa freada forte a 120 km/h. Medidas tiradas do log:
+  aquece ~**4 °C/s por (pedal × m/s)**; esfria exponencial ~**0,0095/s** rumo a ~17–20 °C, **igual a qualquer
+  velocidade**. Decisão: **modelo próprio** (seção 2.2), calibrado com esses números.
+- **Fase B (modelo) feita:** `crates/host/src/brake_fade.rs` (novo): `BrakeFade::tick(level, telemetry, cargo_kg,
+  weather, now) -> Fade { truck, trailer, strength }`, `strength_at()`, `Level`. Calor `HEAT = 1,15` (≈ jogo ÷ 3,5,
+  para a fadiga vir só em descida longa), frio `COOL = 0,0095` + vento, chuva (`wetness`) até ×2,5, noite ×1,3; ar
+  25/15/18 °C; carreta com disco próprio e carga; força cai na hora e volta 2 %/s; mínimo 15 %. 7 testes passando
+  (`cargo test -p westplay-host brake_fade`; suíte do host toda verde: 254).
+  Ligado em `crates/host/src/lib.rs` (junto do `auto_suspension.tick`, ~linha 960): calcula e **só escreve no log**
+  do app a cada 2 s andando (`[brake fade] model: ...`). `last_weather` guardado no laço do `weather_watch`.
+  **Ainda não tira força do freio nem passa nada ao plugin.**
 
-**Próximo passo:** esperar o dono mandar o log dos testes A1 e A2 (`docs/fadiga-freio/TESTES.md`). Com o log:
-- A1: `temp` sobe freando e desce parado? → seção 2.1 (usar a do jogo ou modelo próprio).
-- A2: `effective` caiu para ~0,6 com `pedal 1.00` e o arquivo? → seção 3.3 caminho 1; senão caminho 2.
-Depois seguir a Fase B (seção 2). **Ao terminar a fadiga, tirar a sonda `fade_probe()`** (ou trocá-la pela força
-calculada) e baixar o log de 1 s para só quando `strength < 1`.
+**Próximo passo:**
+1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
+   `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
+2. Enquanto isso dá para fazer a **Fase D (HUD)** sem depender de nada: pôr na ponte (`HostBlock`, seção 2.5)
+   `brake_temp_truck`, `brake_temp_trailer`, `brake_strength`, `brake_hud`; o app grava o `Fade` neles a cada tick;
+   o plugin desenha (seção 4). Ponte vira 55, instala app + plugin juntos.
+3. Com o A2: seção 3 (tirar força) pelo caminho 1 ou 2.
+4. **Ao terminar, tirar a sonda `fade_probe()`** do `commands.rs` e baixar os logs (1 s no plugin, 2 s no app) para
+   só quando `strength < 1`.
 
-Status da instalação/commit: **2.4.5 compilada e instalada** 21/11 17:07 com `instalar-local.ps1` (app aberto,
-DLL nos dois jogos, backup em `%LOCALAPPDATA%\MaxDevMod\backups\20261121-170511`) e **commitada** localmente.
-Nada testado no jogo ainda. Os testes unitários (`cargo test`) não foram rodados: rodar na próxima sessão.
+Status da instalação/commit: Fase B **instalada** 21/11 17:29 (só o app mudou; ponte continua 54, o jogo não precisa
+reabrir; backup `%LOCALAPPDATA%MaxDevModackups61121-172721`) e **commitada** localmente. Nada de push.
 
 ---
 
