@@ -57,8 +57,8 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   deve passar de 300–400 °C. **A ajustar:** (1) o log do app e do plugin para de escrever com o caminhão parado sem
   freio, então o esfriamento parado não aparece: logar também enquanto o disco estiver 5 °C acima do ar; (2) o dono
   ligou o **limpador de para-brisa** parado achando que conta como chuva: o modelo usa a chuva **do jogo**
-  (`weather.rs`), não o limpador. Decidir com o dono se o limpador também deve contar (`truck.wipers`, canal do
-  SDK, fácil de registrar em `telemetry.rs`).
+  (`weather.rs`), não o limpador. **Decidido pelo dono (21/11): o limpador NÃO conta**, fica só a chuva do jogo.
+  A noite vem do relógio do jogo (20h–6h), como já está.
 
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
