@@ -76,7 +76,7 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
 - **Sons, atualização (21/11 18:25):** o dono achou um rangido de **trem (ferro com ferro)** de que gostou
   (`Downloads/90acdb7bee25dc76434b0b28ba17ef47/5b8684e632306.wav`, 5,3 s; trechos altos 2,0–3,0 s e 4,25–4,5 s),
   **mas é do Baotu (ibaotu.com), banco comercial chinês: o .docx junto diz que é proibido usar sem licença**. **O dono disse (21/11) que o Baotu autorizou o uso**:
-  registrado em `THIRD_PARTY_NOTICES.md`. Recortado 1,8–3,3 s, mono 16 bits 24 kHz (o formato do `steps.rs`) em
+  registrado em `THIRD_PARTY_NOTICES.md`. Recortado 1,8–3,8 s (saída suave de 0,6 s), mono 16 bits 24 kHz (o formato do `steps.rs`) em
   `crates/plugin/assets/brake_squeal.raw`; prévia em `docs/fadiga-freio/sons/rangido-recortado.wav`. Tocar em loop
   enquanto freia quente (tocar como `steps.rs` toca a porta). Para o aviso, em vez de baixar (os sites pedem login), foram
   **gerados três avisos originais** (sem licença de terceiros) em `docs/fadiga-freio/sons/`: `aviso-A-ding-dong.wav`,

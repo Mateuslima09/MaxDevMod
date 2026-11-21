@@ -251,5 +251,5 @@ The sounds of the fifth wheel's lock and of the trailer legs' crank (`ui/public/
 The sounds of the overheated brakes (`crates/plugin/assets`), chosen by the owner (2026-11-21):
 
 - `brake_squeal.raw`: iron grinding on iron, a train's, from Baotu (ibaotu.com, file 5b8684e632306); its loud
-  stretch from 1.8 s to 3.3 s, mono at 24 kHz. Baotu's own notice reserves its rights; the owner says Baotu
+  stretch from 1.8 s to 3.8 s, fading out over its last 0.6 s, mono at 24 kHz. Baotu's own notice reserves its rights; the owner says Baotu
   authorized its use in MaxDevMod (2026-11-21).
