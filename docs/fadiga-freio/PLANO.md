@@ -158,6 +158,10 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   grava `HostBlock::brake_alarm`; o plugin (`brake_sounds`) e a notificação `brakeGone` usam esse valor. No app
   Freios: linha "Alarme aos" com 320/340/360/380 °C (somados ao deslocamento do nível: Leve +100, Dura −50).
 
+- **Carreta vazia x carregada (dono, 21/11 ~20:45):** `brake_fade.rs`: parte do calor da carreta `0,6 + carga_t/20`
+  (vazia esquenta 40 % menos que o cavalo; ~igual aos 8 t; 1,6× aos 20 t); cavalo `1,1` com carreta vazia, senão
+  `1 + carga_t/80`. Carga = `job.cargo_mass` com o frete ativo e carregado. Teste `an_empty_trailer_heats_less_than_the_truck`.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

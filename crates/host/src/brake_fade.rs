@@ -150,9 +150,13 @@ impl BrakeFade {
                 (disc + (energy * share - cool * (disc - air)) * dt).clamp(air.min(disc), HOTTEST)
             };
             if t.trailer_connected {
-                // The trailer's brakes take the load's share.
-                self.truck = step(self.truck, 1.0 + load / 80.0);
-                self.trailer = Some(step(self.trailer.unwrap_or(air), 1.0 + load / 30.0));
+                // The trailer's brakes take the load's share (owner 2026-11-21: "heavy is one thing and empty another"):
+                // empty, the trailer's brakes do less than the truck's (load-sensing, EBS), so they heat 40 % less and
+                // the truck works a little more; loaded, they do more and more the heavier (about the truck's at 8 t,
+                // 1.6 times at 20 t).
+                let truck_share = if load < 0.5 { 1.1 } else { 1.0 + load / 80.0 };
+                self.truck = step(self.truck, truck_share);
+                self.trailer = Some(step(self.trailer.unwrap_or(air), 0.6 + load / 20.0));
             } else {
                 self.truck = step(self.truck, 1.0);
                 self.trailer = None;
@@ -283,6 +287,20 @@ mod tests {
         assert!(last.trailer.is_some_and(|trailer| trailer > last.truck), "{last:?}");
         let alone = fade.tick(Level::Realistic, Some(&driving(60.0, 0.0)), 0.0, None, now + Duration::from_millis(100));
         assert_eq!(alone.trailer, None);
+    }
+
+    #[test]
+    fn an_empty_trailer_heats_less_than_the_truck() {
+        let start = Instant::now();
+        let mut fade = BrakeFade::default();
+        let coupled = Telemetry { trailer_connected: true, ..driving(60.0, 0.2) };
+        let mut now = start;
+        let mut last = fade.tick(Level::Realistic, Some(&coupled), 0.0, None, now);
+        for _ in 0..300 {
+            now += Duration::from_millis(100);
+            last = fade.tick(Level::Realistic, Some(&coupled), 0.0, None, now);
+        }
+        assert!(last.trailer.is_some_and(|trailer| trailer < last.truck - 20.0), "{last:?}");
     }
 
     #[test]
