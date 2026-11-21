@@ -135,6 +135,14 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   escreve no log do app (`[brake fade] the phone told: brakeHot (sent | its group is off)`), porque o dono disse
   que não viu o aviso de 60 % (não dava para saber pelo log se foi mandado). Instalado 21/11 ~19:45.
 
+- **Teste do dono 21/11 20:00–20:04:** o disco subiu e **parou em ~393–398 °C** (com o freio quase todo tirado,
+  não esquenta mais) e nunca chegou aos 400 → o aviso e o rangido nunca tocaram; a notificação `brakeHot` chegou.
+  O dono sentiu "quase sem freio" já aos 380 °C. **Corrigido:** `westplay_shared::BRAKE_ALARM_STRENGTH = 0,6` (~320 °C
+  no realista): daí para baixo tocam o aviso (loop) e o rangido (pedal + andando) e vai o "Sem freio!" ao celular;
+  `BRAKE_HOT_STRENGTH = 0,85` (~280 °C) para o "Freio superaquecido". Instalado 21/11 ~20:10. Depois, pedido do dono: o **rangido começa já no "Freio superaquecido"**
+  (`BRAKE_HOT_STRENGTH`, ~280 °C, freando e andando); o aviso da Toyota continua no `BRAKE_ALARM_STRENGTH`. Plugin
+  trocado 20:08.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

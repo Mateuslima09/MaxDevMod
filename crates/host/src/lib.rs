@@ -992,8 +992,10 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             // it has all come back.
             if strength >= 0.999 {
                 brake_told = 0;
-            } else if strength <= 0.6 && brake_told < 1 || strength <= 0.155 && brake_told < 2 {
-                let gone = strength <= 0.155;
+            } else if strength <= westplay_shared::BRAKE_HOT_STRENGTH && brake_told < 1
+                || strength <= westplay_shared::BRAKE_ALARM_STRENGTH && brake_told < 2
+            {
+                let gone = strength <= westplay_shared::BRAKE_ALARM_STRENGTH;
                 brake_told = if gone { 2 } else { 1 };
                 let alert = alerts::Alert::new(alerts::Group::Damage, "truck", if gone { "brakeGone" } else { "brakeHot" });
                 let allowed = alert_filter.allows(&alert);

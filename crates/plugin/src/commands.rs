@@ -350,7 +350,11 @@ fn brake_sounds() {
     let said = bridge.host.brake_sound.load(Ordering::Acquire);
     let (squeal, warning) =
         if said & 0x1_0000 != 0 { ((said & 0xff) as f32 / 100.0, ((said >> 8) & 0xff) as f32 / 100.0) } else { (0.7, 0.7) };
-    let least = brake_strength() <= 0.155;
+    let strength = brake_strength();
+    let least = strength <= westplay_shared::BRAKE_ALARM_STRENGTH;
+    // The grinding from the phone's first word on, "overheating" (owner 2026-11-21: "it has to grind once the
+    // message that you're running out of brakes comes").
+    let hot = strength <= westplay_shared::BRAKE_HOT_STRENGTH;
     let due = |until: Option<Instant>| until.is_none_or(|until| now >= until);
     if least && warning > 0.0 && due(sounds.warning_until) {
         let lasts = crate::character::brake_sound(crate::character::BrakeSound::Warning, warning);
@@ -361,7 +365,7 @@ fn brake_sounds() {
         sounds.warning_until = None;
     }
     let pedal = (t.input_brake - f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed)).min(0.0)).clamp(0.0, 1.0);
-    if least && squeal > 0.0 && pedal > 0.05 && t.speed.abs() > 1.0 && due(sounds.squeal_until) {
+    if hot && squeal > 0.0 && pedal > 0.05 && t.speed.abs() > 1.0 && due(sounds.squeal_until) {
         // Overlapping a little, so it doesn't stop between two.
         let lasts = crate::character::brake_sound(crate::character::BrakeSound::Squeal, squeal * (0.5 + 0.5 * pedal));
         sounds.squeal_until = Some(now + lasts.saturating_sub(Duration::from_millis(150)));

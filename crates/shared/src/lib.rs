@@ -632,6 +632,14 @@ pub struct HostBlock {
     pub brake_hud: AtomicU32,
 }
 
+/// Brake fade: the brake left from which it counts as gone (owner 2026-11-21: "under 380 °C there was almost no
+/// brake already, and no sound": the weakened brake never heats the discs to the least, 400 °C, so the alarm
+/// waited for nothing). 0.6 is about 320 °C on the realistic level: the dashboard's warning, the grinding and the
+/// phone's "no brakes" come from here.
+pub const BRAKE_ALARM_STRENGTH: f32 = 0.6;
+/// The phone's first word, "overheating", a little before (about 280 °C).
+pub const BRAKE_HOT_STRENGTH: f32 = 0.85;
+
 /// The brakes' HUD's corners (`HostBlock::brake_hud` bits 1-2).
 pub const BRAKE_HUD_BOTTOM_LEFT: u32 = 0;
 pub const BRAKE_HUD_BOTTOM_RIGHT: u32 = 1;
