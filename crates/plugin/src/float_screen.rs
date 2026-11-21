@@ -177,8 +177,14 @@ struct Stats {
 /// as it does to the truck's own screen (`bridge::usable`).
 pub fn showing() -> bool {
     ON.load(Ordering::Relaxed)
+        && powered()
         && PRESENTS.load(Ordering::Relaxed).saturating_sub(FOUND_AT.load(Ordering::Relaxed)) <= SEEN_FOR
         && FOUND_AT.load(Ordering::Relaxed) != 0
+}
+
+/// Whether the truck's electrics are on (not known yet: on, as the truck's own screen takes it).
+fn powered() -> bool {
+    bridge::get().is_none_or(|b| b.plugin.telemetry.read().is_none_or(|t| t.electric_enabled))
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -985,7 +991,9 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
     }
     log_stats(presents, cab.is_some());
     let Some((modelview, projection)) = cab else { return };
-    if crate::telemetry::paused() || !bridge::host_alive() {
+    // Off with the truck's electrics, as the truck's own screen is (owner 2026-11-21: the truck switched off, the
+    // floating screen stayed on).
+    if crate::telemetry::paused() || !bridge::host_alive() || !powered() {
         return;
     }
     let place = product(&modelview, &placement(head, pose_now()));

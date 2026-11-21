@@ -3,6 +3,10 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.1 (beta, 2026-11-21)
+- The floating screen goes off with the truck's electrics, as the truck's own screen does (it stayed on with the
+  truck switched off).
+
 ## 2.4.0 (beta, 2026-11-21)
 - Reversing camera: put the truck in reverse and WestPlay's screen becomes a reversing camera, on the trailer's rear
   with one coupled, else on the truck's. Its picture is drawn from your game's map (roads at their real width,
