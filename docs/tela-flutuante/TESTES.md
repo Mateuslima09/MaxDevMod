@@ -289,3 +289,8 @@ viu a etapa no quadro anterior, lê só ela; não viu, lê do jeito antigo só n
 Mande o `Documentos\WestPlay\logs\plugin.log`. As linhas que importam começam com `tela flutuante:`:
 `switched on`, `ready to be drawn` e, a cada 10 s, `10 s: main-view blocks …, the cab's …, nearest head … cm; cab
 found in … frames, drawn …`. Com `the cab's 0`, o plugin não achou a cabine; o `nearest head` diz quão perto chegou.
+
+### Desliga com o caminhão (21/11, 2.4.1)
+Teste do dono: "desligando o caminhão, a tela flutuante não desliga". Agora ela some com a energia do caminhão
+desligada, como a tela do próprio caminhão, e o mouse também não vai para ela.
+- [ ] Desligar a ignição: a tela flutuante some? Religando: volta?
