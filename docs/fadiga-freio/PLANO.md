@@ -51,6 +51,15 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   - o mínimo de 15 % é do que o jogador aplica: com intensidade 0,5 o freio real mínimo é ~7,5 %. Talvez subir o
     `LEAST` para 0,25 se o dono achar pouco no teste.
 
+- **Teste A3 (descida) feito pelo dono (21/11 18:02):** ~45 s de freio leve (pedal 0,2–0,4) a 75–80 km/h com
+  carreta carregada: o modelo chegou a **caminhão 185 °C, carreta 248 °C** (quase na fadiga), força 1,00; parado
+  segurando o freio não esquentou (certo) e esfriou ~0,8 °C/s no começo. Ritmo parece bom; uma descida de 2–4 min
+  deve passar de 300–400 °C. **A ajustar:** (1) o log do app e do plugin para de escrever com o caminhão parado sem
+  freio, então o esfriamento parado não aparece: logar também enquanto o disco estiver 5 °C acima do ar; (2) o dono
+  ligou o **limpador de para-brisa** parado achando que conta como chuva: o modelo usa a chuva **do jogo**
+  (`weather.rs`), não o limpador. Decidir com o dono se o limpador também deve contar (`truck.wipers`, canal do
+  SDK, fácil de registrar em `telemetry.rs`).
+
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
    `docs/fadiga-freio/TESTES.md`. Ajustar `HEAT`/`COOL` com o log do A3 se ele achar rápido/devagar.
