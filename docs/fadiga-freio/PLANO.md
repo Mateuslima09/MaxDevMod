@@ -84,7 +84,9 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
 
 - **Regra do rangido (dono, 21/11):** toca **só com o freio no mínimo** (força no `LEAST`, 15 %) **e o pedal
   pisado**; nunca antes. Aviso: o dono gostou do gongo (C), mas lento; geradas C1–C5 mais rápidas em
-  `docs/fadiga-freio/sons/`, falta ele escolher.
+  `docs/fadiga-freio/sons/`, falta ele escolher. **Depois o dono baixou o Warning Chime da Toyota (Freesound, CC BY 4.0, crédito
+  obrigatório, já em `THIRD_PARTY_NOTICES.md`)**: recortado 1,4 s em `crates/plugin/assets/brake_warning.raw`
+  (prévia `docs/fadiga-freio/sons/aviso-toyota-recortado.wav`). Aguardando ele confirmar este ou um C1–C5.
 
 **Próximo passo:**
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de
