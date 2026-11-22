@@ -115,6 +115,13 @@ fn is_cropped_layout(id: &str) -> bool {
     matches!(id, "scania-7" | "setra-516" | "travego" | "tourismo" | "man-lions-coach")
 }
 
+/// Layouts whose GPS target the cab samples somewhere else too, where the high-res picture must not go (owner
+/// 2026-11-21: a Scania 2025 mod's instrument cluster flashed with WestPlay's screen in it, and stopped with the
+/// game's own resolution). Their target is big already (1024 x 512), so little is lost.
+fn shares_its_target(id: &str) -> bool {
+    id.starts_with("scania-2025")
+}
+
 /// Target dimensions `(width, height)` and unsharp-mask sharpening strength for a live tier.
 fn tier_spec(tier: u32) -> Option<(u32, u32, f32)> {
     match tier {
@@ -218,7 +225,9 @@ pub fn note_frame(
     let split = bridge.host.screen_split.load(Ordering::Acquire);
     // Handed to the truck: the game's own screen (its map) shows, not our picture over it.
     let handed_over = bridge.host.screen_handed_over.load(Ordering::Acquire) != 0;
-    if tier_spec(tier).is_none() || split != 0 || handed_over || !full_viewport || is_cropped_layout(layout_id) || target_tex_raw == 0
+    if tier_spec(tier).is_none() || split != 0 || handed_over || !full_viewport || is_cropped_layout(layout_id)
+        || shares_its_target(layout_id)
+        || target_tex_raw == 0
     {
         if tier_spec(tier).is_none() && LAST_TIER.swap(SCREEN_RES_GAME_DEFAULT, Ordering::AcqRel) != SCREEN_RES_GAME_DEFAULT {
             log!("screen hires: off (game default {target_w}x{target_h})");
@@ -732,5 +741,16 @@ impl Blitter {
             self.last_tier = tier;
             Ok(srv_raw)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_scania_2025_keeps_its_own_screen() {
+        assert!(shares_its_target("scania-2025") && shares_its_target("scania-2025-advanced"));
+        assert!(!shares_its_target("scania-7") && !shares_its_target("generic"));
     }
 }

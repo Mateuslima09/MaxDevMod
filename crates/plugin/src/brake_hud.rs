@@ -11,7 +11,9 @@ use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use windows::Win32::Graphics::Direct3D11::{D3D11_TEXTURE2D_DESC, ID3D11Device, ID3D11ShaderResourceView, ID3D11Texture2D};
+use windows::Win32::Graphics::Direct3D11::{
+    D3D11_TEXTURE2D_DESC, ID3D11Device, ID3D11ShaderResourceView, ID3D11Texture2D,
+};
 use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
 use windows::core::Interface;
 
