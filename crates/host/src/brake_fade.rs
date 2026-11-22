@@ -175,8 +175,11 @@ impl BrakeFade {
                 self.trailer = None;
             }
         }
+        // How much of the braking each does (owner 2026-11-21): empty, the trailer's brakes hold back (30 %, the
+        // truck 70 %); loaded, more and more, 60 % from 15 t on.
+        let share = 0.3 + 0.3 * (cargo_kg.max(0.0) / 15_000.0).min(1.0);
         let target = match self.trailer {
-            Some(trailer) => 0.4 * strength_at(self.truck, level) + 0.6 * strength_at(trailer, level),
+            Some(trailer) => (1.0 - share) * strength_at(self.truck, level) + share * strength_at(trailer, level),
             None => strength_at(self.truck, level),
         };
         // Down at once, back slowly.
@@ -329,6 +332,19 @@ mod tests {
         // The trailer hotter works the same way round.
         assert!(grinds(&fade(250.0, Some(435.0)), level));
         assert!(!grinds(&fade(325.0, None), Level::Light));
+    }
+
+    #[test]
+    fn an_empty_trailer_brakes_less_of_the_whole() {
+        let start = Instant::now();
+        let coupled = Telemetry { trailer_connected: true, ..driving(0.0, 0.0) };
+        let left = |cargo_kg: f32| {
+            let mut fade = BrakeFade { truck: 400.0, trailer: Some(100.0), ..Default::default() };
+            fade.tick(Level::Realistic, Some(&coupled), cargo_kg, None, start).strength
+        };
+        // The truck's brake gone, the trailer's whole: empty, little left; loaded, most of it.
+        assert!((left(0.0) - (0.7 * LEAST + 0.3)).abs() < 0.01, "{}", left(0.0));
+        assert!((left(20_000.0) - (0.4 * LEAST + 0.6)).abs() < 0.01, "{}", left(20_000.0));
     }
 
     #[test]

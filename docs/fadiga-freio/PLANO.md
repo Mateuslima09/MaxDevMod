@@ -166,8 +166,8 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   disco mais quente ≥ `320 + 0,3 × diferença entre cavalo e carreta` (máx. 380 °C; sem carreta, 320), menos o
   deslocamento do nível. O app manda isso no bit 17 de `HostBlock::brake_sound`; o plugin usa o bit (app antigo:
   a regra da força). O **alarme** continua pela força total (os dois juntos). Ex. do dono: cavalo 435 °C, carreta
-  250 °C → força 66 %, não alarma, mas range (ponto 375 °C). Proposto e **não feito**: peso da carreta vazia na
-  força (70/30 em vez de 40/60) — o dono não respondeu.
+  250 °C → força 66 %, não alarma, mas range (ponto 375 °C). **Peso na força (dono aprovou, 21/11 ~21:15):** a carreta
+  pesa `0,3 + 0,3 × min(carga/15 t, 1)` na força total (vazia 30 %, cavalo 70 %; 60 % a partir de 15 t).
 
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
