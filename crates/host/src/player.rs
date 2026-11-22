@@ -36,6 +36,10 @@ pub struct Player {
     pub time_zones: bool,
     /// The player's money as the save has it (`save::money`), for the phone's Nupay.
     pub money: Option<i64>,
+    /// Active bank loans in the save (`save::loans`), for Nupay's Financiamentos tab (owner 2026-11-22).
+    pub loans: Vec<save::Loan>,
+    /// Path to the latest `game.sii` read, so queued loans can be applied safely once the game closes.
+    pub save_path: Option<PathBuf>,
 }
 
 /// The speakers of the parts of the truck the SDK names (`None`: not found in the save, or no part with any).
@@ -119,6 +123,8 @@ impl PlayerWatch {
                             let player = Player {
                                 garages: save::garages(&units),
                                 money: save::money(&units),
+                                loans: save::loans(&units),
+                                save_path: Some(path.clone()),
                                 hvt_map,
                                 language: documents.as_deref().and_then(game_language),
                                 time_zones: options

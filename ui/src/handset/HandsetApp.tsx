@@ -702,7 +702,6 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
           or not. On the player's own phone too. */}
       <List header={words.virtualMirrors} footer={words.virtualMirrorsHint}>
         <Row
-          icon={<RowIcon tone="#0a84ff">{GLYPH_MIRROR}</RowIcon>}
           label={
             <Segmented
               options={[
@@ -720,7 +719,6 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
       {/* How big the mouse's dot is, on the truck's screen and the phone (owner 2026-11-19). */}
       <List header={words.cursorSize} footer={words.cursorSizeHint}>
         <Row
-          icon={<RowIcon tone="#5e5ce6">{GLYPH_CURSOR}</RowIcon>}
           label={
             <Segmented
               options={[
@@ -796,18 +794,6 @@ const GLYPH_LIGHT = <path d="M10 6a6 6 0 0 0 0 12h2V6ZM14 8h7M14 12h7M14 16h7" /
 const GLYPH_PAPER = (
   <path d="M6 2h9l4 4v16H6Zm8 1.5V7h3.5ZM9 11h7v1.6H9Zm0 3.4h7V16H9Zm0 3.4h4.5v1.6H9Z" fillRule="evenodd" />
 )
-const GLYPH_CURSOR = (
-  <>
-    <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
-    <circle cx="12" cy="12" r="3" />
-  </>
-)
-const GLYPH_MIRROR = (
-  <path
-    d="M4 6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-4v3h-2v-3H7a3 3 0 0 1-3-3Zm3-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z"
-    fillRule="evenodd"
-  />
-)
 /** The game's notifications' groups in Settings, each with its glyph. */
 const ALERT_ICONS: Record<AlertGroup, ReactNode> = {
   moneyIn: <RowIcon tone="#8a05be">{GLYPH_MONEY}</RowIcon>,
@@ -815,6 +801,11 @@ const ALERT_ICONS: Record<AlertGroup, ReactNode> = {
   fine: <RowIcon tone="#ff3b30">{<path d="M12 2 1 21h22Zm-1 7h2v6h-2Zm0 8h2v2h-2Z" />}</RowIcon>,
   fuel: <RowIcon tone="#c9541a">{GLYPH_FUEL}</RowIcon>,
   damage: <RowIcon tone="#1c7ed6">{GLYPH_ENGINE}</RowIcon>,
+  brake: (
+    <RowIcon tone="#d71920">
+      <path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 13a4 4 0 1 1 4-4 4 4 0 0 1-4 4Z" fillRule="evenodd" />
+    </RowIcon>
+  ),
   rest: <RowIcon tone="#5856d6">{GLYPH_CLOCK}</RowIcon>,
   job: <RowIcon tone="#ff9500">{GLYPH_PAPER}</RowIcon>,
 }
@@ -924,6 +915,7 @@ const WORDS = {
       fine: 'Fines',
       fuel: 'Fuel (low, pay the attendant)',
       damage: 'Truck damage',
+      brake: 'Brakes (overheating)',
       rest: 'Rest (fatigue)',
       job: 'Jobs and deadlines',
     } satisfies Record<AlertGroup, string>,
@@ -1078,6 +1070,7 @@ const WORDS = {
       fine: 'Multas',
       fuel: 'Combustível (reserva, pagar frentista)',
       damage: 'Dano no caminhão',
+      brake: 'Freios (superaquecimento)',
       rest: 'Descanso (sono)',
       job: 'Fretes e prazos',
     } satisfies Record<AlertGroup, string>,
@@ -1099,7 +1092,7 @@ const WORDS = {
     cursorSmall: 'Pequena',
     cursorNormal: 'Normal',
     cursorLarge: 'Grande',
-    cursorLarger: 'Muito grande',
+    cursorLarger: 'Extra',
     payAttendant: 'Pagar no frentista',
     payAttendantHint:
       'Depois de abastecer a pé, o abastecimento fica em aberto: vá até o frentista na frente do caminhão e aperte E para pagar no Nupay. Desligado, já fica pago.',

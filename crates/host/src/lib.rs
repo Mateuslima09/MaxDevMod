@@ -962,8 +962,15 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
         // The truck's commands the phones hold, as the plugin gives them to the game.
         // And the suspension by itself, if the player turned it on (auto_suspension.rs).
-        let auto_held =
-            auto_suspension.tick(config.settings.get().suspension_auto, last_telemetry.as_ref(), Instant::now());
+        let susp_settings = config.settings.get();
+        let auto_held = auto_suspension.tick_with_damping(
+            susp_settings.suspension_auto,
+            susp_settings.suspension_damping,
+            Duration::from_secs(u64::from(settings::suspension_auto_delay(&susp_settings))),
+            Duration::from_secs(u64::from(settings::suspension_auto_return(&susp_settings))),
+            last_telemetry.as_ref(),
+            Instant::now(),
+        );
         host.truck_commands.store(truck_commands.held(Instant::now()) | auto_held, Ordering::Release);
         // Brake fade: the discs' temperatures and the brake left, logged every 2 s while the truck moves.
         {
@@ -989,7 +996,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let corner = fade_settings.brake_hud_corner as u32;
             let size = fade_settings.brake_hud_size as u32;
             host.brake_hud.store(
-                0x100 | u32::from(fade_settings.brake_hud.0 && fade_settings.brake_fade.0) | corner << 1 | size << 3,
+                0x100
+                    | u32::from(fade_settings.brake_hud.0 && fade_settings.brake_fade.0)
+                    | corner << 1
+                    | size << 3
+                    | u32::from(fade_settings.brake_hud_on_foot) << 5,
                 Ordering::Release,
             );
             // The phone told once as the brake weakens and once as it's gone (owner 2026-11-21), again only once
@@ -1001,7 +1012,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             {
                 let gone = strength <= alarm;
                 brake_told = if gone { 2 } else { 1 };
-                let alert = alerts::Alert::new(alerts::Group::Damage, "truck", if gone { "brakeGone" } else { "brakeHot" });
+                let alert = alerts::Alert::new(alerts::Group::Brake, "truck", if gone { "brakeGone" } else { "brakeHot" });
                 let allowed = alert_filter.allows(&alert);
                 log!("[brake fade] the phone told: {} ({})", alert.kind, if allowed { "sent" } else { "its group is off" });
                 if allowed {
@@ -1180,9 +1191,16 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
 
         while let Ok(player) = player_watch.updates.try_recv() {
             player_messages = player_messages_for(&player);
+            let mut wallet_changed = false;
             if let Some(money) = player.money
                 && wallet.saved(money)
             {
+                wallet_changed = true;
+            }
+            if wallet.update_save_loans(player.loans.clone(), player.save_path.clone()) {
+                wallet_changed = true;
+            }
+            if wallet_changed {
                 let _ = webview.post_json(&wallet.message());
             }
             for message in &player_messages {
@@ -1263,10 +1281,21 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 Err(_) => {}
             }
         }
-        // The suspension's auto reset in the games' options as the player chose (with them closed), and whether it is
-        // there yet, told to the pages (`{"type":"suspensionOption","applied":…}`) when that changes.
-        if let Some(applied) = suspension_option.check(config.settings.get().suspension_auto_reset.0) {
+        // The suspension's auto reset and profile spring stiffness in the games' options as the player chose (with
+        // them closed), and whether auto reset is there yet, told to the pages (`{"type":"suspensionOption","applied":…}`).
+        let current_settings = config.settings.get();
+        if let Some(applied) =
+            suspension_option.check(current_settings.suspension_auto_reset.0, current_settings.suspension_damping.level())
+        {
             let message = serde_json::json!({ "type": "suspensionOption", "applied": applied }).to_string();
+            let _ = webview.post_json(&message);
+            if let Some(handset) = handset.as_deref() {
+                let _ = handset.post_json(&message);
+            }
+            remote.broadcast(&message);
+        }
+        if wallet.try_apply_pending_loan() {
+            let message = wallet.message();
             let _ = webview.post_json(&message);
             if let Some(handset) = handset.as_deref() {
                 let _ = handset.post_json(&message);
@@ -1352,6 +1381,26 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     log!("wallet: its history cleared (Nupay)");
                     let _ = webview.post_json(&wallet.message());
                 }
+                Some(PageMessage::WalletLoan { amount, days, rate }) => {
+                    wallet.queue_loan(amount, days, rate);
+                    let applied = wallet.try_apply_pending_loan();
+                    log!("wallet: loan requested ({amount}, {days}d, rate {rate}; applied now: {applied})");
+                    let message = wallet.message();
+                    let _ = webview.post_json(&message);
+                    if let Some(handset) = handset.as_deref() {
+                        let _ = handset.post_json(&message);
+                    }
+                    remote.broadcast(&message);
+                }
+                Some(PageMessage::WalletLoanCancel) => {
+                    wallet.cancel_pending_loan();
+                    let message = wallet.message();
+                    let _ = webview.post_json(&message);
+                    if let Some(handset) = handset.as_deref() {
+                        let _ = handset.post_json(&message);
+                    }
+                    remote.broadcast(&message);
+                }
                 Some(PageMessage::Westplay { open }) => {
                     bridge.bridge().host.screen_handed_over.store(u32::from(!open), Ordering::Release);
                     if status.westplay_open != Some(open) {
@@ -1431,7 +1480,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         log!("[handset] the front's lowest: {which:?}");
                     }
                 }
-                // How firm the dampers are, from the Suspensão app: the archive made again for the next start.
+                // How firm the dampers & springs are, from the Suspensão app: the archive made again and profiles synced.
                 Some(PageMessage::SuspensionDamping { which }) => {
                     let mut settings = config.settings.get();
                     if let Some(which) = settings::Damping::from_word(&which)
@@ -1442,6 +1491,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         (config.on_settings)(&settings);
                         log!("[handset] the dampers: {which:?}");
                     }
+                    suspension_option.checked = None;
                 }
                 // The suspension by itself, from the Suspensão app (owner 2026-11-19).
                 Some(PageMessage::SuspensionAuto { on }) => {
@@ -1451,6 +1501,28 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
                         log!("[handset] the suspension by itself: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // Rough-road activation delay (1..=5 s), from the Suspensão app (owner 2026-11-22).
+                Some(PageMessage::SuspensionAutoDelay { secs }) => {
+                    let secs = secs.clamp(1, 5);
+                    let mut settings = config.settings.get();
+                    if settings::suspension_auto_delay(&settings) != secs {
+                        settings.suspension_auto_delay = secs;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension rough-road delay: {secs} s");
+                    }
+                }
+                // Smooth-road return delay (3..=15 s), from the Suspensão app (owner 2026-11-22).
+                Some(PageMessage::SuspensionAutoReturn { secs }) => {
+                    let secs = secs.clamp(3, 15);
+                    let mut settings = config.settings.get();
+                    if settings::suspension_auto_return(&settings) != secs {
+                        settings.suspension_auto_return = secs;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension smooth-road return delay: {secs} s");
                     }
                 }
                 // Brake fade, on or off and how soon (owner 2026-11-21).
@@ -1485,6 +1557,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     | PageMessage::BrakeHud { .. }
                     | PageMessage::BrakeHudCorner { .. }
                     | PageMessage::BrakeHudSize { .. }
+                    | PageMessage::BrakeHudOnFoot { .. }
                     | PageMessage::BrakeAlarm { .. }),
                 ) => {
                     let mut settings = config.settings.get();
@@ -1493,6 +1566,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         PageMessage::BrakeSqueal { volume: v } => settings.brake_squeal_volume = volume(*v),
                         PageMessage::BrakeWarning { volume: v } => settings.brake_warning_volume = volume(*v),
                         PageMessage::BrakeHud { on } => settings.brake_hud = settings::Shown(*on),
+                        PageMessage::BrakeHudOnFoot { on } => settings.brake_hud_on_foot = *on,
                         PageMessage::BrakeHudCorner { which } => {
                             if let Ok(corner) = serde_json::from_value(serde_json::Value::String(which.clone())) {
                                 settings.brake_hud_corner = corner;
@@ -3043,6 +3117,8 @@ fn settings_message(settings: &settings::Settings) -> String {
         "suspensionDamping": settings.suspension_damping,
         "cursorSize": settings.cursor_size,
         "suspensionAuto": settings.suspension_auto,
+        "suspensionAutoDelay": settings::suspension_auto_delay(settings),
+        "suspensionAutoReturn": settings::suspension_auto_return(settings),
         "brakeFade": settings.brake_fade.0,
         "brakeFadeLevel": settings.brake_fade_level,
         "brakeSquealVolume": settings.brake_squeal_volume,
@@ -3050,6 +3126,7 @@ fn settings_message(settings: &settings::Settings) -> String {
         "brakeHud": settings.brake_hud.0,
         "brakeHudCorner": settings.brake_hud_corner,
         "brakeHudSize": settings.brake_hud_size,
+        "brakeHudOnFoot": settings.brake_hud_on_foot,
         "brakeAlarm": settings::brake_alarm_c(&settings),
     })
     .to_string()
@@ -3123,6 +3200,9 @@ enum PageMessage {
     Detours { id: u32, nodes: Vec<String> },
     /// Nupay's history let go, its balance kept (`wallet`): the account comes back without it.
     WalletClear,
+    /// Queue a new bank loan in Nupay (applied to `game.sii` once the game closes; owner 2026-11-22).
+    WalletLoan { amount: i64, days: i32, rate: f32 },
+    WalletLoanCancel,
     /// Who walks in the Modo Personagem, chosen in the phone's Personagem app (a place in
     /// `westplay_shared::CHARACTER_PEOPLE`): kept with the settings, for the next time out of the truck.
     CharacterPerson { person: f64 },
@@ -3141,6 +3221,8 @@ enum PageMessage {
     SuspensionDamping { which: String },
     CursorSize { which: String },
     SuspensionAuto { on: bool },
+    SuspensionAutoDelay { secs: u8 },
+    SuspensionAutoReturn { secs: u8 },
     /// Brake fade (owner 2026-11-21): on or off, and how soon (`light`, `realistic`, `hard`).
     BrakeFade { on: bool },
     BrakeFadeLevel { which: String },
@@ -3150,6 +3232,7 @@ enum PageMessage {
     BrakeHud { on: bool },
     BrakeHudCorner { which: String },
     BrakeHudSize { which: String },
+    BrakeHudOnFoot { on: bool },
     /// When the brake alarm comes (°C on the realistic level).
     BrakeAlarm { celsius: f64 },
     /// Where the reversing camera shows the game's rear-view mirrors (the page see-through there), in the frame's
@@ -3236,9 +3319,10 @@ struct SuspensionOption {
 impl SuspensionOption {
     const EVERY: Duration = Duration::from_secs(5);
 
-    /// Looked at again (every few seconds, or at once after a change): set if it can be; whether it's there now, if
-    /// that changed.
-    fn check(&mut self, wanted: bool) -> Option<bool> {
+    /// Looked at again (every few seconds, or at once after a change): set if it can be; whether auto reset is there
+    /// now, if that changed. Also syncs profile spring stiffness (`g_suspension_stiffness` /
+    /// `g_cabin_suspension_stiffness`) when a non-Normal damping preset is active (owner 2026-11-22).
+    fn check(&mut self, wanted: bool, damping: westplay_setup::low_suspension::Damping) -> Option<bool> {
         if self.checked.is_some_and(|at| at.elapsed() < Self::EVERY) {
             return None;
         }
@@ -3247,6 +3331,11 @@ impl SuspensionOption {
         if !now && westplay_setup::suspension::set_auto_reset(wanted) {
             log!("[suspension] the game's auto reset set {} in its options", if wanted { "on" } else { "off" });
             now = westplay_setup::suspension::auto_reset().unwrap_or(true) == wanted;
+        }
+        if !westplay_setup::suspension::stiffness_applied(damping)
+            && westplay_setup::suspension::set_stiffness(damping)
+        {
+            log!("[suspension] the profiles' spring stiffness set for {damping:?}");
         }
         (self.applied != Some(now)).then(|| {
             self.applied = Some(now);
@@ -3647,6 +3736,8 @@ mod tests {
                 "suspensionDamping": "normal",
                 "cursorSize": "normal",
                 "suspensionAuto": false,
+                "suspensionAutoDelay": 3,
+                "suspensionAutoReturn": 7,
                 "brakeFade": true,
                 "brakeFadeLevel": "realistic",
                 "brakeSquealVolume": 70,
@@ -3654,6 +3745,7 @@ mod tests {
                 "brakeHud": true,
                 "brakeHudCorner": "bottomLeft",
                 "brakeHudSize": "small",
+                "brakeHudOnFoot": false,
                 "brakeAlarm": 360,
             })
         );
@@ -3713,6 +3805,8 @@ mod tests {
             language: Some("tr_tr".into()),
             time_zones: true,
             money: None,
+            loans: Vec::new(),
+            save_path: None,
         };
         assert_eq!(
             super::player_messages_for(&player),

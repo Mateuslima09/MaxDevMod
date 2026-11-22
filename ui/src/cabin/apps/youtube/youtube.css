@@ -625,7 +625,7 @@
 
 .yt-glass {
   background: rgb(0 0 0 / 0.3);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(var(--glass-blur, 5px));
   /* A faint rim: the shape still reads over a dark picture. */
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
 }

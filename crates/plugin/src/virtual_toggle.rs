@@ -80,7 +80,11 @@ pub fn on_present(frame: u64) {
     let Some(bridge) = crate::bridge::get() else { return };
     let plugin = &bridge.plugin;
     let reversing = plugin.telemetry.read().is_some_and(|t| t.electric_enabled && (t.displayed_gear < 0 || t.gear < 0));
-    let in_cab = frame.saturating_sub(plugin.cab_frame.load(Ordering::Relaxed)) <= CAB_LATELY && !crate::character::walking();
+    // `cab_frame` is stamped with `plugin.heartbeat` (not the D3D11 present counter `frame`), so compare against
+    // `heartbeat`; comparing against `frame` made `in_cab` go permanently false after a few minutes, blocking F2
+    // and preventing the player from getting out of the truck (owner 2026-11-22).
+    let heartbeat = plugin.heartbeat.load(Ordering::Relaxed);
+    let in_cab = heartbeat.saturating_sub(plugin.cab_frame.load(Ordering::Relaxed)) <= CAB_LATELY && !crate::character::walking();
     // Paused (the game's menu): nothing pressed, left as they are till the game goes on.
     if crate::telemetry::paused() {
         return;
@@ -88,6 +92,7 @@ pub fn on_present(frame: u64) {
     // Getting out (the walk key pressed with them on): off first, whatever the gear, a while.
     if REQUEST_OFF.swap(false, Ordering::Relaxed) {
         OFF_UNTIL.store(frame + 600, Ordering::Relaxed);
+        PRESSES.store(0, Ordering::Relaxed);
     }
     let getting_out = frame < OFF_UNTIL.load(Ordering::Relaxed) && !crate::character::walking();
     // Both on all the time in the cab while one is chosen to be seen (owner 2026-11-18: "by default both on, the right

@@ -35,6 +35,8 @@ export const BRAKES_WORDS = {
     high: 'High',
     hud: 'Brakes in the game',
     hudShown: 'Show',
+    hudOnFoot: 'In Character Mode',
+    hudNote: 'Turn “In Character Mode” off to hide the brake HUD while walking outside the truck.',
     corner: 'Corner',
     bottomLeft: '↙',
     bottomRight: '↘',
@@ -71,6 +73,8 @@ export const BRAKES_WORDS = {
     high: 'Alto',
     hud: 'Freios no jogo',
     hudShown: 'Mostrar',
+    hudOnFoot: 'No Modo Personagem',
+    hudNote: 'Desligue “No Modo Personagem” para esconder o HUD dos freios quando estiver a pé fora do caminhão.',
     corner: 'Canto',
     bottomLeft: '↙',
     bottomRight: '↘',
@@ -183,33 +187,48 @@ export function BrakesApp({ words }: { words: BrakesWords }) {
         </Row>
       </List>
       <List footer={words.alarmNote}>
-        <Row label={words.alarm}>
-          <Segmented
-            options={ALARMS.map((c) => [String(c), `${c + SHIFT[o.brakeFadeLevel]}°`] as [string, string])}
-            chosen={String(
-              ALARMS.reduce((best, c) => (Math.abs(c - o.brakeAlarm) < Math.abs(best - o.brakeAlarm) ? c : best)),
-            )}
-            choose={(c) => postToHost({ type: 'brakeAlarm', celsius: Number(c) })}
-          />
-        </Row>
+        <Row
+          label={
+            <span className="ios-alert-row">
+              <span>{words.alarm}</span>
+              <Segmented
+                options={ALARMS.map((c) => [String(c), `${c + SHIFT[o.brakeFadeLevel]}°`] as [string, string])}
+                chosen={String(
+                  ALARMS.reduce((best, c) => (Math.abs(c - o.brakeAlarm) < Math.abs(best - o.brakeAlarm) ? c : best)),
+                )}
+                choose={(c) => postToHost({ type: 'brakeAlarm', celsius: Number(c) })}
+              />
+            </span>
+          }
+        />
       </List>
       <List header={words.sounds}>
-        <Row label={words.squeal}>
-          <Segmented
-            options={volumes}
-            chosen={step(o.brakeSquealVolume)}
-            choose={(key) => postToHost({ type: 'brakeSqueal', volume: Number(key) })}
-          />
-        </Row>
-        <Row label={words.warning}>
-          <Segmented
-            options={volumes}
-            chosen={step(o.brakeWarningVolume)}
-            choose={(key) => postToHost({ type: 'brakeWarning', volume: Number(key) })}
-          />
-        </Row>
+        <Row
+          label={
+            <span className="ios-alert-row">
+              <span>{words.squeal}</span>
+              <Segmented
+                options={volumes}
+                chosen={step(o.brakeSquealVolume)}
+                choose={(key) => postToHost({ type: 'brakeSqueal', volume: Number(key) })}
+              />
+            </span>
+          }
+        />
+        <Row
+          label={
+            <span className="ios-alert-row">
+              <span>{words.warning}</span>
+              <Segmented
+                options={volumes}
+                chosen={step(o.brakeWarningVolume)}
+                choose={(key) => postToHost({ type: 'brakeWarning', volume: Number(key) })}
+              />
+            </span>
+          }
+        />
       </List>
-      <List header={words.hud}>
+      <List header={words.hud} footer={words.hudNote}>
         <Row label={words.hudShown}>
           <Segmented
             options={[
@@ -220,6 +239,21 @@ export function BrakesApp({ words }: { words: BrakesWords }) {
             choose={(value) => postToHost({ type: 'brakeHud', on: value === 'on' })}
           />
         </Row>
+        <Row
+          label={
+            <span className="ios-alert-row">
+              <span>{words.hudOnFoot}</span>
+              <Segmented
+                options={[
+                  ['on', words.on],
+                  ['off', words.off],
+                ]}
+                chosen={o.brakeHudOnFoot ? 'on' : 'off'}
+                choose={(value) => postToHost({ type: 'brakeHudOnFoot', on: value === 'on' })}
+              />
+            </span>
+          }
+        />
         <Row label={words.corner}>
           <Segmented<BrakeHudCorner>
             options={[

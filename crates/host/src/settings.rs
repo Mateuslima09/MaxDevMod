@@ -58,6 +58,12 @@ pub struct Settings {
     /// (`auto_suspension`). Off at first.
     #[serde(deserialize_with = "lenient")]
     pub suspension_auto: bool,
+    /// Seconds of rough road before automatic suspension raises (1..=5, 0 = default 3 s; owner 2026-11-22).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_delay: u8,
+    /// Seconds of smooth road before automatic suspension lowers back down (3..=15, 0 = default 7 s; owner 2026-11-22).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_return: u8,
     /// Brake fade (owner 2026-11-21, brake_fade.rs): the brakes heat up and, overheated, lose force. On at first.
     #[serde(deserialize_with = "lenient")]
     pub brake_fade: Shown,
@@ -70,17 +76,36 @@ pub struct Settings {
     pub brake_squeal_volume: Volume70,
     #[serde(deserialize_with = "lenient")]
     pub brake_warning_volume: Volume70,
-    /// The brakes' HUD (plugin brake_hud.rs): shown, its corner and its size.
+    /// The brakes' HUD (plugin brake_hud.rs): shown, its corner, its size, and whether to show it on foot in Modo
+    /// Personagem (owner 2026-11-21; off at first so the screen stays clean while walking).
     #[serde(deserialize_with = "lenient")]
     pub brake_hud: Shown,
     #[serde(deserialize_with = "lenient")]
     pub brake_hud_corner: BrakeHudCorner,
     #[serde(deserialize_with = "lenient")]
     pub brake_hud_size: BrakeHudSize,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud_on_foot: bool,
     /// At what temperature the dashboard's warning and the phone's "no brakes" come (°C on the realistic level; the
     /// light and hard ones move it with the fade); 0, the usual 360.
     #[serde(deserialize_with = "lenient")]
     pub brake_alarm_c: u16,
+}
+
+/// Rough-road activation delay in seconds (1..=5, default 3 when unset/0).
+pub fn suspension_auto_delay(settings: &Settings) -> u8 {
+    match settings.suspension_auto_delay {
+        0 => 3,
+        secs => secs.clamp(1, 5),
+    }
+}
+
+/// Smooth-road return delay in seconds (3..=15, default 7 when unset/0).
+pub fn suspension_auto_return(settings: &Settings) -> u8 {
+    match settings.suspension_auto_return {
+        0 => 7,
+        secs => secs.clamp(3, 15),
+    }
 }
 
 /// The brake alarm's temperature on the realistic level (`Settings::brake_alarm_c`, 0 the usual).

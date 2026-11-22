@@ -226,7 +226,9 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
     let Some(bridge) = bridge::get().filter(|_| bridge::host_alive()) else { return };
     let said = bridge.host.brake_hud.load(Ordering::Acquire);
     let driving = bridge.plugin.telemetry.read().is_some_and(|t| !t.paused && t.electric_enabled);
-    if said & 0x100 == 0 || said & 1 == 0 || !driving {
+    // Bit 5: show while walking in Modo Personagem (owner 2026-11-21); hidden on foot when 0.
+    let on_foot_ok = (said & 0x20 != 0) || !crate::character::walking();
+    if said & 0x100 == 0 || said & 1 == 0 || !driving || !on_foot_ok {
         *STARTED.lock().unwrap_or_else(|e| e.into_inner()) = None;
         return;
     }

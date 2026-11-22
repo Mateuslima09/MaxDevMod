@@ -198,8 +198,9 @@ pub fn view_matches() -> bool {
 /// one, the driver's side, so the right one can be a virtual mirror of the player's: `hide_virtual`).
 static OURS_SIDE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 static WRONG_SIDE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// Frames our mirror may hold the other side's view before another is taken for ours (`mirror`).
-const WRONG_SIDE_FRAMES: u64 = 20;
+/// Frames our mirror may hold the other side's view before another is taken for ours (`mirror`): 4 frames (~0.1 s)
+/// so the very first reverse switches to the driver's mirror almost at once (owner 2026-11-22: 3 s black screen).
+const WRONG_SIDE_FRAMES: u64 = 4;
 /// Blocks read a frame of each main mirror, only to know which side its view is of (which virtual mirror to hide,
 /// all the time); the most voted turn needs a handful.
 const SIDE_VOTES: u32 = 64;
@@ -573,7 +574,7 @@ fn sides_now() -> std::collections::HashMap<usize, i32> {
     let behind = back(crate::telemetry::truck().heading, (1.0, 1.0));
     let mut sides: std::collections::HashMap<usize, i32> = votes
         .iter()
-        .filter(|(_, these)| these.read >= SIDE_READ_ENOUGH)
+        .filter(|(texture, these)| **texture >= 0x1000 && these.read >= SIDE_READ_ENOUGH)
         .filter_map(|(texture, these)| {
             best_turn(&these.votes, &these.truck_turns, behind).map(|turn| (*texture, side_of(&turn, behind)))
         })
@@ -585,6 +586,19 @@ fn sides_now() -> std::collections::HashMap<usize, i32> {
     }
     *now = (frame, votes.len(), sides.clone());
     sides
+}
+
+/// Moves votes collected during a high-quality mirror's G-buffer pass (`from`, a small group tag) onto its final
+/// R11G11B10 texture (`to`), so `side_of_texture(to)` knows which side it is (owner 2026-11-22: ATS with high mirror
+/// quality drew all 3D geometry in the `f10x4` G-buffer pass before the final target was bound).
+pub fn alias_texture_votes(from: usize, to: usize) {
+    if from == 0 || to == 0 || from == to {
+        return;
+    }
+    let mut all = TEXTURE_VOTES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(votes) = all.remove(&from) {
+        all.insert(to, votes);
+    }
 }
 
 /// One of a main mirror's blocks counted for its texture's side (at most [`SIDE_VOTES`] a frame each).
@@ -672,7 +686,13 @@ pub fn on_present(frame: u64) {
         }
         sides.retain(|_, (_, at)| frame.saturating_sub(*at) <= 600);
     }
-    let ours_side = side_of_texture(crate::mirror::ours_texture());
+    let voted = voted_turn(behind_now);
+    let mut ours_side = side_of_texture(crate::mirror::ours_texture());
+    if ours_side == 0
+        && let Some(turn) = voted
+    {
+        ours_side = side_of(&turn, behind_now);
+    }
     if ours_side != 0 && OURS_SIDE.swap(ours_side, Ordering::Relaxed) != ours_side {
         log!(
             "retrovisor: our mirror's view is of the {} one (the driver's: {})",
@@ -688,7 +708,7 @@ pub fn on_present(frame: u64) {
     }
     // Our camera's turn: only the driver's side mirror's (owner 2026-11-18); the other one's view in our texture (the
     // game hands the views round) isn't our camera's.
-    if let Some(turn) = voted_turn(behind_now)
+    if let Some(turn) = voted
         && side_of(&turn, behind_now) == driver_side()
     {
         TURNS_TAKEN.fetch_add(1, Ordering::Relaxed);

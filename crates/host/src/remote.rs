@@ -84,6 +84,7 @@ const PAGE_MESSAGES: &[&str] = &[
     "brakeHud",
     "brakeHudCorner",
     "brakeHudSize",
+    "brakeHudOnFoot",
     "brakeAlarm",
     // The reversing camera moved by hand, from the phones too (owner 2026-11-20).
     "cameraNudge",

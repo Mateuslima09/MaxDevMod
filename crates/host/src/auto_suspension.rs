@@ -25,32 +25,45 @@ use std::time::{Duration, Instant};
 
 use westplay_shared::{Telemetry, truck_command_bit};
 
+use crate::settings::Damping;
+
+/// Threshold multiplier by suspension stiffness (calibrated from owner's 2026-11-22 log:
+/// good asphalt in Firmest was 0.3–1.6 cm RMS / 0.8–5.1 cm widest; rough asphalt was 2.0–3.2 cm / 7.0–10.5 cm).
+fn stiffness_scale(damping: Damping) -> f32 {
+    match damping {
+        Damping::Soft => 1.35,
+        Damping::Normal => 1.0,
+        Damping::Firm => 0.95,
+        Damping::Firmest => 0.90,
+    }
+}
+
 /// Over this (m/s, 80 km/h) for [`AFTER`], lowered; under [`SLOW`] (60 km/h) for [`AFTER`], back to normal.
 const FAST: f32 = 80.0 / 3.6;
 const SLOW: f32 = 60.0 / 3.6;
 const AFTER: Duration = Duration::from_secs(5);
 /// How long the lowering is held: a little (all the way took about 5 s in the app's Mínima, 1.5 s bottomed out).
 const LOWER_FOR: Duration = Duration::from_millis(400);
-/// How long the raising on a rough road is held.
-const RAISE_FOR: Duration = Duration::from_millis(800);
+/// How long the raising on a rough road is held (owner 2026-11-22: 800 ms barely lifted a lowered truck;
+/// 2400 ms lifts it substantially clear of rough terrain and lowers back the exact same amount when smooth).
+const RAISE_FOR: Duration = Duration::from_millis(2400);
 /// The player's own suspension press: left alone this long.
 const MANUAL: Duration = Duration::from_secs(60);
 
 /// The springs' jumping: their readings over this long, sampled at most this often; rough over [`ROUGH`] (metres,
 /// the root mean square of how far they are from their mean) for [`ROUGH_AFTER`], smooth under [`SMOOTH`] for
 /// [`SMOOTH_AFTER`]; only moving over [`MOVING`].
+/// Recalibrated (owner 2026-11-22): old 1.2 cm / 6 cm thresholds false-triggered on normal asphalt and 0.9 cm / 20 s
+/// prevented returning to normal height once back on paved roads.
 const WINDOW: Duration = Duration::from_secs(2);
 const SAMPLE: Duration = Duration::from_millis(40);
-const ROUGH: f32 = 0.012;
-// From the owner's dirt road (2026-11-19 log): dirt 1.2 to 2.7 cm, asphalt 0.5 to 0.9 cm.
-const SMOOTH: f32 = 0.009;
-/// An axle's widest swing over [`WINDOW`] (metres): rough over this, smooth under [`SMOOTH_SWING`] (owner 2026-11-21:
-/// lowered, the spring against its stop swings one way only, its mean swing small on a bad road).
-const ROUGH_SWING: f32 = 0.06;
-const SMOOTH_SWING: f32 = 0.035;
-const ROUGH_AFTER: Duration = Duration::from_secs(2);
-// Up for good on a rough road (owner 2026-11-19: "hold it 15 s or more, never lower while it stays rough").
-const SMOOTH_AFTER: Duration = Duration::from_secs(20);
+const ROUGH: f32 = 0.025;
+const SMOOTH: f32 = 0.018;
+/// An axle's widest swing over [`WINDOW`] (metres): rough over this, smooth under [`SMOOTH_SWING`].
+const ROUGH_SWING: f32 = 0.095;
+const SMOOTH_SWING: f32 = 0.062;
+const ROUGH_AFTER: Duration = Duration::from_secs(3);
+const SMOOTH_AFTER: Duration = Duration::from_secs(7);
 /// After the app's own press, the springs' readings left out this long (the suspension moving isn't the road).
 const QUIET_AFTER: Duration = Duration::from_millis(2500);
 const MOVING: f32 = 15.0 / 3.6;
@@ -203,8 +216,23 @@ impl AutoSuspension {
         press
     }
 
-    /// The commands to hold now (bits, with the phones'), `on` as the player set it.
+    /// The commands to hold now (bits, with the phones'), `on` as the player set it, using Normal stiffness scale.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn tick(&mut self, on: bool, telemetry: Option<&Telemetry>, now: Instant) -> u64 {
+        self.tick_with_damping(on, Damping::Normal, ROUGH_AFTER, SMOOTH_AFTER, telemetry, now)
+    }
+
+    /// The commands to hold now (bits, with the phones'), scaling rough/smooth road thresholds to match `damping`
+    /// and using `rough_after` / `smooth_after` as the player-configured delays.
+    pub fn tick_with_damping(
+        &mut self,
+        on: bool,
+        damping: Damping,
+        rough_after: Duration,
+        smooth_after: Duration,
+        telemetry: Option<&Telemetry>,
+        now: Instant,
+    ) -> u64 {
         if let Some((held, until)) = self.pressing {
             if now < until {
                 return held;
@@ -239,7 +267,7 @@ impl AutoSuspension {
         if speed > MOVING && self.logged_at.is_none_or(|at| now.saturating_duration_since(at) >= LOG_EVERY) {
             self.logged_at = Some(now);
             log!(
-                "suspension by itself: {:.0} km/h, road {}, {:?}",
+                "suspension by itself: {:.0} km/h, road {}, {:?}, {damping:?}",
                 speed * 3.6,
                 roughness.map_or("not read".to_owned(), |r| format!("{:.1} cm (widest {:.1} cm)", r.rms * 100.0, r.widest * 100.0)),
                 self.level
@@ -322,12 +350,19 @@ impl AutoSuspension {
 
         self.fast_since = since(self.fast_since, speed > FAST, now);
         self.slow_since = since(self.slow_since, speed < SLOW, now);
-        // Only what was read moving counts: standing, or the suspension moving, leaves both as they were.
+        // Only what was read moving (and not braking hard) counts as a rough road; stopping or braking clears
+        // `rough_since` so it can never false-trigger "rough road at 0 km/h" (owner 2026-11-22).
+        // Thresholds scale with the chosen suspension stiffness (Soft moves more, Firm/Firmest move less).
+        let scale = stiffness_scale(damping);
         if let Some(r) = roughness {
-            self.rough_since = since(self.rough_since, r.rms > ROUGH || r.widest > ROUGH_SWING, now);
-            self.smooth_since = since(self.smooth_since, r.rms < SMOOTH && r.widest < SMOOTH_SWING, now);
+            let is_rough = t.brake <= BRAKE_HARD && (r.rms > ROUGH * scale || r.widest > ROUGH_SWING * scale);
+            self.rough_since = since(self.rough_since, is_rough, now);
+            self.smooth_since =
+                since(self.smooth_since, r.rms < SMOOTH * scale && r.widest < SMOOTH_SWING * scale, now);
+        } else {
+            self.rough_since = None;
         }
-        let rough = held_for(self.rough_since, ROUGH_AFTER, now);
+        let rough = held_for(self.rough_since, rough_after, now);
         let kmh = speed * 3.6;
 
         match self.level {
@@ -337,8 +372,8 @@ impl AutoSuspension {
                 self.level = Level::High;
                 self.press(&["frontsuspup", "rearsuspup"], hold, now, format_args!("raised on a rough road at {kmh:.0} km/h"))
             }
-            // Down again only after a long while smooth (never while it stays rough, whatever the speed).
-            Level::High if held_for(self.smooth_since, SMOOTH_AFTER, now) => {
+            // Down again only after a while smooth (never while it stays rough, whatever the speed).
+            Level::High if held_for(self.smooth_since, smooth_after, now) => {
                 self.level = Level::Normal;
                 self.press(
                     &["frontsuspdwn", "rearsuspdwn"],
@@ -443,11 +478,28 @@ mod tests {
         let mut held = 0;
         for i in 0..200u32 {
             let mut t = driving(40.0);
-            let hit = if i % 10 == 0 { -0.07 } else { 0.0 };
+            let hit = if i % 10 == 0 { -0.10 } else { 0.0 };
             t.suspension = [0.2 + hit, 0.2, -1.0];
             held |= auto.tick(true, Some(&t), start + SAMPLE * i);
         }
         assert_ne!(held & bits(&["frontsuspup"]), 0);
+    }
+
+    #[test]
+    fn never_raises_for_rough_road_when_stopped() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        // Brief rough samples while moving (not long enough to trigger), then stop.
+        for i in 0..30u32 {
+            let mut t = driving(30.0);
+            let bump = if i % 2 == 0 { 0.04 } else { -0.04 };
+            t.suspension = [0.1 + bump, 0.1 + bump, -1.0];
+            auto.tick(true, Some(&t), start + SAMPLE * i);
+        }
+        let stopped = start + SAMPLE * 30;
+        let held = auto.tick(true, Some(&driving(0.0)), stopped + ROUGH_AFTER + Duration::from_secs(1));
+        assert_eq!(held, 0);
+        assert_eq!(auto.level, Level::Normal);
     }
 
     #[test]

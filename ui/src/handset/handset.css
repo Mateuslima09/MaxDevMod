@@ -12,19 +12,20 @@ body,
   overflow: hidden;
 }
 
-/* iOS's colours, dark and light. */
+/* MAXDEV MOD Light Glassmorphism tokens, dark and light (owner 2026-11-22). */
 .handset {
-  --ios-bg: #000;
-  --ios-group: #1c1c1e;
-  --ios-fill: rgb(120 120 128 / 0.32);
-  --ios-sep: rgb(84 84 88 / 0.6);
-  --ios-label: #fff;
-  --ios-secondary: rgb(235 235 245 / 0.6);
-  --ios-tint: #0a84ff;
-  --ios-red: #ff453a;
+  --ios-bg: #0d0f13;
+  --ios-group: rgb(24 27 33 / 0.84);
+  --ios-card-border: rgb(255 255 255 / 0.11);
+  --ios-fill: rgb(255 255 255 / 0.13);
+  --ios-sep: rgb(255 255 255 / 0.09);
+  --ios-label: #f5f7fa;
+  --ios-secondary: rgb(218 222 232 / 0.66);
+  --ios-tint: #e53935;
+  --ios-red: #e53935;
   --ios-green: #30d158;
-  --ios-material: rgb(30 30 36 / 0.8);
-  --ios-material-edge: rgb(255 255 255 / 0.1);
+  --ios-material: rgb(22 25 31 / 0.8);
+  --ios-material-edge: rgb(255 255 255 / 0.12);
   --edge: 12px;
   --tile-gap: 10px;
   --panel-radius: 22px;
@@ -45,22 +46,34 @@ body,
 
 .handset.appearance-light {
   --ios-bg: #f2f2f7;
-  --ios-group: #fff;
-  --ios-fill: rgb(118 118 128 / 0.12);
-  --ios-sep: rgb(60 60 67 / 0.29);
-  --ios-label: #000;
-  --ios-secondary: rgb(60 60 67 / 0.6);
-  --ios-tint: #007aff;
-  --ios-red: #ff3b30;
+  --ios-group: rgb(255 255 255 / 0.88);
+  --ios-card-border: rgb(20 22 26 / 0.1);
+  --ios-fill: rgb(118 118 128 / 0.14);
+  --ios-sep: rgb(60 60 67 / 0.22);
+  --ios-label: #14161a;
+  --ios-secondary: rgb(60 60 67 / 0.64);
+  --ios-tint: #d32f2f;
+  --ios-red: #d32f2f;
   --ios-green: #34c759;
-  --ios-material: rgb(255 255 255 / 0.85);
-  --ios-material-edge: rgb(255 255 255 / 0.5);
+  --ios-material: rgb(255 255 255 / 0.86);
+  --ios-material-edge: rgb(255 255 255 / 0.55);
 }
 
 .handset button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 120ms ease,
+    opacity 140ms ease;
+}
+
+.handset button:disabled {
+  opacity: 0.42;
+  cursor: default;
 }
 
 .handset-screen {
@@ -663,8 +676,12 @@ body,
 }
 
 .ios-list {
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--ios-group);
+  border: 1px solid var(--ios-card-border);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 4px 14px rgb(0 0 0 / 0.22);
   overflow: hidden;
 }
 
@@ -781,28 +798,35 @@ body,
 .ios-segmented {
   flex: none;
   display: flex;
-  padding: 2px;
-  border-radius: 9px;
+  padding: 3px;
+  border-radius: 999px;
   background: var(--ios-fill);
+  border: 1px solid var(--ios-card-border);
 }
 
 .ios-segmented button {
   padding: 5px 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 999px;
   background: none;
   font-size: 13px !important;
   font-weight: 500;
 }
 
+.ios-segmented button:active {
+  transform: scale(0.96);
+}
+
 .ios-segmented button.on {
-  background: #636366 !important;
+  background: var(--ios-tint) !important;
+  color: #fff !important;
   font-weight: 650;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+  box-shadow: 0 2px 8px rgb(229 57 53 / 0.32);
 }
 
 .appearance-light .ios-segmented button.on {
-  background: #fff !important;
+  background: var(--ios-tint) !important;
+  color: #fff !important;
 }
 
 .handset .phone-volume {
@@ -966,10 +990,19 @@ body,
 /* A choice as wide as its row. */
 .ios-row-label .ios-segmented {
   display: flex;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ios-row-label .ios-segmented button {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 4px;
+  font-size: 12px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The real icons (the cab's): the image is the whole icon, its own colours and gloss. */
@@ -3205,9 +3238,12 @@ body,
 }
 
 /* The volume keys on the phone's left side, as an iPhone's (SideKeys.tsx): the phone a little narrower, so they
-   stand out of its edge in the strip it leaves; each wider than it looks, to be easy to hit. */
+   stand out of its edge in the strip it leaves; each wider than it looks, to be easy to hit.
+   `width: auto` overrides `.shell`'s `width: 100%` so `left: 5px; right: 0` doesn't push the right bezel 5 px past
+   the viewport (owner 2026-11-22). */
 .handset.with-keys {
   left: 5px;
+  width: auto;
   overflow: visible;
 }
 
@@ -3258,7 +3294,7 @@ body,
   border-radius: 15px;
   overflow: hidden;
   background: rgb(60 60 66 / 0.75);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(5px);
   color: #fff;
   z-index: 40;
   display: flex;

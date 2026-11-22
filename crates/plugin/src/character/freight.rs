@@ -95,6 +95,9 @@ fn unload_cargo_words(language: &str) -> &'static CStr {
 const LOAD_HELD: Duration = Duration::from_millis(400);
 /// After coupling or uncoupling by hand, how long E at the fifth wheel does nothing.
 const AFTER_BY_HAND: Duration = Duration::from_secs(4);
+/// After coupling a trailer, how long to wait for the game's GPS to recalculate the route to the delivery (it points
+/// to the uncoupled trailer a few metres away for a frame right after coupling).
+const ROUTE_SETTLE: Duration = Duration::from_secs(1);
 /// How far over the truck's own point the ground is (metres, as bits), learnt (`frame`): none, as the owner's log
 /// measured it (2026-11-11: the player's ground and the truck's point both 91.01). A clerk put there from the cab
 /// sank where the yard rose by the trailer, and floated with 0.7 m added: the ground right by them is the player's,
@@ -621,6 +624,8 @@ pub(super) struct Freight {
     uncoupling: bool,
     /// The route's last distance not 0 (metres).
     last_route: f32,
+    /// When the trailer last became coupled (`ROUTE_SETTLE`).
+    coupled_at: Option<Instant>,
     /// When coupling or uncoupling by hand was last done (`AFTER_BY_HAND`).
     done_by_hand: Option<Instant>,
     /// Since when the game's activate is held to load the trailer, the papers collected.
@@ -663,6 +668,7 @@ impl Freight {
             locked: false,
             uncoupling: false,
             last_route: f32::MAX,
+            coupled_at: None,
             done_by_hand: None,
             loading: None,
             load_armed: false,
@@ -786,22 +792,34 @@ pub(super) unsafe fn frame(state: &mut State) {
     let trailer = crate::telemetry::trailer();
     let job = crate::telemetry::job();
     let navigation = crate::telemetry::navigation_distance();
+    // After coupling a trailer, the game's GPS still points to the trailer (a few metres away) for a frame before
+    // recalculating the route to the delivery (owner 2026-11-21: re-coupling on the road spawned the delivery clerk
+    // for one frame, who then walked away in front of the truck). Wait for the route to settle, and never store an
+    // uncoupled distance in `last_route`.
+    if !trailer.connected {
+        freight.coupled_at = None;
+    } else if freight.was_connected == Some(false) && freight.coupled_at.is_none() {
+        freight.coupled_at = Some(Instant::now());
+    }
+    let just_coupled = freight.coupled_at.is_some_and(|at| at.elapsed() < ROUTE_SETTLE);
+    let cargo_loaded = job.as_ref().is_some_and(|job| job.cargo_loaded);
     // The route's last distance not 0 (0: on its end, or no route at all; `Facts::at_end`).
-    if navigation > 0.0 {
+    if navigation > 0.0 && trailer.connected && !just_coupled {
         freight.last_route = navigation;
     }
     let facts = Facts {
         job: job.as_ref().map(job_key),
-        cargo_loaded: job.as_ref().is_some_and(|job| job.cargo_loaded),
+        cargo_loaded,
         connected: trailer.connected,
         // (Its distance 0 too, as it was last near: parked on the spot the route ends at; owner's log 2026-11-11,
         // the clerk at the delivery walked away and came back as it went to 0 and back.)
         // Before loading, 0 is the shipper's yard: a job taken there with the player's own trailer has no route
         // yet (owner 2026-11-12: "the clerk doesn't show and Enter loads").
         at_end: job.is_some()
+            && !(cargo_loaded && (!trailer.connected || just_coupled))
             && (if navigation > 0.0 {
                 navigation
-            } else if !job.as_ref().is_some_and(|job| job.cargo_loaded) {
+            } else if !cargo_loaded {
                 0.0
             } else {
                 freight.last_route

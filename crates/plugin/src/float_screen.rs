@@ -118,6 +118,11 @@ type M4 = [[f32; 4]; 4];
 
 /// Whether the player switched it on (kept in the file; read at the first telemetry).
 static ON: AtomicBool = AtomicBool::new(false);
+
+/// Whether the floating virtual screen is currently enabled.
+pub fn is_on() -> bool {
+    ON.load(Ordering::Relaxed)
+}
 /// The main view's targets are bound now (a big, wide target with a depth buffer).
 static MAIN_VIEW: AtomicBool = AtomicBool::new(false);
 /// Only the pass drawing the scene's surfaces is read (owner 2026-11-20: back from the outside camera the screen took
@@ -921,6 +926,7 @@ Vertex vs(uint id : SV_VertexID) {
 }
 Texture2D screen : register(t0);
 Texture2D brand : register(t1);
+Texture2D under : register(t2);
 SamplerState smooth : register(s0);
 float rounded(float2 p, float2 half_size, float r) {
     float2 q = abs(p) - half_size + r;
@@ -939,7 +945,9 @@ float4 ps(Vertex v) : SV_Target {
     float in_logo = all(logo_uv >= 0) && all(logo_uv <= 1) ? 1 : 0;
     color = color * (1 - mark.a * in_logo) + mark.rgb * in_logo;
     float2 uv = float2(0.5 + p.x / picture.x, 0.5 - p.y / picture.y);
-    float3 shown = screen.Sample(smooth, saturate(uv)).rgb;
+    float4 fg = screen.Sample(smooth, saturate(uv));
+    float3 bg = under.Sample(smooth, saturate(uv)).rgb;
+    float3 shown = fg.rgb + bg * (1 - fg.a);
     float inside = rounded(p, picture.xy * 0.5, picture.w);
     float cover = saturate(0.5 - inside / max(fwidth(inside), 1e-5));
     color = lerp(color, shown, cover);
@@ -968,6 +976,118 @@ struct Drawing {
 
 // SAFETY: used only on the game's render thread (Present), the lock only keeping it there.
 unsafe impl Send for Drawing {}
+
+/// Live copy of the game's original dashboard GPS render target, shown underneath transparent regions of the
+/// floating virtual screen (e.g. when the player hands the screen back to the truck's map, owner 2026-11-22).
+struct GpsCapture {
+    device: usize,
+    size: (u32, u32),
+    format: DXGI_FORMAT,
+    texture: ID3D11Texture2D,
+    view: ID3D11ShaderResourceView,
+    captured_at: u64,
+}
+
+// SAFETY: accessed only on the game's render thread (`screens::refresh` and `on_present`).
+unsafe impl Send for GpsCapture {}
+
+static GPS_UNDER: Mutex<Option<GpsCapture>> = Mutex::new(None);
+/// How many presents a captured GPS map stays valid without a fresh capture (e.g. switching to a truck without GPS).
+const GPS_FRESH_FOR: u64 = 30;
+
+fn gps_srv_desc(format: DXGI_FORMAT) -> Option<D3D11_SHADER_RESOURCE_VIEW_DESC> {
+    use windows::Win32::Graphics::Dxgi::Common::{
+        DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_TYPELESS,
+        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+    };
+    let concrete = match format {
+        DXGI_FORMAT_R8G8B8A8_TYPELESS => DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        DXGI_FORMAT_B8G8R8A8_TYPELESS => DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+        _ => return None,
+    };
+    Some(D3D11_SHADER_RESOURCE_VIEW_DESC {
+        Format: concrete,
+        ViewDimension: D3D_SRV_DIMENSION_TEXTURE2D,
+        Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+            Texture2D: D3D11_TEX2D_SRV { MostDetailedMip: 0, MipLevels: 1 },
+        },
+    })
+}
+
+/// Captures the game's clean original GPS render target right before WestPlay's overlay draws over it.
+///
+/// # Safety
+/// Must be called on the game's render thread with its live `context`, `device`, and bound GPS render-target texture.
+pub unsafe fn capture_gps_map(context: &ID3D11DeviceContext, device: &ID3D11Device, rt: &ID3D11Texture2D) {
+    // SAFETY: live D3D11 objects on the render thread; CopySubresourceRegion from an RTV to a separate SRV texture is valid.
+    unsafe {
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        rt.GetDesc(&mut desc);
+        if desc.SampleDesc.Count != 1 || desc.Width < 64 || desc.Height < 64 {
+            return;
+        }
+        let Ok(mut slot) = GPS_UNDER.try_lock() else { return };
+        let device_raw = device.as_raw() as usize;
+        let size = (desc.Width, desc.Height);
+        let matches = slot.as_ref().is_some_and(|c| c.device == device_raw && c.size == size && c.format == desc.Format);
+        if !matches {
+            let mut texture = None;
+            if device
+                .CreateTexture2D(
+                    &D3D11_TEXTURE2D_DESC {
+                        Width: desc.Width,
+                        Height: desc.Height,
+                        MipLevels: 1,
+                        ArraySize: 1,
+                        Format: desc.Format,
+                        SampleDesc: windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                        Usage: D3D11_USAGE_DEFAULT,
+                        BindFlags: windows::Win32::Graphics::Direct3D11::D3D11_BIND_SHADER_RESOURCE.0 as u32,
+                        ..Default::default()
+                    },
+                    None,
+                    Some(&mut texture),
+                )
+                .is_err()
+            {
+                return;
+            }
+            let Some(texture) = texture else { return };
+            let srv_desc = gps_srv_desc(desc.Format);
+            let mut view = None;
+            if device
+                .CreateShaderResourceView(&texture, srv_desc.as_ref().map(|d| d as *const _), Some(&mut view))
+                .is_err()
+            {
+                return;
+            }
+            let Some(view) = view else { return };
+            log!("tela flutuante: capturing game GPS map ({}x{}, format {:?})", desc.Width, desc.Height, desc.Format);
+            *slot = Some(GpsCapture {
+                device: device_raw,
+                size,
+                format: desc.Format,
+                texture,
+                view,
+                captured_at: 0,
+            });
+        }
+        if let Some(capture) = slot.as_mut() {
+            context.CopySubresourceRegion(&capture.texture, 0, 0, 0, 0, rt, 0, None);
+            capture.captured_at = PRESENTS.load(Ordering::Relaxed).max(1);
+        }
+    }
+}
+
+pub(crate) fn gps_under_view(device: &ID3D11Device) -> Option<ID3D11ShaderResourceView> {
+    let slot = GPS_UNDER.try_lock().ok()?;
+    let capture = slot.as_ref()?;
+    let now = PRESENTS.load(Ordering::Relaxed);
+    (capture.device == device.as_raw() as usize
+        && capture.captured_at != 0
+        && now.saturating_sub(capture.captured_at) <= GPS_FRESH_FOR)
+        .then(|| capture.view.clone())
+}
 
 static DRAWING: Mutex<Option<Result<Drawing, ()>>> = Mutex::new(None);
 /// After a failed draw, the present it's tried again at (owner 2026-11-21, ETS2 1.62, old Actros: one "invalid
@@ -1303,7 +1423,17 @@ impl Drawing {
             let mut target = None;
             self.device.CreateRenderTargetView(&back, None, Some(&mut target)).map_err(|e| step(e, "the back buffer's target"))?;
             let target = target.ok_or_else(windows::core::Error::empty)?;
-            self.render(&context, &target, back_desc.Width as f32, back_desc.Height as f32, mvp, view, logo_view)?;
+            let under = if black { None } else { gps_under_view(&self.device) };
+            self.render(
+                &context,
+                &target,
+                back_desc.Width as f32,
+                back_desc.Height as f32,
+                mvp,
+                view,
+                logo_view,
+                under.as_ref(),
+            )?;
             Ok(true)
         }
     }
@@ -1323,6 +1453,7 @@ impl Drawing {
         mvp: &M4,
         view: &ID3D11ShaderResourceView,
         logo_view: &ID3D11ShaderResourceView,
+        under_view: Option<&ID3D11ShaderResourceView>,
     ) -> windows::core::Result<()> {
         // SAFETY: as the caller says; the context's state is swapped back as it was before this returns.
         unsafe {
@@ -1355,12 +1486,15 @@ impl Drawing {
             context.PSSetShader(&self.pixel, None);
             // The frame's layout is the pixel shader's too (owner 2026-11-20: without it the frame came out empty).
             context.PSSetConstantBuffers(0, Some(&[Some(self.place.clone())]));
-            context.PSSetShaderResources(0, Some(&[Some(view.clone()), Some(logo_view.clone())]));
+            context.PSSetShaderResources(
+                0,
+                Some(&[Some(view.clone()), Some(logo_view.clone()), under_view.cloned()]),
+            );
             context.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
             context.Draw(4, 0);
             // Let go of the game's back buffer: it's resized only once nothing holds it.
             context.OMSetRenderTargets(Some(&[None]), None);
-            context.PSSetShaderResources(0, Some(&[None, None]));
+            context.PSSetShaderResources(0, Some(&[None, None, None]));
             if let Some(game) = &game {
                 context1.SwapDeviceContextState(game, None);
             }
@@ -1612,7 +1746,16 @@ mod tests {
             let place: M4 = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, -0.6], [0.0, 0.0, 0.0, 1.0]];
             let mvp = product(&projection, &place);
             drawing
-                .render(&context, rtv.as_ref().unwrap(), size as f32, size as f32, &mvp, view.as_ref().unwrap(), logo_view.as_ref().unwrap())
+                .render(
+                    &context,
+                    rtv.as_ref().unwrap(),
+                    size as f32,
+                    size as f32,
+                    &mvp,
+                    view.as_ref().unwrap(),
+                    logo_view.as_ref().unwrap(),
+                    None,
+                )
                 .unwrap();
             let staging = {
                 let mut made = None;

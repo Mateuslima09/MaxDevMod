@@ -30,6 +30,26 @@ pub struct Entry {
     pub detail: String,
 }
 
+/// Active bank loan read from `game.sii`, shown in Nupay's Financiamentos tab (owner 2026-11-22).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoanInfo {
+    pub amount: i64,
+    pub original_amount: i64,
+    pub interest_rate: f32,
+    pub duration: i32,
+    pub daily_payment: i64,
+}
+
+/// A new loan requested in Nupay, queued to be written to `game.sii` once the game closes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingLoan {
+    pub amount: i64,
+    pub days: i32,
+    pub rate: f32,
+}
+
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct State {
@@ -39,11 +59,17 @@ struct State {
     since_save: i64,
     /// Newest last.
     entries: Vec<Entry>,
+    /// Pending loan requested from Nupay, applied to the save when the game closes.
+    pending_loan: Option<PendingLoan>,
 }
 
 pub struct Wallet {
     path: Option<PathBuf>,
     state: State,
+    /// Active bank loans from the latest save (not persisted: always reflects the save).
+    loans: Vec<LoanInfo>,
+    /// Latest `game.sii` path seen by `PlayerWatch`, for applying `pending_loan` when the game closes.
+    save_path: Option<PathBuf>,
     /// How many of the plugin's money events were taken (`None`: none looked at yet this run).
     seen: Option<u64>,
     /// The currency the game counts its money in (ISO 4217): ETS2's euros, ATS's dollars. The phone shows it in
@@ -65,7 +91,16 @@ impl Wallet {
             None => data_dir.join(FILE),
         };
         let state = std::fs::read(&path).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
-        Self { path: Some(path), state, seen: None, currency: currency_of(game), fresh: Vec::new(), save_read: false }
+        Self {
+            path: Some(path),
+            state,
+            loans: Vec::new(),
+            save_path: None,
+            seen: None,
+            currency: currency_of(game),
+            fresh: Vec::new(),
+            save_read: false,
+        }
     }
 
     /// The balance now: the latest save's, and what the game moved since.
@@ -159,10 +194,99 @@ impl Wallet {
         self.keep();
     }
 
-    /// `{"type":"wallet","balance":25512,"entries":[…]}`: the account for the pages, the newest entries first.
+    /// Updates active loans and save path from the latest save; returns whether loans changed.
+    pub fn update_save_loans(&mut self, loans: Vec<westplay_mapdata::save::Loan>, save_path: Option<PathBuf>) -> bool {
+        if save_path.is_some() {
+            self.save_path = save_path;
+        }
+        let next: Vec<LoanInfo> = loans
+            .into_iter()
+            .map(|l| LoanInfo {
+                amount: l.amount,
+                original_amount: l.original_amount,
+                interest_rate: l.interest_rate,
+                duration: l.duration,
+                daily_payment: l.daily_payment,
+            })
+            .collect();
+        if self.loans != next {
+            self.loans = next;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Queues a new loan to be written to `game.sii` once the game is closed.
+    pub fn queue_loan(&mut self, amount: i64, days: i32, rate: f32) {
+        if amount <= 0 || days <= 0 {
+            return;
+        }
+        self.state.pending_loan = Some(PendingLoan { amount, days, rate });
+        self.keep();
+    }
+
+    /// Cancels a queued loan before it is written to the save.
+    pub fn cancel_pending_loan(&mut self) {
+        if self.state.pending_loan.take().is_some() {
+            self.keep();
+        }
+    }
+
+    /// Applies any pending loan to the latest `game.sii` when the game is closed (creates a `.bak` backup first).
+    /// Returns `true` if a pending loan was applied (so the host should broadcast updated wallet state).
+    pub fn try_apply_pending_loan(&mut self) -> bool {
+        let Some(loan) = self.state.pending_loan.clone() else { return false };
+        if westplay_setup::game::running() {
+            return false;
+        }
+        let Some(path) = self.save_path.clone() else { return false };
+        let Ok(bytes) = std::fs::read(&path) else { return false };
+        match westplay_mapdata::save::add_loan(&bytes, loan.amount, loan.rate, loan.days) {
+            Ok(Some(updated)) => {
+                let backup = path.with_extension("sii.westplay.bak");
+                let _ = std::fs::copy(&path, &backup);
+                if std::fs::write(&path, updated).is_ok() {
+                    self.state.pending_loan = None;
+                    if let Some(saved) = self.state.saved {
+                        self.state.saved = Some(saved.saturating_add(loan.amount));
+                    }
+                    let daily_payment =
+                        ((loan.amount as f64) * (1.0 + f64::from(loan.rate)) / f64::from(loan.days)).round() as i64;
+                    self.loans.push(LoanInfo {
+                        amount: loan.amount,
+                        original_amount: loan.amount,
+                        interest_rate: loan.rate,
+                        duration: loan.days,
+                        daily_payment,
+                    });
+                    self.keep();
+                    crate::log!("[nupay] loan {} ({} days) written to {}", loan.amount, loan.days, path.display());
+                    return true;
+                }
+            }
+            Ok(None) => {
+                crate::log!("[nupay] pending loan skipped: {} is binary BSII (set g_save_format 2)", path.display());
+            }
+            Err(e) => {
+                crate::log!("[nupay] failed to apply pending loan to {}: {e}", path.display());
+            }
+        }
+        false
+    }
+
+    /// `{"type":"wallet","balance":25512,"entries":[…],"loans":[…],"pendingLoan":…}`: the account for the pages.
     pub fn message(&self) -> String {
         let entries: Vec<&Entry> = self.state.entries.iter().rev().take(SENT_ENTRIES).collect();
-        serde_json::json!({ "type": "wallet", "balance": self.balance(), "currency": self.currency, "entries": entries }).to_string()
+        serde_json::json!({
+            "type": "wallet",
+            "balance": self.balance(),
+            "currency": self.currency,
+            "entries": entries,
+            "loans": self.loans,
+            "pendingLoan": self.state.pending_loan,
+        })
+        .to_string()
     }
 
     fn push(&mut self, entry: Entry) {
@@ -204,6 +328,8 @@ mod tests {
         Wallet {
             path: None,
             state: State::default(),
+            loans: Vec::new(),
+            save_path: None,
             seen: None,
             currency: "USD",
             fresh: Vec::new(),

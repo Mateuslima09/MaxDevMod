@@ -7,25 +7,25 @@
      sarunw.com's "Dark color cheat sheet" and Flutter's CupertinoColors, matching iOS 26's Settings. */
 
 .shell {
-  /* Grouped lists (Settings): the page, the cards on it, and what's layered on a card. */
-  --apple-background: #000;
-  --apple-card: #1c1c1e;
-  --apple-card-raised: #2c2c2e;
+  /* MAXDEV MOD graphite + frosted cards (owner 2026-11-22). */
+  --apple-background: #0d0f13;
+  --apple-card: rgb(24 27 33 / 0.84);
+  --apple-card-raised: rgb(38 42 50 / 0.92);
 
-  --apple-label: #fff;
-  --apple-label-secondary: rgb(235 235 245 / 0.6);
-  --apple-label-tertiary: rgb(235 235 245 / 0.3);
-  --apple-label-quaternary: rgb(235 235 245 / 0.18);
+  --apple-label: #f5f7fa;
+  --apple-label-secondary: rgb(218 222 232 / 0.66);
+  --apple-label-tertiary: rgb(218 222 232 / 0.34);
+  --apple-label-quaternary: rgb(218 222 232 / 0.18);
 
-  --apple-separator: rgb(84 84 88 / 0.6);
-  --apple-separator-opaque: #38383a;
+  --apple-separator: rgb(255 255 255 / 0.09);
+  --apple-separator-opaque: #2c3038;
 
-  --apple-fill: rgb(120 120 128 / 0.36);
-  --apple-fill-secondary: rgb(120 120 128 / 0.32);
-  --apple-fill-tertiary: rgb(118 118 128 / 0.24);
-  --apple-fill-quaternary: rgb(118 118 128 / 0.18);
+  --apple-fill: rgb(255 255 255 / 0.14);
+  --apple-fill-secondary: rgb(255 255 255 / 0.11);
+  --apple-fill-tertiary: rgb(255 255 255 / 0.08);
+  --apple-fill-quaternary: rgb(255 255 255 / 0.05);
 
-  --apple-red: rgb(255 66 69);
+  --apple-red: #e53935;
   --apple-orange: rgb(255 146 48);
   --apple-yellow: rgb(255 214 0);
   --apple-green: rgb(48 209 88);

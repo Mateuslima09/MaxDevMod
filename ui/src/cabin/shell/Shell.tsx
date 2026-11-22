@@ -55,8 +55,10 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
   const halved = phone ? null : cabHalved
   // YouTube's picture under the page, in full or in small: nothing the page paints may cover it.
   const videoShown = useYouTube((state) => state.open || state.hole !== null)
+  // Transparent cutout for the game's original GPS map in the Dashboard (Settings › Dashboard › Original Game Map).
+  const mapHole = useCabin((state) => state.mapHole)
   // The cab's fit is the truck's screen's, not the phone's (owner 2026-11-03: it cut the panel's edges off there).
-  useFittedRoot(phone ? NO_FIT : fit, handedOver || videoShown, halved)
+  useFittedRoot(phone ? NO_FIT : fit, handedOver || videoShown || mapHole !== null, halved)
   // With the game's map on the left, the sidebar on WestPlay's outer edge, the right (shell.css `.sidebar-right`): not in
   // the middle of the screen, against the map (owner 2026-11-02).
   useLayoutEffect(() => {
@@ -94,6 +96,7 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
   // The apps' text size (state/textSize.ts), on <html> so menus portalled out of the apps and the screen
   // changes' snapshots take it too.
   const textSize = useCabin((state) => state.textSize)
+  const brightness = useCabin((state) => state.brightness)
   useLayoutEffect(() => {
     document.documentElement.style.setProperty('--text-scale', String(textScale(textSize)))
   }, [textSize])
@@ -126,7 +129,7 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
         className={`carplay${truckScreen ? ' handed-over' : ''}${watching ? ' watching' : ''}${watching && holdSidebar ? ' hold-sidebar' : ''}${peek ? ' peek-sidebar' : ''}`}
         style={{
           transformOrigin: `${button.x - insets.left}px ${button.y}px`,
-          ...(hole && !watching && hasVideoUnder() ? holeMask(hole) : {}),
+          ...(hole && !watching && hasVideoUnder() ? holeMask(hole) : mapHole && !watching ? holeMask(mapHole) : {}),
         }}
         aria-hidden={truckScreen}
       >
@@ -145,6 +148,9 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
           <Keyboard />
           <VolumeHud />
         </div>
+        {!phone && brightness < 1 && (
+          <div className="screen-dimmer" style={{ opacity: 1 - brightness }} aria-hidden="true" />
+        )}
       </div>
       {/* What's drawn over the video where it shows through the CarPlay area (apps/youtube/VideoHole.tsx). */}
       <div id="video-over" className={truckScreen ? 'video-over handed-over' : 'video-over'} />

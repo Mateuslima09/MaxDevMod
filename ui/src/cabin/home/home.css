@@ -53,6 +53,7 @@
 }
 
 .home-dot.shown::before {
+  background: var(--mdm-red);
   opacity: 1;
 }
 
@@ -71,9 +72,10 @@
 
 .label {
   padding: 5px 16px 6px;
-  border-radius: 14px;
+  border-radius: 999px;
   background: var(--chip);
-  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--mdm-border);
+  backdrop-filter: blur(var(--glass-blur, 5px)) saturate(120%);
   max-width: 100%;
   /* Never squeezed by a short row (with overflow hidden, a flex item may shrink below its text): its lines are what
      Home measures to make its row as tall as they need. */

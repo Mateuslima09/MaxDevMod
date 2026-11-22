@@ -12,6 +12,11 @@
   box-shadow: var(--shadow-raised-large);
 }
 
+.map-tile.game-map-hole {
+  background: transparent;
+  box-shadow: none;
+}
+
 /* The live map, rounded with the tile: its canvas is a layer of its own, and overflow's rounded clip alone
    can drop to square corners on and off in the cab's offscreen page as layers come and go; a clip path
    holds (on the map, not the tile, whose shadow it would cut off). */

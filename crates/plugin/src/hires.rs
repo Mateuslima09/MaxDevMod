@@ -435,19 +435,23 @@ Vertex vs(uint id : SV_VertexID) {
     return v;
 }
 Texture2D picture : register(t0);
+Texture2D under : register(t1);
 SamplerState smooth : register(s0);
 float4 ps(Vertex v) : SV_Target {
     float4 c = picture.SampleLevel(smooth, v.uv, 0);
-    if (params.z <= 0.0) return float4(c.rgb, 1.0);
-    float2 dx = float2(params.x, 0.0);
-    float2 dy = float2(0.0, params.y);
-    float3 n = picture.SampleLevel(smooth, v.uv - dy, 0).rgb;
-    float3 s = picture.SampleLevel(smooth, v.uv + dy, 0).rgb;
-    float3 e = picture.SampleLevel(smooth, v.uv + dx, 0).rgb;
-    float3 w = picture.SampleLevel(smooth, v.uv - dx, 0).rgb;
-    float3 blur = (n + s + e + w) * 0.25;
-    float3 sharp = saturate(c.rgb + (c.rgb - blur) * params.z);
-    return float4(sharp, 1.0);
+    float3 fg = c.rgb;
+    if (params.z > 0.0) {
+        float2 dx = float2(params.x, 0.0);
+        float2 dy = float2(0.0, params.y);
+        float3 n = picture.SampleLevel(smooth, v.uv - dy, 0).rgb;
+        float3 s = picture.SampleLevel(smooth, v.uv + dy, 0).rgb;
+        float3 e = picture.SampleLevel(smooth, v.uv + dx, 0).rgb;
+        float3 w = picture.SampleLevel(smooth, v.uv - dx, 0).rgb;
+        float3 blur = (n + s + e + w) * 0.25;
+        fg = saturate(c.rgb + (c.rgb - blur) * params.z);
+    }
+    float3 bg = under.SampleLevel(smooth, v.uv, 0).rgb;
+    return float4(fg + bg * (1.0 - c.a), 1.0);
 }
 ";
 
@@ -680,7 +684,8 @@ impl Blitter {
         let source_raw = source.as_raw() as usize;
         // SAFETY: `self.device` is live on the render thread.
         let srv_raw = unsafe { self.ensure_target(width, height)? }.srv.as_raw() as usize;
-        if self.last_version == version && self.last_source == source_raw && self.last_tier == tier {
+        let under_srv = crate::float_screen::gps_under_view(&self.device);
+        if under_srv.is_none() && self.last_version == version && self.last_source == source_raw && self.last_tier == tier {
             return Ok(srv_raw);
         }
         // SAFETY: `self.device`, `context`, and `source` are live on the render thread; game state is swapped back.
@@ -728,10 +733,10 @@ impl Blitter {
             context.PSSetShader(&self.pixel, None);
             context.PSSetConstantBuffers(0, Some(&[Some(self.params.clone())]));
             context.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
-            context.PSSetShaderResources(0, Some(&[Some(source_srv)]));
+            context.PSSetShaderResources(0, Some(&[Some(source_srv), under_srv]));
             context.Draw(4, 0);
             context.OMSetRenderTargets(Some(&[None]), None);
-            context.PSSetShaderResources(0, Some(&[None]));
+            context.PSSetShaderResources(0, Some(&[None, None]));
             context.GenerateMips(&target.srv);
             if let Some(saved) = &saved {
                 context1.SwapDeviceContextState(saved, None);

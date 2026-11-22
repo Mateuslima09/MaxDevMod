@@ -1,17 +1,25 @@
 import { type ReactNode, useState } from 'react'
 import { postToHost, type WalletEntry } from '../shared/host'
 import { useLive } from '../cabin/state/store'
+import { Segmented } from './ios'
 import { OFFENCES } from './offences'
 import { formatMoney, type Prefs, shownCurrency } from './prefs'
 
+const LOAN_OFFERS = [
+  { amount: 10_000, rate: 0.18, days: 35 },
+  { amount: 50_000, rate: 0.15, days: 35 },
+  { amount: 100_000, rate: 0.12, days: 70 },
+  { amount: 400_000, rate: 0.12, days: 70 },
+] as const
+
 /**
- * Nupay (owner 2026-11-03: "a finance app in the phone: the account's balance and what came in and went out"):
- * the player's account as the app keeps it (crates/host wallet.rs), its balance (hidden at a tap, as a bank's
- * app does), what came in and went out, and each movement, the newest first, by day.
+ * Nupay (owner 2026-11-03 / 2026-11-22): balance, statement, and in-game bank loans (`bank_loan` units from
+ * `game.sii`) with optional queued new loan applied when the game restarts.
  */
 export function NupayApp({ language, currency }: { language: 'en' | 'pt'; currency: Prefs['currency'] }) {
   const wallet = useLive((state) => state.wallet)
   const [hidden, setHidden] = useState(false)
+  const [tab, setTab] = useState<'history' | 'loans'>('history')
   // Clearing the history asked, waiting for its yes.
   const [confirming, setConfirming] = useState(false)
   const words = WORDS[language]
@@ -20,8 +28,12 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
   const shown = shownCurrency(currency, from)
   const money = (amount: number, signed = false) => formatMoney(amount, from, currency, language, signed)
   const entries = wallet?.entries ?? []
+  const loans = wallet?.loans ?? []
+  const pendingLoan = wallet?.pendingLoan ?? null
   const income = entries.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0)
   const spent = entries.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0)
+  const totalDebt = loans.reduce((sum, loan) => sum + loan.amount, 0)
+  const totalDaily = loans.reduce((sum, loan) => sum + loan.dailyPayment, 0)
 
   return (
     <div className="nupay">
@@ -37,77 +49,197 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
         </button>
         {wallet?.balance == null && <p className="nupay-note">{words.noSave}</p>}
       </header>
-      <div className="nupay-summary">
-        <article className="nupay-total in">
-          <span>{words.income}</span>
-          <strong>{hidden ? '••••' : money(income)}</strong>
-        </article>
-        <article className="nupay-total out">
-          <span>{words.spent}</span>
-          <strong>{hidden ? '••••' : money(-spent)}</strong>
-        </article>
+      <div style={{ margin: '0 0 12px' }}>
+        <Segmented
+          options={[
+            ['history', language === 'pt' ? 'Extrato' : 'Activity'],
+            ['loans', language === 'pt' ? 'Financiamentos' : 'Loans'],
+          ]}
+          chosen={tab}
+          choose={(next) => setTab(next as 'history' | 'loans')}
+        />
       </div>
-      <div className="nupay-history-head">
-        <h2 className="nupay-title">{words.history}</h2>
-        {entries.length > 0 && !confirming && (
-          <button type="button" className="nupay-clear" onClick={() => setConfirming(true)}>
-            {words.clear}
-          </button>
-        )}
-      </div>
-      {/* Asked once more before it goes: it can't come back (owner 2026-11-03). */}
-      {confirming && entries.length > 0 && (
-        <div className="nupay-confirm" role="alertdialog" aria-label={words.clearAsk}>
-          <p>
-            <strong>{words.clearAsk}</strong>
-            <span>{words.clearNote}</span>
-          </p>
-          <div className="nupay-confirm-buttons">
-            <button type="button" onClick={() => setConfirming(false)}>
-              {words.cancel}
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                postToHost({ type: 'walletClear' })
-                setConfirming(false)
-              }}
-            >
-              {words.clearYes}
-            </button>
+      {tab === 'loans' ? (
+        <>
+          <div className="nupay-summary">
+            <article className="nupay-total out">
+              <span>{language === 'pt' ? 'Saldo devedor' : 'Total owed'}</span>
+              <strong>{hidden ? '••••' : money(totalDebt)}</strong>
+            </article>
+            <article className="nupay-total">
+              <span>{language === 'pt' ? 'Parcela diária' : 'Daily payment'}</span>
+              <strong>{hidden ? '••••' : money(totalDaily)}</strong>
+            </article>
           </div>
-        </div>
-      )}
-      {entries.length === 0 ? (
-        <p className="nupay-empty">{words.empty}</p>
-      ) : (
-        byDay(entries, language).map(([day, list]) => (
-          <section key={day} className="nupay-day">
-            <h3>{day}</h3>
-            <div className="ios-list">
-              {list.map((entry, index) => (
-                <div key={`${entry.at}-${index}`} className="ios-row nupay-row">
-                  <span className={`nupay-kind nupay-kind-${entry.kind}`} aria-hidden>
-                    <svg viewBox="0 0 24 24">{KIND_GLYPHS[entry.kind]}</svg>
+          {pendingLoan && (
+            <div className="ios-list" style={{ marginBottom: 12 }}>
+              <div className="ios-row">
+                <span className="ios-row-text">
+                  <span className="ios-row-label">
+                    {language === 'pt' ? 'Empréstimo solicitado' : 'Loan queued'}: {money(pendingLoan.amount)}
                   </span>
-                  <span className="ios-row-text">
-                    <span className="ios-row-label">{kindName(entry, words)}</span>
-                    <span className="ios-row-detail">{detailOf(entry, words)}</span>
+                  <span className="ios-row-detail">
+                    {language === 'pt'
+                      ? `${Math.round(pendingLoan.rate * 100)}% · ${pendingLoan.days} dias — feche e reabra o jogo para aplicar.`
+                      : `${Math.round(pendingLoan.rate * 100)}% · ${pendingLoan.days} days — close and restart the game to apply.`}
                   </span>
-                  <span className={`nupay-amount${entry.amount > 0 ? ' in' : ''}`}>
-                    {hidden ? '••••' : money(entry.amount, true)}
-                  </span>
-                </div>
-              ))}
+                </span>
+                <button
+                  type="button"
+                  className="nupay-clear"
+                  onClick={() => postToHost({ type: 'walletLoanCancel' })}
+                >
+                  {words.cancel}
+                </button>
+              </div>
             </div>
-          </section>
-        ))
+          )}
+          <div className="nupay-history-head">
+            <h2 className="nupay-title">{language === 'pt' ? 'Empréstimos ativos' : 'Active loans'}</h2>
+          </div>
+          {loans.length === 0 ? (
+            <p className="nupay-empty">
+              {language === 'pt' ? 'Nenhum financiamento ativo no save atual.' : 'No active bank loans in your save.'}
+            </p>
+          ) : (
+            <div className="ios-list" style={{ marginBottom: 14 }}>
+              {loans.map((loan, index) => {
+                const paidPct = Math.max(
+                  0,
+                  Math.min(100, Math.round(((loan.originalAmount - loan.amount) / Math.max(1, loan.originalAmount)) * 100)),
+                )
+                return (
+                  <div key={index} className="ios-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span className="ios-row-label">{hidden ? '••••' : money(loan.amount)}</span>
+                      <span className="ios-row-detail">
+                        {language === 'pt'
+                          ? `${money(loan.dailyPayment)}/dia · ${Math.round(loan.interestRate * 100)}%`
+                          : `${money(loan.dailyPayment)}/day · ${Math.round(loan.interestRate * 100)}%`}
+                      </span>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 999, background: 'var(--ios-fill)', overflow: 'hidden' }}>
+                      <div style={{ width: `${paidPct}%`, height: '100%', background: 'var(--ios-tint)' }} />
+                    </div>
+                    <span className="ios-row-detail">
+                      {language === 'pt'
+                        ? `Original: ${money(loan.originalAmount)} · ${paidPct}% pago (${loan.duration} dias)`
+                        : `Original: ${money(loan.originalAmount)} · ${paidPct}% paid (${loan.duration} days)`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <div className="nupay-history-head">
+            <h2 className="nupay-title">{language === 'pt' ? 'Novo empréstimo' : 'Request loan'}</h2>
+          </div>
+          <div className="ios-list">
+            {LOAN_OFFERS.map((offer) => {
+              const daily = Math.round((offer.amount * (1 + offer.rate)) / offer.days)
+              return (
+                <button
+                  key={offer.amount}
+                  type="button"
+                  className="ios-row ios-row-button"
+                  onClick={() => postToHost({ type: 'walletLoan', amount: offer.amount, days: offer.days, rate: offer.rate })}
+                >
+                  <span className="ios-row-text">
+                    <span className="ios-row-label">{money(offer.amount)}</span>
+                    <span className="ios-row-detail">
+                      {language === 'pt'
+                        ? `${Math.round(offer.rate * 100)}% juros · ${offer.days} dias · ${money(daily)}/dia`
+                        : `${Math.round(offer.rate * 100)}% APR · ${offer.days} days · ${money(daily)}/day`}
+                    </span>
+                  </span>
+                  <span style={{ color: 'var(--ios-tint)', fontWeight: 600, fontSize: 13 }}>
+                    {language === 'pt' ? 'Solicitar' : 'Request'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="nupay-foot">
+            {language === 'pt'
+              ? 'Solicitações são gravadas no seu save (com backup .bak) assim que o jogo fechar.'
+              : 'Loan requests are written to your save (with a .bak backup) as soon as the game closes.'}
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="nupay-summary">
+            <article className="nupay-total in">
+              <span>{words.income}</span>
+              <strong>{hidden ? '••••' : money(income)}</strong>
+            </article>
+            <article className="nupay-total out">
+              <span>{words.spent}</span>
+              <strong>{hidden ? '••••' : money(-spent)}</strong>
+            </article>
+          </div>
+          <div className="nupay-history-head">
+            <h2 className="nupay-title">{words.history}</h2>
+            {entries.length > 0 && !confirming && (
+              <button type="button" className="nupay-clear" onClick={() => setConfirming(true)}>
+                {words.clear}
+              </button>
+            )}
+          </div>
+          {/* Asked once more before it goes: it can't come back (owner 2026-11-03). */}
+          {confirming && entries.length > 0 && (
+            <div className="nupay-confirm" role="alertdialog" aria-label={words.clearAsk}>
+              <p>
+                <strong>{words.clearAsk}</strong>
+                <span>{words.clearNote}</span>
+              </p>
+              <div className="nupay-confirm-buttons">
+                <button type="button" onClick={() => setConfirming(false)}>
+                  {words.cancel}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    postToHost({ type: 'walletClear' })
+                    setConfirming(false)
+                  }}
+                >
+                  {words.clearYes}
+                </button>
+              </div>
+            </div>
+          )}
+          {entries.length === 0 ? (
+            <p className="nupay-empty">{words.empty}</p>
+          ) : (
+            byDay(entries, language).map(([day, list]) => (
+              <section key={day} className="nupay-day">
+                <h3>{day}</h3>
+                <div className="ios-list">
+                  {list.map((entry, index) => (
+                    <div key={`${entry.at}-${index}`} className="ios-row nupay-row">
+                      <span className={`nupay-kind nupay-kind-${entry.kind}`} aria-hidden>
+                        <svg viewBox="0 0 24 24">{KIND_GLYPHS[entry.kind]}</svg>
+                      </span>
+                      <span className="ios-row-text">
+                        <span className="ios-row-label">{kindName(entry, words)}</span>
+                        <span className="ios-row-detail">{detailOf(entry, words)}</span>
+                      </span>
+                      <span className={`nupay-amount${entry.amount > 0 ? ' in' : ''}`}>
+                        {hidden ? '••••' : money(entry.amount, true)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
+          <p className="nupay-foot">
+            {words.foot}
+            {shown !== from && ` ${words.converted}`}
+          </p>
+        </>
       )}
-      <p className="nupay-foot">
-        {words.foot}
-        {shown !== from && ` ${words.converted}`}
-      </p>
     </div>
   )
 }

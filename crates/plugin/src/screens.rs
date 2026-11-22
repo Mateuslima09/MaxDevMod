@@ -436,6 +436,16 @@ unsafe fn refresh(context: &ID3D11DeviceContext, texture: ID3D11Texture2D, heigh
             // A truck's own screen drawn into a screen target: its size said in the log.
             if candidate_target {
                 say_size(context, layout);
+                // Capture the game's clean original GPS map before WestPlay's overlay quad draws on top of it,
+                // so both the floating virtual screen and hi-res dashboard cutouts can show it (owner 2026-11-22).
+                let mut rtvs = [None; 1];
+                context.OMGetRenderTargets(Some(&mut rtvs), None);
+                if let Some(rtv) = rtvs[0].take()
+                    && let Ok(res) = rtv.GetResource()
+                    && let Ok(rt_tex) = res.cast::<ID3D11Texture2D>()
+                {
+                    crate::float_screen::capture_gps_map(context, &device, &rt_tex);
+                }
             }
             // A truck's id can't be read while the telemetry thread writes it: the last answer stands meanwhile.
             let truck = bridge::get().and_then(|b| b.plugin.truck.read());

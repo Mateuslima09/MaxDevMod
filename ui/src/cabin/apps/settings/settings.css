@@ -81,7 +81,7 @@
   position: absolute;
   inset: 0 0 -28px;
   background: linear-gradient(var(--apple-background) 40%, transparent);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(var(--glass-blur, 5px));
   mask-image: linear-gradient(#000 55%, transparent);
   opacity: 0;
   transition: opacity 200ms var(--motion-ease);
@@ -106,7 +106,7 @@
   opacity: 1;
 }
 
-/* Back: iOS 26's round glass button. */
+/* Back: pill/round frosted glass button. */
 .shell .settings-back {
   position: relative;
   width: 60px;
@@ -116,15 +116,17 @@
   place-items: center;
   padding-right: 3px;
   background: var(--apple-card);
+  border: 1px solid var(--mdm-border);
   color: var(--apple-label);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.1),
-    var(--shadow-raised);
+    0 6px 16px rgb(0 0 0 / 0.24);
   pointer-events: auto;
 }
 
 .shell .settings-back:active {
   background: var(--apple-card-raised);
+  transform: scale(0.95);
 }
 
 .settings-group {
@@ -148,10 +150,14 @@
   color: var(--apple-label-secondary);
 }
 
-/* A card of rows, each but the first with a separator that starts under its text. */
+/* A frosted graphite card of rows (MAXDEV MOD Light Glassmorphism). */
 .settings-card {
-  border-radius: 34px;
+  border-radius: 26px;
   background: var(--apple-card);
+  border: 1px solid var(--mdm-border);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 6px 20px rgb(0 0 0 / 0.22);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -342,7 +348,7 @@
 }
 
 .settings-radio.on {
-  background: var(--apple-blue);
+  background: var(--mdm-red);
   box-shadow: none;
 }
 
@@ -380,18 +386,18 @@
 
 .wallpaper-choice[aria-pressed='true'] img,
 .wallpaper-choice[aria-pressed='true'] .wallpaper-thumbnail-empty {
-  outline-color: var(--apple-blue);
+  outline-color: var(--mdm-red);
 }
 
 .wallpaper-choice[aria-pressed='true'] .wallpaper-name {
   color: var(--apple-label);
 }
 
-/* The Equalizer (iOS 27's AirPods one): a blue tick on the row picked. */
+/* The Equalizer: MAXDEV MOD red tick on the row picked. */
 .settings-check {
   flex: none;
   display: flex;
-  color: var(--apple-blue);
+  color: var(--mdm-red);
 }
 
 .settings-check svg {
@@ -527,10 +533,11 @@
   text-anchor: middle;
 }
 
-/* A row that does something (Reset): the label in blue, centred; grey while there's nothing to do. */
+/* A row that does something (Reset): MAXDEV MOD red accent, centred; grey while disabled. */
 .shell button.settings-row.settings-action {
   justify-content: center;
-  color: var(--apple-blue);
+  color: var(--mdm-red);
+  font-weight: 600;
 }
 
 .shell button.settings-row.settings-action:disabled {

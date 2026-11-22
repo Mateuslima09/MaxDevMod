@@ -53,8 +53,9 @@ const PX_RAYCAST: &str = "F3 0F 11 5C 24 20 4C 8B DC 53 48 83 EC 70 0F AE 9C 24 
                           4C 8B D1 C7 84 24 88 00 00 00 C0 9F 00 00 0F AE 94 24 88 00 00 00 0F 18 02 41 0F 18 00";
 
 /// Collision layers (docs/personagem/INVESTIGACAO.md §7.1): 1 and 2 the fixed world (roads, buildings, the map's
-/// models), 4 the traffic, 8 and 10 trailers. Not 6 and 7 (the player's truck) nor the people's.
-const SOLID: u32 = 1 << 1 | 1 << 2 | 1 << 4 | 1 << 8 | 1 << 10;
+/// models), 4, 5 and 22 the traffic (AI cars and trucks, owner 2026-11-22), 8 and 10 trailers. Not 6 and 7 (the
+/// player's truck) nor the people's.
+const SOLID: u32 = 1 << 1 | 1 << 2 | 1 << 4 | 1 << 5 | 1 << 8 | 1 << 10 | 1 << 22;
 const FIXED_WORLD: u32 = 1 << 1 | 1 << 2;
 const TRAILERS: u32 = 1 << 8 | 1 << 10;
 
@@ -79,8 +80,9 @@ const GROUND_NORMAL: f32 = 0.7;
 const TEST_OVER: f64 = 3.0;
 const TEST_LENGTH: f64 = 10.0;
 const GROUND_WITHIN: (f64, f64) = (1.0, 6.0);
-/// The sensors' rays: this far over the ground, starting this far behind the rear.
-const SENSOR_HEIGHT: f64 = 0.6;
+/// The sensors' rays: these heights over the ground (low for cars, higher for AI trucks/trailers whose chassis
+/// sits above 0.6 m, owner 2026-11-22), starting this far behind the rear.
+const SENSOR_HEIGHTS: [f64; 2] = [0.6, 1.2];
 const BEHIND: f64 = 0.05;
 
 /// The rear's four sensors, as the page's (ui/src/cabin/reversing/sensor.ts `SENSORS`): across the rear (-1 its
@@ -461,8 +463,10 @@ struct CameraRay {
 }
 
 static CAMERA: Mutex<CameraRay> = Mutex::new(CameraRay { ask: None, answer: None });
-/// What the camera's ray meets: the fixed world, the traffic, trailers, and the player's own truck (6, 7).
-const CAMERA_LAYERS: u32 = SOLID | 1 << 6 | 1 << 7;
+/// What the camera's ray meets: the fixed world, traffic cars, trailers, and the player's own truck (6, 7).
+/// Layers 5 and 22 (added to `SOLID` for rear parking sensors) are intentionally excluded here: including them
+/// caused the third-person camera ray to hit right next to the character and stay zoomed in (owner 2026-11-22).
+const CAMERA_LAYERS: u32 = 1 << 1 | 1 << 2 | 1 << 4 | 1 << 6 | 1 << 7 | 1 << 8 | 1 << 10;
 /// Frames an answer is kept for (the game casts about 50 times a second on foot).
 const CAMERA_FRESH: u64 = 10;
 /// Camera rays cast (this session), and how many before the guard says ok for them (about a minute on foot).
@@ -619,7 +623,7 @@ unsafe fn after_game_ray(world: usize, original: Casing) {
             let reading = unsafe { cast(original, world, ray, SOLID) }
                 .filter(|(_, normal)| normal[1] < GROUND_NORMAL)
                 .map(|(d, _)| d);
-            let sensor = &mut sensors[index / RAYS_PER_SENSOR];
+            let sensor = &mut sensors[index / (RAYS_PER_SENSOR * SENSOR_HEIGHTS.len())];
             *sensor = match (*sensor, reading) {
                 (Some(a), Some(b)) => Some(f32::min(a, b)),
                 (a, b) => a.or(b),
@@ -705,14 +709,19 @@ fn sensor_rays(t: &Telemetry) -> Vec<Ray> {
     let right = [h.cos(), -h.sin()];
     let half = f64::from(half_width.max(1.0));
     let rear = [x + back[0] * (f64::from(rear_z) + BEHIND), z + back[1] * (f64::from(rear_z) + BEHIND)];
-    let mut rays = Vec::with_capacity(SENSORS.len() * RAYS_PER_SENSOR);
+    let mut rays = Vec::with_capacity(SENSORS.len() * RAYS_PER_SENSOR * SENSOR_HEIGHTS.len());
     for (across, aim, half_cone, range) in SENSORS {
         let at = [rear[0] + right[0] * half * across, rear[1] + right[1] * half * across];
-        for ray in 0..RAYS_PER_SENSOR {
-            let angle = aim + half_cone * ((2 * ray) as f64 / (RAYS_PER_SENSOR - 1) as f64 - 1.0) * 0.8;
-            let along =
-                [back[0] * angle.cos() + right[0] * angle.sin(), 0.0, back[1] * angle.cos() + right[1] * angle.sin()];
-            rays.push(Ray { from: [at[0], y + SENSOR_HEIGHT, at[1]], along, length: range });
+        for height in SENSOR_HEIGHTS {
+            for ray in 0..RAYS_PER_SENSOR {
+                let angle = aim + half_cone * ((2 * ray) as f64 / (RAYS_PER_SENSOR - 1) as f64 - 1.0) * 0.8;
+                let along = [
+                    back[0] * angle.cos() + right[0] * angle.sin(),
+                    0.0,
+                    back[1] * angle.cos() + right[1] * angle.sin(),
+                ];
+                rays.push(Ray { from: [at[0], y + height, at[1]], along, length: range });
+            }
         }
     }
     rays
@@ -945,7 +954,7 @@ mod tests {
 
     #[test]
     fn the_sensors_never_ask_for_the_players_own_truck_or_people() {
-        for layer in [1, 2, 4, 8, 10] {
+        for layer in [1, 2, 4, 5, 8, 10, 22] {
             assert_ne!(SOLID & 1 << layer, 0);
         }
         for layer in [3, 6, 7, 9, 16, 18] {
@@ -967,18 +976,22 @@ mod tests {
         // A truck facing north (back is +z), its rear 5 m back.
         let t = Telemetry { half_width: 1.25, rear_z: 5.0, ..Default::default() };
         let rays = sensor_rays(&t);
-        assert_eq!(rays.len(), 12);
+        assert_eq!(rays.len(), 24);
         for ray in &rays {
             assert!((ray.from[2] - 5.05).abs() < 1e-9);
             assert!(ray.along[2] > 0.6, "{ray:?}");
             assert!((ray.along[0].hypot(ray.along[2]) - 1.0).abs() < 1e-9);
         }
-        // The left corner's middle ray looks out to the left (-x), the right's to the right.
+        // The left corner's middle rays look out to the left (-x), the right's to the right, at both heights.
+        let per_sensor = RAYS_PER_SENSOR * SENSOR_HEIGHTS.len();
         assert!(rays[1].along[0] < -0.2 && rays[1].from[0] < -1.0);
-        assert!(rays[10].along[0] > 0.2 && rays[10].from[0] > 1.0);
+        assert!((rays[1].from[1] - SENSOR_HEIGHTS[0]).abs() < 1e-9);
+        assert!((rays[1 + RAYS_PER_SENSOR].from[1] - SENSOR_HEIGHTS[1]).abs() < 1e-9);
+        let right_mid = 3 * per_sensor + 1;
+        assert!(rays[right_mid].along[0] > 0.2 && rays[right_mid].from[0] > 1.0);
         // With a trailer, from its rear.
         let t =
             Telemetry { trailer_connected: true, trailer_half_width: 1.3, trailer_rear_z: 7.0, trailer_z: 10.0, ..t };
-        assert!((sensor_rays(&t)[4].from[2] - 17.05).abs() < 1e-9);
+        assert!((sensor_rays(&t)[per_sensor + 1].from[2] - 17.05).abs() < 1e-9);
     }
 }

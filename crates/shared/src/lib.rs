@@ -629,7 +629,8 @@ pub struct HostBlock {
     /// hottest disc, later with a cooler one beside it).
     pub brake_sound: AtomicU32,
     /// The brakes' HUD (owner 2026-11-21, plugin/src/brake_hud.rs): bit 8 set once the app said; bit 0 shown,
-    /// bits 1-2 its corner ([`BRAKE_HUD_BOTTOM_LEFT`]…), bits 3-4 its size (0 small, 1 medium, 2 large).
+    /// bits 1-2 its corner ([`BRAKE_HUD_BOTTOM_LEFT`]…), bits 3-4 its size (0 small, 1 medium, 2 large),
+    /// bit 5 shown while walking in Modo Personagem (0 hides it on foot).
     pub brake_hud: AtomicU32,
     /// The brake left from which the dashboard's warning sounds, as the player chose its temperature on the phone
     /// (owner 2026-11-21: "an option for when the alarm comes"): an `f32`'s bits; 0, not said

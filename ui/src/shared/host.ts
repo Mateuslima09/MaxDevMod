@@ -119,6 +119,20 @@ export type GameCurrency = 'USD' | 'EUR'
 
 /** One sum in or out of the player's account (crates/host wallet.rs `Entry`; an expense negative): what for, about
  * what, and when (the PC's time, ms; the game's, minutes, when known). */
+export interface WalletLoan {
+  amount: number
+  originalAmount: number
+  interestRate: number
+  duration: number
+  dailyPayment: number
+}
+
+export interface PendingLoan {
+  amount: number
+  days: number
+  rate: number
+}
+
 export interface WalletEntry {
   at: number
   gameTime: number | null
@@ -178,7 +192,14 @@ export type HostMessage =
   | { type: 'job'; data: JobInfo }
   /** The player's account (crates/host wallet.rs), for the phone's Nupay: its balance (`null`: no save read yet)
    * and its entries, the newest first. */
-  | { type: 'wallet'; balance: number | null; currency?: GameCurrency; entries: WalletEntry[] }
+  | {
+      type: 'wallet'
+      balance: number | null
+      currency?: GameCurrency
+      entries: WalletEntry[]
+      loans?: WalletLoan[]
+      pendingLoan?: PendingLoan | null
+    }
   /** `null` until the game has drawn a WestPlay screen. Checked against the known ids on arrival. */
   | { type: 'screen'; layout: string | null }
   /** Adjust Screen from a phone (cabin/state/screenFit.ts), relayed by the host to the cab's page: a change, the fit
@@ -218,6 +239,10 @@ export type HostMessage =
       suspensionAutoReset?: boolean
       /** The suspension by itself: lowered on the motorway, normal in town (the Suspensão app). */
       suspensionAuto?: boolean
+      /** Seconds of rough road before automatic suspension raises (1..=5). */
+      suspensionAutoDelay?: number
+      /** Seconds of smooth road before automatic suspension lowers back down (3..=15). */
+      suspensionAutoReturn?: number
       /** Brake fade (the phone's Freios app, owner 2026-11-21). */
       brakeFade?: boolean
       brakeFadeLevel?: BrakeFadeLevel
@@ -226,6 +251,7 @@ export type HostMessage =
       brakeHud?: boolean
       brakeHudCorner?: BrakeHudCorner
       brakeHudSize?: BrakeHudSize
+      brakeHudOnFoot?: boolean
       brakeAlarm?: number
       /** How low the front may go (the Suspensão app). */
       suspensionLowFront?: LowFront
@@ -456,6 +482,9 @@ export type PageMessage =
   | { type: 'detours'; id: number; nodes: string[] }
   /** Nupay's history let go, its balance kept (crates/host wallet.rs): the account comes back without it. */
   | { type: 'walletClear' }
+  /** Request or cancel a new bank loan queued for the next game restart (owner 2026-11-22). */
+  | { type: 'walletLoan'; amount: number; days: number; rate: number }
+  | { type: 'walletLoanCancel' }
   /** Who walks in the Modo Personagem, chosen in the phone's Personagem app (a place in `CHARACTER_PEOPLE`). */
   | { type: 'characterPerson'; person: number }
   /** The text field selected, a number that changes with every selection (0: none), for the player's own
@@ -497,6 +526,10 @@ export type PageMessage =
   | { type: 'suspensionAutoReset'; on: boolean }
   /** The suspension by itself, on or off (the Suspensão app, owner 2026-11-19). */
   | { type: 'suspensionAuto'; on: boolean }
+  /** Seconds of rough road before automatic suspension raises (1..=5, owner 2026-11-22). */
+  | { type: 'suspensionAutoDelay'; secs: number }
+  /** Seconds of smooth road before automatic suspension lowers back down (3..=15, owner 2026-11-22). */
+  | { type: 'suspensionAutoReturn'; secs: number }
   /** Brake fade (the Freios app, owner 2026-11-21): on or off, how soon, the sounds' volumes (0 off..100), the HUD. */
   | { type: 'brakeFade'; on: boolean }
   | { type: 'brakeFadeLevel'; which: BrakeFadeLevel }
@@ -505,6 +538,7 @@ export type PageMessage =
   | { type: 'brakeHud'; on: boolean }
   | { type: 'brakeHudCorner'; which: BrakeHudCorner }
   | { type: 'brakeHudSize'; which: BrakeHudSize }
+  | { type: 'brakeHudOnFoot'; on: boolean }
   /** When the brake alarm comes (°C on the realistic level). */
   | { type: 'brakeAlarm'; celsius: number }
   /** How low the front may go (the Suspensão app): counts from the game's next start. */
@@ -624,7 +658,7 @@ export type GameNotificationKind =
   | 'brakeGone'
 
 /** The groups of the game's notifications the phone's Settings turn on and off (`westplay_host::alerts::Group`). */
-export const ALERT_GROUPS = ['moneyIn', 'moneyOut', 'fine', 'fuel', 'damage', 'rest', 'job'] as const
+export const ALERT_GROUPS = ['moneyIn', 'moneyOut', 'fine', 'fuel', 'damage', 'brake', 'rest', 'job'] as const
 export type AlertGroup = (typeof ALERT_GROUPS)[number]
 
 /** What the Spotify app asks of Spotify's web player (`westplay_host::spotify::Command`), run hidden by the
