@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { postToHost, type WalletEntry } from '../shared/host'
 import { useLive } from '../cabin/state/store'
 import { Segmented } from './ios'
@@ -22,6 +22,10 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
   const [tab, setTab] = useState<'history' | 'loans'>('history')
   // Clearing the history asked, waiting for its yes.
   const [confirming, setConfirming] = useState(false)
+  // Optimistic pending loan so clicking an offer immediately shows as selected even before host round-trip.
+  const [optimisticLoan, setOptimisticLoan] = useState<{ amount: number; days: number; rate: number } | null | undefined>(
+    undefined,
+  )
   const words = WORDS[language]
   // The game's money, in the currency chosen (its own, `auto`).
   const from = wallet?.currency ?? 'USD'
@@ -29,11 +33,24 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
   const money = (amount: number, signed = false) => formatMoney(amount, from, currency, language, signed)
   const entries = wallet?.entries ?? []
   const loans = wallet?.loans ?? []
-  const pendingLoan = wallet?.pendingLoan ?? null
+  const serverPendingLoan = wallet?.pendingLoan ?? null
+  useEffect(() => {
+    setOptimisticLoan(undefined)
+  }, [serverPendingLoan?.amount, serverPendingLoan?.days, serverPendingLoan?.rate])
+  const pendingLoan = optimisticLoan === undefined ? serverPendingLoan : optimisticLoan
   const income = entries.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0)
   const spent = entries.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0)
   const totalDebt = loans.reduce((sum, loan) => sum + loan.amount, 0)
   const totalDaily = loans.reduce((sum, loan) => sum + loan.dailyPayment, 0)
+
+  const requestLoan = (offer: (typeof LOAN_OFFERS)[number]) => {
+    setOptimisticLoan({ amount: offer.amount, days: offer.days, rate: offer.rate })
+    postToHost({ type: 'walletLoan', amount: offer.amount, days: offer.days, rate: offer.rate })
+  }
+  const cancelLoan = () => {
+    setOptimisticLoan(null)
+    postToHost({ type: 'walletLoanCancel' })
+  }
 
   return (
     <div className="nupay">
@@ -49,7 +66,8 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
         </button>
         {wallet?.balance == null && <p className="nupay-note">{words.noSave}</p>}
       </header>
-      <div style={{ margin: '0 0 12px' }}>
+
+      <div className="nupay-tabs">
         <Segmented
           options={[
             ['history', language === 'pt' ? 'Extrato' : 'Activity'],
@@ -59,8 +77,9 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
           choose={(next) => setTab(next as 'history' | 'loans')}
         />
       </div>
+
       {tab === 'loans' ? (
-        <>
+        <div className="nupay-section">
           <div className="nupay-summary">
             <article className="nupay-total out">
               <span>{language === 'pt' ? 'Saldo devedor' : 'Total owed'}</span>
@@ -71,102 +90,112 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
               <strong>{hidden ? '••••' : money(totalDaily)}</strong>
             </article>
           </div>
+
           {pendingLoan && (
-            <div className="ios-list" style={{ marginBottom: 12 }}>
-              <div className="ios-row">
-                <span className="ios-row-text">
-                  <span className="ios-row-label">
-                    {language === 'pt' ? 'Empréstimo solicitado' : 'Loan queued'}: {money(pendingLoan.amount)}
-                  </span>
-                  <span className="ios-row-detail">
-                    {language === 'pt'
-                      ? `${Math.round(pendingLoan.rate * 100)}% · ${pendingLoan.days} dias — feche e reabra o jogo para aplicar.`
-                      : `${Math.round(pendingLoan.rate * 100)}% · ${pendingLoan.days} days — close and restart the game to apply.`}
-                  </span>
+            <div className="nupay-pending" role="status">
+              <div className="nupay-pending-info">
+                <strong>
+                  {language === 'pt' ? 'Solicitação agendada' : 'Loan queued'}: {money(pendingLoan.amount)}
+                </strong>
+                <span>
+                  {language === 'pt'
+                    ? `${Math.round(pendingLoan.rate * 100)}% juros · ${pendingLoan.days} dias — feche e reabra o jogo para creditar.`
+                    : `${Math.round(pendingLoan.rate * 100)}% APR · ${pendingLoan.days} days — close and restart the game to apply.`}
                 </span>
-                <button
-                  type="button"
-                  className="nupay-clear"
-                  onClick={() => postToHost({ type: 'walletLoanCancel' })}
-                >
-                  {words.cancel}
-                </button>
               </div>
+              <button type="button" className="nupay-pending-cancel" onClick={cancelLoan}>
+                {words.cancel}
+              </button>
             </div>
           )}
-          <div className="nupay-history-head">
-            <h2 className="nupay-title">{language === 'pt' ? 'Empréstimos ativos' : 'Active loans'}</h2>
-          </div>
-          {loans.length === 0 ? (
-            <p className="nupay-empty">
-              {language === 'pt' ? 'Nenhum financiamento ativo no save atual.' : 'No active bank loans in your save.'}
-            </p>
-          ) : (
-            <div className="ios-list" style={{ marginBottom: 14 }}>
-              {loans.map((loan, index) => {
-                const paidPct = Math.max(
-                  0,
-                  Math.min(100, Math.round(((loan.originalAmount - loan.amount) / Math.max(1, loan.originalAmount)) * 100)),
-                )
-                return (
-                  <div key={index} className="ios-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <span className="ios-row-label">{hidden ? '••••' : money(loan.amount)}</span>
+
+          <div className="nupay-block">
+            <div className="nupay-history-head">
+              <h2 className="nupay-title">{language === 'pt' ? 'Empréstimos ativos' : 'Active loans'}</h2>
+            </div>
+            {loans.length === 0 ? (
+              <p className="nupay-empty">
+                {language === 'pt' ? 'Nenhum financiamento ativo no save atual.' : 'No active bank loans in your save.'}
+              </p>
+            ) : (
+              <div className="ios-list">
+                {loans.map((loan, index) => {
+                  const paidPct = Math.max(
+                    0,
+                    Math.min(100, Math.round(((loan.originalAmount - loan.amount) / Math.max(1, loan.originalAmount)) * 100)),
+                  )
+                  return (
+                    <div key={index} className="ios-row nupay-loan-card">
+                      <div className="nupay-loan-top">
+                        <span className="ios-row-label">{hidden ? '••••' : money(loan.amount)}</span>
+                        <span className="nupay-loan-rate">
+                          {language === 'pt'
+                            ? `${money(loan.dailyPayment)}/dia · ${Math.round(loan.interestRate * 100)}%`
+                            : `${money(loan.dailyPayment)}/day · ${Math.round(loan.interestRate * 100)}%`}
+                        </span>
+                      </div>
+                      <div className="nupay-loan-bar">
+                        <div className="nupay-loan-bar-fill" style={{ width: `${paidPct}%` }} />
+                      </div>
                       <span className="ios-row-detail">
                         {language === 'pt'
-                          ? `${money(loan.dailyPayment)}/dia · ${Math.round(loan.interestRate * 100)}%`
-                          : `${money(loan.dailyPayment)}/day · ${Math.round(loan.interestRate * 100)}%`}
+                          ? `Original: ${money(loan.originalAmount)} · ${paidPct}% pago (${loan.duration} dias)`
+                          : `Original: ${money(loan.originalAmount)} · ${paidPct}% paid (${loan.duration} days)`}
                       </span>
                     </div>
-                    <div style={{ height: 5, borderRadius: 999, background: 'var(--ios-fill)', overflow: 'hidden' }}>
-                      <div style={{ width: `${paidPct}%`, height: '100%', background: 'var(--ios-tint)' }} />
-                    </div>
-                    <span className="ios-row-detail">
-                      {language === 'pt'
-                        ? `Original: ${money(loan.originalAmount)} · ${paidPct}% pago (${loan.duration} dias)`
-                        : `Original: ${money(loan.originalAmount)} · ${paidPct}% paid (${loan.duration} days)`}
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="nupay-block">
+            <div className="nupay-history-head">
+              <h2 className="nupay-title">{language === 'pt' ? 'Novo empréstimo' : 'Request loan'}</h2>
+            </div>
+            <div className="ios-list">
+              {LOAN_OFFERS.map((offer) => {
+                const daily = Math.round((offer.amount * (1 + offer.rate)) / offer.days)
+                const selected = pendingLoan?.amount === offer.amount && pendingLoan?.days === offer.days
+                return (
+                  <button
+                    key={offer.amount}
+                    type="button"
+                    aria-pressed={selected}
+                    className={`ios-row ios-row-button nupay-offer${selected ? ' selected' : ''}`}
+                    onClick={() => (selected ? cancelLoan() : requestLoan(offer))}
+                  >
+                    <span className="ios-row-text">
+                      <span className="ios-row-label">{money(offer.amount)}</span>
+                      <span className="ios-row-detail">
+                        {language === 'pt'
+                          ? `${Math.round(offer.rate * 100)}% juros · ${offer.days} dias · ${money(daily)}/dia`
+                          : `${Math.round(offer.rate * 100)}% APR · ${offer.days} days · ${money(daily)}/day`}
+                      </span>
                     </span>
-                  </div>
+                    <span className={`nupay-offer-pill${selected ? ' selected' : ''}`}>
+                      {selected
+                        ? language === 'pt'
+                          ? 'Solicitado ✓'
+                          : 'Requested ✓'
+                        : language === 'pt'
+                          ? 'Solicitar'
+                          : 'Request'}
+                    </span>
+                  </button>
                 )
               })}
             </div>
-          )}
-          <div className="nupay-history-head">
-            <h2 className="nupay-title">{language === 'pt' ? 'Novo empréstimo' : 'Request loan'}</h2>
           </div>
-          <div className="ios-list">
-            {LOAN_OFFERS.map((offer) => {
-              const daily = Math.round((offer.amount * (1 + offer.rate)) / offer.days)
-              return (
-                <button
-                  key={offer.amount}
-                  type="button"
-                  className="ios-row ios-row-button"
-                  onClick={() => postToHost({ type: 'walletLoan', amount: offer.amount, days: offer.days, rate: offer.rate })}
-                >
-                  <span className="ios-row-text">
-                    <span className="ios-row-label">{money(offer.amount)}</span>
-                    <span className="ios-row-detail">
-                      {language === 'pt'
-                        ? `${Math.round(offer.rate * 100)}% juros · ${offer.days} dias · ${money(daily)}/dia`
-                        : `${Math.round(offer.rate * 100)}% APR · ${offer.days} days · ${money(daily)}/day`}
-                    </span>
-                  </span>
-                  <span style={{ color: 'var(--ios-tint)', fontWeight: 600, fontSize: 13 }}>
-                    {language === 'pt' ? 'Solicitar' : 'Request'}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+
           <p className="nupay-foot">
             {language === 'pt'
               ? 'Solicitações são gravadas no seu save (com backup .bak) assim que o jogo fechar.'
               : 'Loan requests are written to your save (with a .bak backup) as soon as the game closes.'}
           </p>
-        </>
+        </div>
       ) : (
-        <>
+        <div className="nupay-section">
           <div className="nupay-summary">
             <article className="nupay-total in">
               <span>{words.income}</span>
@@ -238,7 +267,7 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
             {words.foot}
             {shown !== from && ` ${words.converted}`}
           </p>
-        </>
+        </div>
       )}
     </div>
   )

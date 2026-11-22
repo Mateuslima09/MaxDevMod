@@ -65,6 +65,8 @@ const PAGE_MESSAGES: &[&str] = &[
     "truckCommand",
     "screenFit",
     "walletClear",
+    "walletLoan",
+    "walletLoanCancel",
     "characterPerson",
     // The phones' Settings switches (owner 2026-11-18: the virtual mirrors' choice didn't change; the Modo
     // Personagem's switches weren't let through either).
@@ -77,6 +79,8 @@ const PAGE_MESSAGES: &[&str] = &[
     "suspensionDamping",
     "cursorSize",
     "suspensionAuto",
+    "suspensionAutoDelay",
+    "suspensionAutoReturn",
     "brakeFade",
     "brakeFadeLevel",
     "brakeSqueal",

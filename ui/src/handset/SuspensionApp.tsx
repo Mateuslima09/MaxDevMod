@@ -313,7 +313,11 @@ export function SuspensionApp({ words }: { words: SuspensionWords }) {
                     ['5', '5s'],
                   ]}
                   chosen={String(autoDelay)}
-                  choose={(chosen) => postToHost({ type: 'suspensionAutoDelay', secs: Number(chosen) })}
+                  choose={(chosen) => {
+                    const secs = Number(chosen)
+                    useCharacterSwitches.setState({ suspensionAutoDelay: secs })
+                    postToHost({ type: 'suspensionAutoDelay', secs })
+                  }}
                 />
               </div>
             }
@@ -333,7 +337,11 @@ export function SuspensionApp({ words }: { words: SuspensionWords }) {
                     ['15', '15s'],
                   ]}
                   chosen={String(autoReturn)}
-                  choose={(chosen) => postToHost({ type: 'suspensionAutoReturn', secs: Number(chosen) })}
+                  choose={(chosen) => {
+                    const secs = Number(chosen)
+                    useCharacterSwitches.setState({ suspensionAutoReturn: secs })
+                    postToHost({ type: 'suspensionAutoReturn', secs })
+                  }}
                 />
               </div>
             }
