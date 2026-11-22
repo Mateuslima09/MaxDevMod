@@ -67,7 +67,7 @@ pub enum Level {
 }
 
 impl Level {
-    fn shift(self) -> f32 {
+    pub fn shift(self) -> f32 {
         match self {
             Level::Light => 100.0,
             Level::Realistic => 0.0,
@@ -108,6 +108,19 @@ pub fn strength_at(celsius: f32, level: Level) -> f32 {
     let t = celsius - level.shift();
     let past = ((t - 250.0) / 150.0).clamp(0.0, 1.0);
     (1.0 - (1.0 - LEAST) * past).max(LEAST)
+}
+
+/// Whether braking grinds (owner 2026-11-21): by the hottest disc, from 320 °C on the realistic level; with a trailer
+/// whose discs are much cooler (or hotter) than the truck's, later, as the cooler ones still hold a good part of the
+/// brake: 30 % of the difference later, 380 °C at most. The dashboard's warning goes by the brake left, both together.
+pub fn grinds(fade: &Fade, level: Level) -> bool {
+    let shift = level.shift();
+    let (hottest, gap) = match fade.trailer {
+        Some(trailer) => (fade.truck.max(trailer), (fade.truck - trailer).abs()),
+        None => (fade.truck, 0.0),
+    };
+    let from = (320.0 + 0.3 * gap).min(380.0);
+    hottest - shift >= from
 }
 
 /// Whether it's night in the game (20:00 to 06:00), from its minutes (and a Convoy's offset).
@@ -301,6 +314,21 @@ mod tests {
             last = fade.tick(Level::Realistic, Some(&coupled), 0.0, None, now);
         }
         assert!(last.trailer.is_some_and(|trailer| trailer < last.truck - 20.0), "{last:?}");
+    }
+
+    #[test]
+    fn it_grinds_by_the_hottest_disc_later_with_a_cool_one_beside_it() {
+        let fade = |truck: f32, trailer: Option<f32>| Fade { truck, trailer, strength: 1.0 };
+        let level = Level::Realistic;
+        assert!(!grinds(&fade(310.0, None), level));
+        assert!(grinds(&fade(325.0, None), level));
+        // The owner's picture: the truck at 435 °C, the trailer at 250 °C.
+        assert!(grinds(&fade(435.0, Some(250.0)), level));
+        assert!(!grinds(&fade(340.0, Some(150.0)), level));
+        assert!(grinds(&fade(330.0, Some(320.0)), level));
+        // The trailer hotter works the same way round.
+        assert!(grinds(&fade(250.0, Some(435.0)), level));
+        assert!(!grinds(&fade(325.0, None), Level::Light));
     }
 
     #[test]

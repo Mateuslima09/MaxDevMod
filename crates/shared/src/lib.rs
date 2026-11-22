@@ -625,7 +625,8 @@ pub struct HostBlock {
     pub brake_temp_truck: AtomicU32,
     pub brake_temp_trailer: AtomicU32,
     /// The brake fade's sounds (owner 2026-11-21): bit 16 set once the app said; bits 0-7 the squeal's volume and
-    /// bits 8-15 the warning's, 0 (off) to 100.
+    /// bits 8-15 the warning's, 0 (off) to 100; bit 17 set while braking grinds (host brake_fade.rs `grinds`: the
+    /// hottest disc, later with a cooler one beside it).
     pub brake_sound: AtomicU32,
     /// The brakes' HUD (owner 2026-11-21, plugin/src/brake_hud.rs): bit 8 set once the app said; bit 0 shown,
     /// bits 1-2 its corner ([`BRAKE_HUD_BOTTOM_LEFT`]…), bits 3-4 its size (0 small, 1 medium, 2 large).

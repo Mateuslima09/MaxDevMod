@@ -162,6 +162,13 @@ Este arquivo é o roteiro inteiro: o que ler, onde mexer, a ordem, como testar e
   (vazia esquenta 40 % menos que o cavalo; ~igual aos 8 t; 1,6× aos 20 t); cavalo `1,1` com carreta vazia, senão
   `1 + carga_t/80`. Carga = `job.cargo_mass` com o frete ativo e carregado. Teste `an_empty_trailer_heats_less_than_the_truck`.
 
+- **Rangido pelo disco mais quente (dono, 21/11 ~21:10):** `brake_fade::grinds(fade, level)`: range freando se o
+  disco mais quente ≥ `320 + 0,3 × diferença entre cavalo e carreta` (máx. 380 °C; sem carreta, 320), menos o
+  deslocamento do nível. O app manda isso no bit 17 de `HostBlock::brake_sound`; o plugin usa o bit (app antigo:
+  a regra da força). O **alarme** continua pela força total (os dois juntos). Ex. do dono: cavalo 435 °C, carreta
+  250 °C → força 66 %, não alarma, mas range (ponto 375 °C). Proposto e **não feito**: peso da carreta vazia na
+  força (70/30 em vez de 40/60) — o dono não respondeu.
+
 **Próximo passo (a partir da 2.4.6):** dono testa a seção C de TESTES.md. Depois: sons (seção 5.1, arquivos já
 em `crates/plugin/assets/`), app Freios no celular com as opções (5.2), HUD (4), notificação. Lista antiga abaixo:
 1. Dono faz **A3** (o modelo no log, ritmo certo?) e **A2** (a sonda do freio negativo, ainda não feita) de

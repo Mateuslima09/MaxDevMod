@@ -978,6 +978,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             host.brake_temp_trailer.store(fade.trailer.unwrap_or(f32::NAN).to_bits(), Ordering::Release);
             host.brake_sound.store(
                 0x1_0000
+                    | u32::from(brake_fade::grinds(&fade, level) && fade_settings.brake_fade.0) << 17
                     | u32::from(fade_settings.brake_squeal_volume.0)
                     | u32::from(fade_settings.brake_warning_volume.0) << 8,
                 Ordering::Release,

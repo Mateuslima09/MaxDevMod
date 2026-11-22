@@ -355,7 +355,8 @@ fn brake_sounds() {
     let alarm = if chosen.is_finite() && chosen > 0.0 { chosen } else { westplay_shared::BRAKE_ALARM_STRENGTH };
     let least = strength <= alarm;
     // The grinding braking from orange to red (about 320 °C).
-    let hot = strength <= westplay_shared::BRAKE_SQUEAL_STRENGTH;
+    // As the app says (the hottest disc, later with a cooler one beside it); an app that hasn't said, by the brake left.
+    let hot = if said & 0x1_0000 != 0 { said & 0x2_0000 != 0 } else { strength <= westplay_shared::BRAKE_SQUEAL_STRENGTH };
     let due = |until: Option<Instant>| until.is_none_or(|until| now >= until);
     if least && warning > 0.0 && due(sounds.warning_until) {
         let lasts = crate::character::brake_sound(crate::character::BrakeSound::Warning, warning);
