@@ -5,7 +5,8 @@
 <p align="center">
   <b>Uma tela no estilo CarPlay para os caminhões do American Truck Simulator e do Euro Truck Simulator 2.</b><br>
   Seu mapa, sua música e o YouTube na tela do painel, câmera de ré, um celular dentro do jogo e o Modo Personagem
-  para descer do caminhão.
+  para descer do caminhão.<br>
+  <sub><i>English: Open-source CarPlay-style infotainment screen, in-game phone, rear-view camera and HUD for American Truck Simulator and Euro Truck Simulator 2 on Windows (GPL-3.0-or-later).</i></sub>
 </p>
 
 <p align="center">
