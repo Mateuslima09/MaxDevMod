@@ -61,7 +61,7 @@ export function fleetTruckVisual(truck: Pick<FleetTruck, 'brand' | 'model' | 'ch
 
 /**
  * Maps any owned trailer (graneleiro, carga seca, carrega-tudo, tanque, baú frigorífico, sider, etc.)
- * to a realistic themed photo from `ui/public/cargo/*.jpg`, matching the Job Market photo system.
+ * to a dedicated photorealistic semi-trailer photo under `ui/public/fleet/trailer_*.jpg`.
  */
 export function fleetTrailerVisual(
   trailer: Pick<FleetTrailer, 'brand' | 'model' | 'body' | 'bodyType' | 'chainType'>,
@@ -71,30 +71,18 @@ export function fleetTrailerVisual(
   const text = normalize(`${trailer.brand} ${trailer.model} ${trailer.body} ${trailer.bodyType} ${trailer.chainType}`)
 
   if (hasAny(text, ['tanque', 'tank', 'silo', 'cistern', 'fuel', 'combust', 'foodtank', 'chem'])) {
-    return { photo: '/cargo/tanker.jpg', badge: pt ? 'TANQUE' : 'TANKER', accent: '#f59e0b' }
+    return { photo: '/fleet/trailer_tanque.jpg', badge: pt ? 'TANQUE' : 'TANKER', accent: '#f59e0b' }
   }
-  if (hasAny(text, ['granel', 'grain', 'hopper', 'bulk', 'caçamba', 'cacamba', 'dumper', 'tipper', 'bascul'])) {
-    return { photo: '/cargo/grains.jpg', badge: pt ? 'GRANELEIRO' : 'BULK', accent: '#d97706' }
+  if (hasAny(text, ['granel', 'grain', 'hopper', 'bulk', 'caçamba', 'cacamba', 'dumper', 'tipper', 'bascul', 'carga seca', 'manos', 'noma'])) {
+    return { photo: '/fleet/trailer_graneleiro.jpg', badge: pt ? 'GRANELEIRO' : 'BULK', accent: '#d97706' }
   }
-  if (hasAny(text, ['carrega', 'prancha', 'lowbed', 'lowloader', 'lowboy', 'heavy', 'machin', 'flatbed'])) {
-    return { photo: '/cargo/machinery.jpg', badge: pt ? 'PRANCHA' : 'LOWBED', accent: '#eab308' }
+  if (hasAny(text, ['carrega', 'prancha', 'lowbed', 'lowloader', 'lowboy', 'heavy', 'machin', 'flatbed', 'facchini', 'log', 'timber', 'steel', 'cegonha'])) {
+    return { photo: '/fleet/trailer_prancha.jpg', badge: pt ? 'PRANCHA' : 'LOWBED', accent: '#eab308' }
   }
-  if (hasAny(text, ['frig', 'reefer', 'refriger', 'insul', 'termic', 'baú frig', 'bau frig', 'cold'])) {
-    return { photo: '/cargo/food_cold.jpg', badge: pt ? 'FRIGORÍFICO' : 'REEFER', accent: '#38bdf8' }
+  if (hasAny(text, ['frig', 'reefer', 'refriger', 'insul', 'termic', 'baú', 'bau', 'cold', 'dry', 'sider', 'curtain', 'box', 'container', 'gooseneck'])) {
+    return { photo: '/fleet/trailer_bau.jpg', badge: pt ? 'BAÚ / SIDER' : 'BOX / REEFER', accent: '#38bdf8' }
   }
-  if (hasAny(text, ['log', 'timber', 'madeir', 'tora', 'florest'])) {
-    return { photo: '/cargo/timber.jpg', badge: pt ? 'FLORESTAL' : 'TIMBER', accent: '#a16207' }
-  }
-  if (hasAny(text, ['cegonha', 'car_trans', 'auto', 'veic'])) {
-    return { photo: '/cargo/automotive.jpg', badge: pt ? 'CEGONHA' : 'CARRIER', accent: '#6366f1' }
-  }
-  if (hasAny(text, ['steel', 'aco', 'ferro', 'bobina'])) {
-    return { photo: '/cargo/steel.jpg', badge: pt ? 'SERRALHERIA' : 'STEEL', accent: '#64748b' }
-  }
-  if (hasAny(text, ['dry', 'sider', 'curtain', 'box', 'bau', 'carga seca', 'container', 'gooseneck'])) {
-    return { photo: '/cargo/crates.jpg', badge: pt ? 'CARGA SECA' : 'DRY VAN', accent: '#10b981' }
-  }
-  return { photo: '/cargo/general.jpg', badge: pt ? 'CARRETA' : 'TRAILER', accent: '#3b82f6' }
+  return { photo: '/fleet/trailer_graneleiro.jpg', badge: pt ? 'CARRETA' : 'TRAILER', accent: '#3b82f6' }
 }
 
 /** Maps an owned garage to the flagship garage photo and tier accent. */

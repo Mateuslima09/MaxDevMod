@@ -1,6 +1,7 @@
-import { useCabin, useLive } from '../cabin/state/store'
+import { useCabin, useCharacterSwitches, useLive } from '../cabin/state/store'
 import { type FloatScreenAction, postToHost } from '../shared/host'
 import { List, Row, Segmented } from './ios'
+import { ScreenFitList, type ScreenFitWords } from './ScreenFitList'
 
 /**
  * MaxDevMod's own screen floating in the cab (owner 2026-11-20: "a screen of our own that works in any truck, no
@@ -89,10 +90,20 @@ export const FLOAT_SCREEN_WORDS = {
 
 export type FloatScreenWords = (typeof FLOAT_SCREEN_WORDS)['en']
 
-export function FloatScreenApp({ words, language }: { words: FloatScreenWords; language: 'en' | 'pt' }) {
+export function FloatScreenApp({
+  words,
+  language,
+  fitWords,
+}: {
+  words: FloatScreenWords
+  language: 'en' | 'pt'
+  fitWords: ScreenFitWords
+}) {
   const t = useLive((state) => state.telemetry)
   const useGameMap = useCabin((state) => state.useGameMap)
   const setUseGameMap = useCabin((state) => state.setUseGameMap)
+  const switches = useCharacterSwitches()
+  const pt = language === 'pt'
 
   const mapSelector = (
     <List header={words.mapHeader} footer={words.mapNote}>
@@ -109,10 +120,87 @@ export function FloatScreenApp({ words, language }: { words: FloatScreenWords; l
     </List>
   )
 
+  const extraScreenControls = (
+    <>
+      <List
+        header={pt ? 'Tela ligada com caminhão desligado' : 'Keep screen on with truck off'}
+        footer={
+          pt
+            ? 'Mantém o MaxDevMod aceso na tela do caminhão mesmo com a chave elétrica desligada.'
+            : 'Keeps MaxDevMod lit on the truck screen even when the ignition is off.'
+        }
+      >
+        <Row
+          label={
+            <Segmented
+              options={[
+                ['on', words.on],
+                ['off', words.off],
+              ]}
+              chosen={switches.keepScreenOn ? 'on' : 'off'}
+              choose={(chosen) => postToHost({ type: 'keepScreenOn', on: chosen === 'on' })}
+            />
+          }
+        />
+      </List>
+
+      <List
+        header={pt ? 'Espelhos virtuais (F2)' : 'Virtual mirrors (F2)'}
+        footer={
+          pt
+            ? 'Escolhe quais espelhos virtuais do jogo aparecem na tela.'
+            : 'Choose which of the game’s virtual mirrors appear on screen.'
+        }
+      >
+        <Row
+          label={
+            <Segmented
+              options={[
+                ['none', pt ? 'Nenhum' : 'None'],
+                ['left', pt ? 'Esquerdo' : 'Left'],
+                ['right', pt ? 'Direito' : 'Right'],
+                ['both', pt ? 'Ambos' : 'Both'],
+              ]}
+              chosen={switches.virtualMirrors}
+              choose={(which) => postToHost({ type: 'virtualMirrors', which })}
+            />
+          }
+        />
+      </List>
+
+      <List
+        header={pt ? 'Tamanho do cursor' : 'Cursor size'}
+        footer={
+          pt
+            ? 'Ajusta o tamanho da bolinha do mouse sobre a tela do caminhão e do celular.'
+            : 'Adjusts the size of the mouse dot over the truck screen and phone.'
+        }
+      >
+        <Row
+          label={
+            <Segmented
+              options={[
+                ['small', pt ? 'Pequeno' : 'Small'],
+                ['normal', 'Normal'],
+                ['large', pt ? 'Grande' : 'Large'],
+                ['larger', pt ? 'Maior' : 'Larger'],
+              ]}
+              chosen={switches.cursorSize}
+              choose={(which) => postToHost({ type: 'cursorSize', which })}
+            />
+          }
+        />
+      </List>
+
+      <ScreenFitList words={fitWords} />
+    </>
+  )
+
   if (!t) {
     return (
       <>
         {mapSelector}
+        {extraScreenControls}
         <p className="ios-empty">{words.noGame}</p>
       </>
     )
@@ -220,6 +308,7 @@ export function FloatScreenApp({ words, language }: { words: FloatScreenWords; l
           </List>
         </>
       )}
+      {extraScreenControls}
     </>
   )
 }

@@ -204,7 +204,7 @@ export const useCabin = create<CabinState>()(
       setAlbumArt: (albumArt) => set({ albumArt }),
       setTextSize: (step) => set({ textSize: toTextSize(step) }),
       setBrightness: (value) => set({ brightness: toBrightness(value) }),
-      setUseGameMap: (useGameMap) => set({ useGameMap }),
+      setUseGameMap: (useGameMap) => set((state) => (state.useGameMap === useGameMap ? state : { useGameMap })),
       setMapHole: (mapHole) => set({ mapHole }),
       setEqualizerBand: (band, db) => {
         const equalizer = toEqualizer({ ...useCabin.getState().equalizer, [band]: db })
@@ -309,7 +309,7 @@ if (typeof window !== 'undefined') {
     if (event.key !== cabinKey || !event.newValue) return
     try {
       const parsed = JSON.parse(event.newValue) as { state?: Partial<Persisted> }
-      if (typeof parsed.state?.useGameMap === 'boolean') {
+      if (typeof parsed.state?.useGameMap === 'boolean' && parsed.state.useGameMap !== useCabin.getState().useGameMap) {
         useCabin.setState({ useGameMap: parsed.state.useGameMap })
       }
     } catch {

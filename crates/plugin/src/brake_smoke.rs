@@ -395,7 +395,7 @@ unsafe fn snapshot_gbuffer_depth(
 /// # Safety
 /// The game's live context and arguments: `count` views, each live or null; `depth` live or null.
 pub unsafe fn on_set_render_targets(context: *mut c_void, count: u32, views: *const *mut c_void, depth: *mut c_void) {
-    if IN_DRAW.load(Ordering::Relaxed) {
+    if IN_DRAW.load(Ordering::Relaxed) || crate::dirt_render::in_draw() {
         return;
     }
     let was_gbuffer = IN_MAIN_GBUFFER.swap(false, Ordering::Relaxed);
@@ -444,7 +444,7 @@ pub unsafe fn on_set_render_targets(context: *mut c_void, count: u32, views: *co
 /// # Safety
 /// The game's live context on the render thread.
 pub unsafe fn after_set_render_targets(context: *mut c_void) {
-    if IN_DRAW.load(Ordering::Relaxed) {
+    if IN_DRAW.load(Ordering::Relaxed) || crate::dirt_render::in_draw() {
         return;
     }
     let Some(prev) = PENDING_DEPTH_COPY.lock().unwrap_or_else(|e| e.into_inner()).0.take() else { return };
@@ -1563,9 +1563,10 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         return;
     };
     let flags = bridge.host.brake_hud.load(Ordering::Acquire);
-    let enabled = (flags & 0x100) != 0 && (flags & 0x40) != 0;
+    let smoke_enabled = (flags & 0x100) != 0 && (flags & 0x40) != 0;
     let paused = crate::telemetry::paused();
-    if !enabled {
+    let dirt_active = !paused && crate::dirt::has_visible_dirt();
+    if !smoke_enabled && !dirt_active {
         deactivate();
         return;
     }
@@ -1573,8 +1574,8 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
     let shift = level_shift(flags);
     let truck_temp = f32::from_bits(bridge.host.brake_temp_truck.load(Ordering::Acquire));
     let trailer_temp = f32::from_bits(bridge.host.brake_temp_trailer.load(Ordering::Acquire));
-    let truck_intensity = smoke_intensity(truck_temp - shift);
-    let trailer_intensity = smoke_intensity(trailer_temp - shift);
+    let truck_intensity = if smoke_enabled { smoke_intensity(truck_temp - shift) } else { 0.0 };
+    let trailer_intensity = if smoke_enabled { smoke_intensity(trailer_temp - shift) } else { 0.0 };
 
     let mut sim = SIM.lock().unwrap_or_else(|e| e.into_inner());
     let now = Instant::now();
@@ -1596,7 +1597,8 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         sim.step(dt, truck_intensity, trailer_intensity, &truck_wheels, &trailer_wheels, truck.speed);
     }
 
-    let still_active = !paused && (truck_intensity > 0.0 || trailer_intensity > 0.0 || !sim.particles.is_empty());
+    let still_active =
+        !paused && (dirt_active || truck_intensity > 0.0 || trailer_intensity > 0.0 || !sim.particles.is_empty());
     ACTIVE.store(still_active, Ordering::Relaxed);
 
     if still_active {
@@ -1606,7 +1608,7 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         *SAVED_DEPTH.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
-    if paused || sim.particles.is_empty() {
+    if paused || (sim.particles.is_empty() && !dirt_active) {
         WORLD_VOTES.lock().unwrap_or_else(|e| e.into_inner()).clear();
         VEHICLE_VOTES.lock().unwrap_or_else(|e| e.into_inner()).clear();
         clear_unit_mvs();
@@ -1680,6 +1682,59 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
 
     let mut projected = project_particles(&sim.particles, &poses, &unit_mvs, &boxes, cam, &rot, depth_mode == 0);
     drop(sim);
+
+    // Phase 2 + Phase 3: render deferred 3D dirt decals onto truck & coupled trailers before brake smoke.
+    if dirt_active
+        && let Some((ref depth_srv, _, _, _, _, z_min, z_max)) = saved_depth
+    {
+        let dirt_units = crate::dirt::all_units();
+        let mut draws: Vec<crate::dirt_render::DirtUnitDraw> = Vec::with_capacity(5);
+        for (idx, body) in boxes.iter().enumerate().take(5) {
+            let Some(mv) = unit_mvs[idx] else { continue };
+            let dirt = dirt_units[idx];
+            if dirt.total() <= 0.015 {
+                continue;
+            }
+            // Slightly pad the tight interior OBB outward to encompass fenders, skirts, fuel tanks, and wheels.
+            let pad_x = 0.28f32;
+            let ground_y = body.min[1] - 0.35;
+            draws.push(crate::dirt_render::DirtUnitDraw {
+                mv,
+                obb_min: [body.min[0] - pad_x, ground_y, body.min[2] - 0.25],
+                obb_max: [body.max[0] + pad_x, body.max[1] + 0.35, body.max[2] + 0.25],
+                ground_y,
+                dirt,
+            });
+        }
+        if !draws.is_empty() {
+            let game_min = bridge.plugin.telemetry.read().map_or(720u32, |t| t.game_time % 1440);
+            let hour = game_min as f32 / 60.0;
+            // Smooth daylight curve: 0.20 at night, 1.0 between 08:00 and 18:00.
+            let daylight = if (8.0..=18.0).contains(&hour) {
+                1.0
+            } else if (5.0..8.0).contains(&hour) {
+                0.20 + 0.80 * ((hour - 5.0) / 3.0)
+            } else if (18.0..21.0).contains(&hour) {
+                1.0 - 0.80 * ((hour - 18.0) / 3.0)
+            } else {
+                0.20
+            };
+            // SAFETY: live swapchain on the game's render thread inside Present.
+            unsafe {
+                if let Some(sc) = IDXGISwapChain::from_raw_borrowed(&swapchain) {
+                    let scene = crate::dirt_render::DirtScene {
+                        proj,
+                        depth_srv,
+                        z_min,
+                        z_max,
+                        daylight,
+                        units: &draws,
+                    };
+                    crate::dirt_render::render_into(sc, &scene);
+                }
+            }
+        }
+    }
 
     let first_view = projected.first().map(|(pr, _)| [pr[0], pr[1], pr[2]]);
     let projected_count = projected.len();

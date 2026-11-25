@@ -1039,11 +1039,12 @@ export const STRINGS: Record<Language, Strings> = {
       fitSize: 'Size',
       resolution: {
         title: 'Screen Resolution (Live)',
-        footer: 'Applies immediately on the truck screen without restarting the game.',
+        footer:
+          'Recommended: Game Default (Original) for best stability. High/Ultra sharpen small screens, but may cause dashboard flickering on some trucks/mods.',
         high: 'High · HD (1280×720)',
         ultra: 'Ultra · Max Sharpness (1280×720+)',
         standard: 'Standard · Balanced (640×360)',
-        gameDefault: 'Game Default (Original)',
+        gameDefault: 'Game Default (Original · Recommended)',
       },
       keepScreenOn: 'Keep Screen On (Truck Off)',
       keepScreenOnFooter:
@@ -1591,11 +1592,12 @@ export const STRINGS: Record<Language, Strings> = {
       fitSize: 'Tamanho',
       resolution: {
         title: 'Resolução da Tela (Ao Vivo)',
-        footer: 'Aplica na hora direto no painel do caminhão, sem precisar reiniciar o jogo.',
+        footer:
+          'Recomendado: Padrão do Jogo (Original) para máxima estabilidade. Alta/Ultra melhoram a nitidez em telas pequenas, mas podem fazer o painel piscar em alguns caminhões/mods.',
         high: 'Alta · HD (1280×720)',
         ultra: 'Ultra · Nitidez Máxima (1280×720+)',
         standard: 'Padrão · Equilibrada (640×360)',
-        gameDefault: 'Padrão do Jogo (Original)',
+        gameDefault: 'Padrão do Jogo (Original · Recomendado)',
       },
       keepScreenOn: 'Tela Ligada (Caminhão Desligado)',
       keepScreenOnFooter: 'Mantém a central multimídia ligada e funcionando mesmo com o caminhão desligado.',
