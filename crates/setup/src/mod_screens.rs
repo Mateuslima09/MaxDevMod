@@ -60,7 +60,8 @@ pub fn find(game: &GameFiles, mods: &[PathBuf]) -> ModScreens {
     let own_vehicles: BTreeSet<&str> = game_mod::mod_screen_trucks().collect();
     let mut mesh_cache = MeshCache::default();
 
-    // Custom GPS scripts brought by installed mods (`gps_path` not in `own_scripts`).
+    // 1. Custom GPS scripts named by mod vehicle interiors (`gps_path` not in `own_scripts`)
+    //    and by cabin GPS accessories (`accessory/*/*.sii`, `addon_hookups/*.sii`).
     let mut named: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut script_meshes: BTreeMap<String, Vec<ScreenMesh>> = BTreeMap::new();
     for (_, files) in &active_mods {
@@ -79,6 +80,38 @@ pub fn find(game: &GameFiles, mods: &[PathBuf]) -> ModScreens {
                         }
                     }
                 }
+                // Cabin accessories (e.g. aftermarket/optional GPS & multimedia units on mod trucks).
+                let acc_root = format!("def/vehicle/{kind}/{vehicle}/accessory");
+                for slot_dir in files.dirs(&acc_root).unwrap_or_default() {
+                    let dir = format!("{acc_root}/{slot_dir}");
+                    for script in read_accessory_gps_scripts(files, Some(game), &dir) {
+                        if !own.contains(script.as_str()) {
+                            named.entry(script).or_default().insert(vehicle.clone());
+                        }
+                    }
+                }
+            }
+        }
+        // Global cabin addon hookups that declare a custom `gps_path`.
+        for script in read_accessory_gps_scripts(files, Some(game), "def/vehicle/addon_hookups") {
+            if !own.contains(script.as_str()) {
+                named.entry(script).or_default().insert("addon_hookups".into());
+            }
+        }
+        // 2. Direct GPS-only UI script discovery inside the mod (`ui/` and `ui/dashboard/`):
+        //    only scripts that actually render a GPS map (`ui::map`) or are named `*gps*.sii` with `id: 100`
+        //    so speedometers, radios, and non-GPS displays are never touched.
+        for ui_dir in ["ui", "ui/dashboard"] {
+            for name in files.list(ui_dir).unwrap_or_default().iter().filter(|n| n.ends_with(".sii")) {
+                let script = format!("{ui_dir}/{name}");
+                if own.contains(script.as_str()) || named.contains_key(&script) {
+                    continue;
+                }
+                let Some(bytes) = files.read(&script).ok().flatten() else { continue };
+                let Ok(text) = String::from_utf8(bytes) else { continue };
+                if is_gps_only_script(&script, &text) {
+                    named.entry(script).or_default().insert("mod-gps".into());
+                }
             }
         }
     }
@@ -87,10 +120,20 @@ pub fn find(game: &GameFiles, mods: &[PathBuf]) -> ModScreens {
     let mut found = ModScreens::default();
 
     for (script, vehicles) in named {
-        let copies: Vec<Vec<u8>> = std::iter::once(game)
-            .chain(active_mods.iter().map(|(_, files)| files))
-            .filter_map(|files| files.read(&script).ok().flatten())
+        let mod_copies: Vec<Vec<u8>> = active_mods
+            .iter()
+            .filter_map(|(_, files)| files.read(&script).ok().flatten())
             .collect();
+        let game_copy = game.read(&script).ok().flatten();
+        // Prefer mod copies when a mod intentionally overrides a base-game GPS script;
+        // still guard against conflicting copies across two different installed mods.
+        let copies: Vec<Vec<u8>> = if !mod_copies.is_empty() {
+            mod_copies
+        } else if let Some(gc) = game_copy {
+            vec![gc]
+        } else {
+            Vec::new()
+        };
         let Some(first) = copies.first() else {
             found.left.push((script, "not in the game or an installed mod".into()));
             continue;
@@ -174,8 +217,55 @@ fn inspect_single_interior(
     Some(InteriorInfo { gps_script, mesh })
 }
 
+/// True only for UI scripts that actually draw a GPS screen (never speedometers, trip computers, or radios).
+fn is_gps_only_script(script_path: &str, text: &str) -> bool {
+    if text.contains("ui::map") {
+        return true;
+    }
+    let file = script_path.rsplit('/').next().unwrap_or(script_path).to_ascii_lowercase();
+    file.contains("gps") && text.contains("ui::group") && text.contains("id: 100")
+}
+
+/// Reads `gps_path` entries from cabin accessory `.sii` definitions in `dir` (strictly GPS accessories).
+fn read_accessory_gps_scripts(files: &GameFiles, fallback: Option<&GameFiles>, dir: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for name in files.list(dir).unwrap_or_default().iter().filter(|n| n.ends_with(".sii")) {
+        let path = format!("{dir}/{name}");
+        let units = sii::read_units(files, &path)
+            .ok()
+            .filter(|u| !u.is_empty())
+            .or_else(|| read_units_with_fallback(files, fallback?, &path));
+        let Some(units) = units else { continue };
+        for unit in units {
+            if let Some(script) = unit
+                .get("gps_path")
+                .map(|s| s.trim().trim_matches('"').trim_start_matches('/').to_owned())
+                .filter(|s| !s.is_empty())
+            {
+                out.push(script);
+            }
+        }
+    }
+    out
+}
+
 fn read_units_with_fallback(primary: &GameFiles, fallback: &GameFiles, path: &str) -> Option<Vec<sii::Unit>> {
-    let bytes = primary.read(path).ok().flatten()?;
+    let mut visited = BTreeSet::new();
+    let expanded = expand_includes_recursive(primary, fallback, path, 0, &mut visited)?;
+    Some(sii::parse(&expanded))
+}
+
+fn expand_includes_recursive(
+    primary: &GameFiles,
+    fallback: &GameFiles,
+    path: &str,
+    depth: u8,
+    visited: &mut BTreeSet<String>,
+) -> Option<String> {
+    if depth > 6 || !visited.insert(path.to_owned()) {
+        return None;
+    }
+    let bytes = primary.read(path).ok().flatten().or_else(|| fallback.read(path).ok().flatten())?;
     let text = String::from_utf8(bytes).ok()?;
     let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
     let mut expanded = String::new();
@@ -185,12 +275,12 @@ fn read_units_with_fallback(primary: &GameFiles, fallback: &GameFiles, path: &st
         {
             let inc_path = if let Some(abs) = inc_file.strip_prefix('/') {
                 abs.to_owned()
+            } else if dir.is_empty() {
+                inc_file.to_owned()
             } else {
                 format!("{dir}/{inc_file}")
             };
-            if let Some(ib) = primary.read(&inc_path).ok().flatten().or_else(|| fallback.read(&inc_path).ok().flatten())
-                && let Ok(inc_text) = String::from_utf8(ib)
-            {
+            if let Some(inc_text) = expand_includes_recursive(primary, fallback, &inc_path, depth + 1, visited) {
                 expanded.push_str(&inc_text);
                 expanded.push('\n');
                 continue;
@@ -199,7 +289,7 @@ fn read_units_with_fallback(primary: &GameFiles, fallback: &GameFiles, path: &st
         expanded.push_str(line);
         expanded.push('\n');
     }
-    Some(sii::parse(&expanded))
+    Some(expanded)
 }
 
 fn consistent_mesh(meshes: &[ScreenMesh]) -> Option<ScreenMesh> {

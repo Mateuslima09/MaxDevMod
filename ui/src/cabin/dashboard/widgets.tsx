@@ -32,35 +32,50 @@ import { weatherView } from './weather'
 import { WeatherGlyph } from './WeatherGlyph'
 import { EMPTY, useDestinationView, useGuided } from './widgetState'
 import { cabClock, isPhonePage } from '../../shared/host'
-import { command, useYouTube } from '../apps/youtube/youtube'
+import { command, nextVideo, play, previousVideo, useYouTube } from '../apps/youtube/youtube'
 
 /**
  * Now Playing: what plays, the video YouTube plays first (VideoWidget), then the Spotify app's music, then
  * Apple Music's (the Music app), then YouTube Music's; nothing playing, what played last (nowPlaying.ts); none
  * of them with anything, Not Playing. Turned off in Settings, its room goes to the others.
  */
-export function NowPlayingWidget() {
+export type NowPlayingApp = 'music' | 'youtubeMusic' | 'spotify' | 'youtube'
+
+export function NowPlayingWidget({ onOpenApp }: { onOpenApp?: (app: NowPlayingApp) => void } = {}) {
   const shown = useCabin((state) => state.dashboardWidgets.nowPlaying)
   const { showing, spotify, appleMusic, youtubeMusic } = useNowPlaying()
   return (
     <div className={`widget-slot${shown ? ' open' : ''}`}>
-      {shown && showing === 'video' && (isPhonePage() ? <PhoneVideoWidget /> : <VideoWidget />)}
-      {shown && showing === 'spotify' && spotify && <SpotifyWidget spotify={spotify} />}
-      {shown && showing === 'appleMusic' && appleMusic && <AppleMusicWidget appleMusic={appleMusic} />}
-      {shown && showing === 'youtubeMusic' && youtubeMusic && <YouTubeMusicWidget youtubeMusic={youtubeMusic} />}
-      {shown && showing === null && <MusicWidget source={null} artwork={null} onControl={() => {}} />}
+      {shown && showing === 'video' && (isPhonePage() ? <PhoneVideoWidget onOpenApp={onOpenApp} /> : <VideoWidget />)}
+      {shown && showing === 'spotify' && spotify && <SpotifyWidget spotify={spotify} onOpenApp={onOpenApp} />}
+      {shown && showing === 'appleMusic' && appleMusic && (
+        <AppleMusicWidget appleMusic={appleMusic} onOpenApp={onOpenApp} />
+      )}
+      {shown && showing === 'youtubeMusic' && youtubeMusic && (
+        <YouTubeMusicWidget youtubeMusic={youtubeMusic} onOpenApp={onOpenApp} />
+      )}
+      {shown && showing === null && (
+        <MusicWidget
+          source={null}
+          artwork={null}
+          onOpen={onOpenApp ? () => onOpenApp('music') : undefined}
+          onControl={() => {}}
+        />
+      )}
     </div>
   )
 }
 
 /**
  * The video YouTube plays, on a phone's page (owner 2026-11-03: its picture filled the card, cut off): its picture
- * can't show there (VideoHole.tsx), so it's a track, as the music's, its thumbnail the cover. Played or paused from
- * here, all a phone may do to it (crates/host remote.rs).
+ * can't show there (VideoHole.tsx), so it's a track, as the music's, its thumbnail the cover. Played, paused, or
+ * skipped from here, and tapping the card opens YouTube right on the phone/iPad.
  */
-function PhoneVideoWidget() {
+function PhoneVideoWidget({ onOpenApp }: { onOpenApp?: (app: NowPlayingApp) => void }) {
   const current = useYouTube((store) => store.current)
   const playing = useYouTube((store) => store.state?.state === 1 && store.state.video === store.current?.video)
+  const hasNext = useYouTube((store) => Boolean((store.queue && store.queue.videos.length > 1) || store.upNext?.length))
+  const hasPrev = useYouTube((store) => Boolean((store.queue && store.queue.videos.length > 1) || store.watched.length > 1))
   const source = useMemo<MediaSource | null>(
     () =>
       current && {
@@ -74,32 +89,47 @@ function PhoneVideoWidget() {
         positionMs: 0,
         positionAt: 0,
         durationMs: 0,
-        controls: { playPause: true, next: false, previous: false, shuffle: false, repeat: false },
+        controls: { playPause: true, next: hasNext, previous: hasPrev, shuffle: false, repeat: false },
         shuffle: null,
         repeat: null,
       },
-    [current, playing],
+    [current, playing, hasNext, hasPrev],
   )
   return (
     <MusicWidget
       source={source}
       artwork={current?.thumbnail ?? null}
+      onOpen={onOpenApp ? () => onOpenApp('youtube') : undefined}
       onControl={(action) => {
         if (action === 'playPause') command({ action: playing ? 'pause' : 'play' })
+        else if (action === 'next') {
+          const next = nextVideo()
+          if (next) play(next, false)
+        } else if (action === 'previous') {
+          const prev = previousVideo()
+          if (prev) play(prev, false)
+        }
       }}
     />
   )
 }
 
 /** Apple Music's music (the Music app's): what plays, its controls, opening Music on Now Playing. */
-function AppleMusicWidget({ appleMusic }: { appleMusic: NonNullable<ReturnType<typeof useAppleMusicSource>> }) {
+function AppleMusicWidget({
+  appleMusic,
+  onOpenApp,
+}: {
+  appleMusic: NonNullable<ReturnType<typeof useAppleMusicSource>>
+  onOpenApp?: (app: NowPlayingApp) => void
+}) {
   return (
     <MusicWidget
       source={appleMusic.source}
       artwork={appleMusic.artwork}
       onOpen={() => {
         useAppleMusic.setState({ nowPlaying: true })
-        go({ type: 'openApp', app: 'music' })
+        if (onOpenApp) onOpenApp('music')
+        else go({ type: 'openApp', app: 'music' })
       }}
       onControl={(action) => {
         if (action === 'playPause') playOrPauseAppleMusic()
@@ -111,14 +141,21 @@ function AppleMusicWidget({ appleMusic }: { appleMusic: NonNullable<ReturnType<t
 }
 
 /** YouTube Music's music: what plays, its controls, opening YouTube Music on Now Playing. */
-function YouTubeMusicWidget({ youtubeMusic }: { youtubeMusic: NonNullable<ReturnType<typeof useYouTubeMusicSource>> }) {
+function YouTubeMusicWidget({
+  youtubeMusic,
+  onOpenApp,
+}: {
+  youtubeMusic: NonNullable<ReturnType<typeof useYouTubeMusicSource>>
+  onOpenApp?: (app: NowPlayingApp) => void
+}) {
   return (
     <MusicWidget
       source={youtubeMusic.source}
       artwork={youtubeMusic.artwork}
       onOpen={() => {
         useYouTubeMusic.setState({ nowPlaying: true })
-        go({ type: 'openApp', app: 'youtubeMusic' })
+        if (onOpenApp) onOpenApp('youtubeMusic')
+        else go({ type: 'openApp', app: 'youtubeMusic' })
       }}
       onControl={(action) => {
         if (action === 'playPause') playOrPauseYouTubeMusic()
@@ -130,14 +167,21 @@ function YouTubeMusicWidget({ youtubeMusic }: { youtubeMusic: NonNullable<Return
 }
 
 /** The Spotify app's music: what Spotify plays, its controls, opening the Spotify app on Now Playing. */
-function SpotifyWidget({ spotify }: { spotify: NonNullable<ReturnType<typeof useSpotifySource>> }) {
+function SpotifyWidget({
+  spotify,
+  onOpenApp,
+}: {
+  spotify: NonNullable<ReturnType<typeof useSpotifySource>>
+  onOpenApp?: (app: NowPlayingApp) => void
+}) {
   return (
     <MusicWidget
       source={spotify.source}
       artwork={spotify.artwork}
       onOpen={() => {
         useSpotify.setState({ nowPlaying: true })
-        go({ type: 'openApp', app: 'spotify' })
+        if (onOpenApp) onOpenApp('spotify')
+        else go({ type: 'openApp', app: 'spotify' })
       }}
       onControl={(action) => {
         if (action === 'playPause') playOrPause()

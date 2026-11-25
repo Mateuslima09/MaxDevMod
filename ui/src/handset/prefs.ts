@@ -33,6 +33,8 @@ export interface Prefs {
   alertsOff: AlertGroup[]
   /** Notification chime style (iPhone-inspired tones or silent). */
   notificationSound: NotificationSound
+  /** Whether the first-time phone tutorial has been completed or skipped. */
+  tutorialDone: boolean
 }
 
 const KEY = 'westplay-handset-prefs'
@@ -48,6 +50,7 @@ const DEFAULTS: Prefs = {
   manualRefuel: true,
   alertsOff: [],
   notificationSound: 'tritone',
+  tutorialDone: false,
 }
 
 /** Notification sound styles selectable in Settings (iPhone-inspired tones). */

@@ -13,6 +13,7 @@ compile_error!(
 );
 
 mod customize;
+mod diagnostics;
 mod maps;
 mod people;
 mod setup;
@@ -159,6 +160,13 @@ fn app_log_place() -> Option<String> {
     westplay_host::log::place().map(|path| path.display().to_string())
 }
 
+/// Generates a full diagnostic support report (.txt) with automated checks and log excerpts,
+/// saves it in Documents\WestPlay\logs, and opens Explorer selecting the file.
+#[tauri::command]
+fn generate_diagnostic_report(live_summary: String) -> Result<diagnostics::DiagnosticReportResult, String> {
+    diagnostics::generate(&live_summary)
+}
+
 /// A keyboard key's name for the player's keyboard, by its virtual-key code (the keybinds' labels); `None`
 /// for a mouse button or a key without one.
 #[tauri::command]
@@ -266,6 +274,7 @@ fn main() {
             tiktok_check,
             open_support_page,
             app_log_place,
+            generate_diagnostic_report,
             customize::customize_list,
             customize::add_wallpapers,
             customize::add_icon_set,

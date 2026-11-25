@@ -1088,6 +1088,14 @@ pub fn patch_gps_script(text: &str, texture: &str, shown: Option<&ShownPart>) ->
     let group = blocks
         .iter()
         .find(|block| block.kind == "ui::group" && field(&lines, block, "id") == Some(SCREEN_ON_GROUP))
+        .or_else(|| {
+            // Custom GPS-only mod scripts that draw a `ui::map` directly without an `id: 100` group:
+            // fall back to the map's parent group or root window (strictly only when `ui::map` is present).
+            let map = blocks.iter().find(|block| block.kind == "ui::map")?;
+            field(&lines, map, "my_parent")
+                .and_then(|parent_name| blocks.iter().find(|block| block.name == parent_name))
+                .or_else(|| blocks.iter().find(|block| block.kind == "ui::window"))
+        })
         .ok_or("no group with id 100")?;
     // Attach to the root `ui::window` (always drawn, even when `id: 100` is hidden with truck electrics off)
     // so the plugin can either keep WestPlay on or make it transparent to show the game's `id: 200` off-screen.

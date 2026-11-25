@@ -80,6 +80,7 @@ struct Pending {
     target_h: u32,
     layout_id: &'static str,
     frame: u64,
+    force: bool,
 }
 
 struct SharedPending(Option<Pending>);
@@ -159,6 +160,15 @@ fn publish_gps_srvs(target_tex_raw: usize) -> bool {
         slot.store(addr, Ordering::Release);
     }
     count > 0
+}
+
+/// True if the game has created at least one SRV for render-target texture `target_tex_raw`
+/// (i.e. it is sampled in the 3D scene, such as a cab GPS display).
+pub fn has_rt_views(target_tex_raw: usize) -> bool {
+    if target_tex_raw == 0 {
+        return false;
+    }
+    RT_VIEWS.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|&(res, _)| res == target_tex_raw)
 }
 
 /// Records an SRV the game created for a single-sample RGBA render-target texture.
@@ -248,6 +258,44 @@ pub fn note_frame(
         target_h,
         layout_id,
         frame,
+        force: false,
+    });
+}
+
+/// Live GPS-only render-target fallback for locked/encrypted truck mods whose GPS `.sii` script
+/// could not be patched on disk. Substitutes WestPlay's frame directly into the live GPS RT's SRV
+/// during `Present` (honoring `screen_handed_over` so the player can still toggle back to the original GPS).
+pub fn note_live_gps_frame(
+    source: ID3D11Texture2D,
+    version: u64,
+    target_tex_raw: usize,
+    target_w: u32,
+    target_h: u32,
+    frame: u64,
+) {
+    let Some(bridge) = bridge::get() else {
+        disable_for_frame();
+        return;
+    };
+    let handed_over = bridge.host.screen_handed_over.load(Ordering::Acquire) != 0;
+    if handed_over || target_tex_raw == 0 {
+        disable_for_frame();
+        return;
+    }
+    if !publish_gps_srvs(target_tex_raw) {
+        GPS_RT_READY.store(false, Ordering::Release);
+        return;
+    }
+    GPS_RT_FRAME.store(frame, Ordering::Release);
+    PENDING.lock().unwrap_or_else(|e| e.into_inner()).0 = Some(Pending {
+        source,
+        version,
+        target_tex_raw,
+        target_w,
+        target_h,
+        layout_id: "live-gps",
+        frame,
+        force: true,
     });
 }
 
@@ -267,6 +315,7 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
             target_h: p.target_h,
             layout_id: p.layout_id,
             frame: p.frame,
+            force: p.force,
         })
     };
     let Some(pending) = pending else { return };
@@ -275,15 +324,16 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         return;
     };
     let tier = bridge.host.screen_resolution.load(Ordering::Acquire);
+    let effective_tier = if pending.force && tier_spec(tier).is_none() { SCREEN_RES_HIGH } else { tier };
     let split = bridge.host.screen_split.load(Ordering::Acquire);
-    let Some((out_w, out_h, sharpen)) = tier_spec(tier) else {
+    let Some((out_w, out_h, sharpen)) = tier_spec(effective_tier) else {
         if LAST_TIER.swap(SCREEN_RES_GAME_DEFAULT, Ordering::AcqRel) != SCREEN_RES_GAME_DEFAULT {
             log!("screen hires: off (game default {}x{})", pending.target_w, pending.target_h);
         }
         GPS_RT_READY.store(false, Ordering::Release);
         return;
     };
-    if split != 0 {
+    if split != 0 && !pending.force {
         GPS_RT_READY.store(false, Ordering::Release);
         return;
     }

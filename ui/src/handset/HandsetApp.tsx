@@ -53,6 +53,7 @@ import { FloatScreenApp, FLOAT_SCREEN_WORDS } from './FloatScreenApp'
 import { BrakesApp, BRAKES_WORDS } from './BrakesApp'
 import { JobMarketApp, JOB_MARKET_WORDS } from './JobMarketApp'
 import { GarageApp } from './GarageApp'
+import { TutorialOverlay } from './TutorialOverlay'
 import { cancelActiveJob } from './jobMarketBridge'
 import { ScrollThumb } from './ScrollThumb'
 import { Scaled } from './Scaled'
@@ -94,6 +95,8 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   const appearance = prefs.look === 'auto' ? cab : prefs.look
   const words = WORDS[language === 'pt' ? 'pt' : 'en']
   const [app, setApp] = useState<AppId | null>(null)
+  const [replayTutorial, setReplayTutorial] = useState(false)
+  const showTutorial = !prefs.tutorialDone || replayTutorial
   // The app's page, for the scroll bar at its edge (ScrollThumb).
   const content = useRef<HTMLDivElement>(null)
   const home = () => setApp(null)
@@ -204,7 +207,17 @@ export function HandsetApp({ remote }: { remote: boolean }) {
                 />
               )}
               {app === 'truck' && <TruckApp words={words} units={prefs.units} />}
-              {app === 'settings' && <SettingsApp words={words} prefs={prefs} remote={remote} />}
+              {app === 'settings' && (
+                <SettingsApp
+                  words={words}
+                  prefs={prefs}
+                  remote={remote}
+                  onReplayTutorial={() => {
+                    setApp(null)
+                    setReplayTutorial(true)
+                  }}
+                />
+              )}
               {app === 'nupay' && <NupayApp language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />}
               {app === 'services' && <ServicesApp words={SERVICES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'character' && <CharacterApp words={CHARACTER_WORDS[language === 'pt' ? 'pt' : 'en']} />}
@@ -252,6 +265,15 @@ export function HandsetApp({ remote }: { remote: boolean }) {
           </section>
         )}
         <button type="button" className="ios-home-indicator" aria-label={words.home} onClick={home} />
+        {showTutorial && (
+          <TutorialOverlay
+            language={language === 'pt' ? 'pt' : 'en'}
+            prefs={prefs}
+            remote={remote}
+            ipad={isIpad}
+            onFinish={() => setReplayTutorial(false)}
+          />
+        )}
       </div>
     </main>
   )
@@ -763,7 +785,17 @@ function signedMetres(metres: number, language: 'en' | 'pt'): string {
 const LITRES_PER_GALLON = 3.785411784
 
 /** The phone's look and units (prefs.ts), the volume of what plays, reloading it, and how it's used. */
-function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; remote: boolean }) {
+function SettingsApp({
+  words,
+  prefs,
+  remote,
+  onReplayTutorial,
+}: {
+  words: Words
+  prefs: Prefs
+  remote: boolean
+  onReplayTutorial: () => void
+}) {
   const switches = useCharacterSwitches()
   return (
     <>
@@ -1011,8 +1043,11 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
           </button>
         )}
       </List>
-      <List header={words.howTo} footer="MaxDevMod ATS">
+      <List header={words.howTo} footer="MaxDevMod">
         <Row label={<span className="ios-row-wrap">{words.howToText}</span>} />
+        <button type="button" className="ios-row ios-row-action" onClick={onReplayTutorial}>
+          {words.replayTutorial}
+        </button>
       </List>
     </>
   )
@@ -1274,6 +1309,7 @@ const WORDS = {
     },
     howToText:
       'Alt+4 takes the phone out and puts it away. Hold Alt to use it with the mouse. The key can be changed in MaxDevMod’s Controls.',
+    replayTutorial: 'Replay tutorial',
   },
   pt: {
     home: 'Início',
@@ -1460,6 +1496,7 @@ const WORDS = {
     },
     howToText:
       'Alt+4 tira e guarda o celular. Segure o Alt para mexer nele com o mouse. A tecla pode ser trocada em Controles, no MaxDevMod.',
+    replayTutorial: 'Ver tutorial novamente',
   },
 }
 
