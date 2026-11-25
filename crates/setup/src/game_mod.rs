@@ -100,9 +100,9 @@ pub fn split_current(built: &Path) -> bool {
 #[serde(rename_all = "camelCase")]
 pub enum ScreenResolution {
     Standard,
-    #[default]
     High,
     Ultra,
+    #[default]
     GameDefault,
 }
 

@@ -120,7 +120,7 @@ fn is_cropped_layout(id: &str) -> bool {
 /// 2026-11-21: a Scania 2025 mod's instrument cluster flashed with WestPlay's screen in it, and stopped with the
 /// game's own resolution). Their target is big already (1024 x 512), so little is lost.
 fn shares_its_target(id: &str) -> bool {
-    id.starts_with("scania-2025")
+    id.starts_with("scania-2025") || id == "daf-2021"
 }
 
 /// Target dimensions `(width, height)` and unsharp-mask sharpening strength for a live tier.

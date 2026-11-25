@@ -12,6 +12,8 @@ mod camera;
 mod character;
 mod commands;
 mod d3d;
+mod dirt;
+mod dirt_render;
 mod fade;
 mod fleet;
 mod float_screen;

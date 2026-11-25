@@ -38,7 +38,6 @@ use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB, DXGI_FORMAT_R8G8B8A8_UNORM,
     DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_SAMPLE_DESC,
 };
-use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
 use windows::core::Interface;
 
 use crate::frame::FrameSource;
@@ -181,70 +180,6 @@ fn target_said(desc: &D3D11_TEXTURE2D_DESC) -> u64 {
     (desc.Width as u64 & 0xffff) << 32 | (desc.Height as u64 & 0xffff) << 16 | (desc.Format.0 as u64 & 0xffff)
 }
 
-/// Candidate in-cab UI render target tracked live for locked/encrypted truck mods whose GPS `.sii`
-/// script could not be patched on disk by `westplay.scs`.
-#[derive(Clone, Copy)]
-struct LiveRt {
-    tex_raw: usize,
-    width: u32,
-    height: u32,
-    has_cab_mark: bool,
-    last_frame: u64,
-    seen_frames: u32,
-}
-
-static LIVE_RTS: LazyLock<Mutex<Vec<LiveRt>>> = LazyLock::new(|| Mutex::new(Vec::new()));
-static LIVE_GPS_LOGGED: AtomicUsize = AtomicUsize::new(0);
-
-fn is_gps_rt_dimensions(w: u32, h: u32) -> bool {
-    if !(256..=1536).contains(&w) || !(256..=1024).contains(&h) {
-        return false;
-    }
-    let aspect = w as f64 / h as f64;
-    (0.9..=2.8).contains(&aspect)
-}
-
-fn gps_rt_priority(w: u32, h: u32) -> u32 {
-    match (w, h) {
-        (1024, 512) | (1280, 720) => 100,
-        (800, 480) | (1024, 600) | (1280, 800) | (1440, 540) => 95,
-        (512, 512) | (1024, 1024) | (512, 256) => 80,
-        (256, 256) => 60,
-        _ => 40,
-    }
-}
-
-fn note_live_rt(tex_raw: usize, width: u32, height: u32) {
-    if tex_raw == 0 || !is_gps_rt_dimensions(width, height) {
-        return;
-    }
-    let frame = FRAME.load(Ordering::Relaxed);
-    let mut rts = LIVE_RTS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(entry) = rts.iter_mut().find(|r| r.tex_raw == tex_raw) {
-        entry.width = width;
-        entry.height = height;
-        if entry.last_frame != frame {
-            entry.last_frame = frame;
-            entry.seen_frames = entry.seen_frames.saturating_add(1);
-        }
-        return;
-    }
-    if rts.len() >= 16 {
-        rts.remove(0);
-    }
-    rts.push(LiveRt { tex_raw, width, height, has_cab_mark: false, last_frame: frame, seen_frames: 1 });
-}
-
-fn mark_rt_non_gps(tex_raw: usize) {
-    if tex_raw == 0 {
-        return;
-    }
-    let mut rts = LIVE_RTS.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(entry) = rts.iter_mut().find(|r| r.tex_raw == tex_raw) {
-        entry.has_cab_mark = true;
-    }
-}
-
 /// Whether the truck's screen is one WestPlay shows on (see [`ON_SUPPORTED_TRUCK`]).
 pub fn on_supported_truck() -> bool {
     ON_SUPPORTED_TRUCK.load(Ordering::Acquire)
@@ -277,8 +212,6 @@ pub fn truck_changed(id: &str) {
     SIZE_SAID.store(0, Ordering::Release);
     ANY_SCREEN_DRAWN.store(0, Ordering::Release);
     CAB_WITHOUT_SCREEN.store(0, Ordering::Release);
-    LIVE_RTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    LIVE_GPS_LOGGED.store(0, Ordering::Release);
     crate::hires::reset_truck();
     if let Some(bridge) = bridge::get() {
         bridge.plugin.truck_supported.store(0, Ordering::Release);
@@ -305,9 +238,6 @@ pub unsafe fn on_set_render_targets(count: u32, views: *const *mut c_void) {
         CURRENT_IS_CANDIDATE.store(candidate, Ordering::Relaxed);
         CURRENT_TARGET.store(target.as_ref().map_or(0, |(desc, _)| target_said(desc)), Ordering::Relaxed);
         CURRENT_TARGET_TEX.store(tex_raw, Ordering::Relaxed);
-        if candidate && let Some((desc, raw)) = &target {
-            note_live_rt(*raw, desc.Width, desc.Height);
-        }
     }
 }
 
@@ -341,7 +271,6 @@ pub unsafe fn on_set_shader_resources(context: *mut c_void, count: u32, views: *
             let mut desc = D3D11_TEXTURE2D_DESC::default();
             texture.GetDesc(&mut desc);
             if is_cab_mark(&desc) {
-                mark_rt_non_gps(CURRENT_TARGET_TEX.load(Ordering::Relaxed));
                 cab_drawn();
                 continue;
             }
@@ -827,86 +756,6 @@ unsafe fn first_target(count: u32, views: *const *mut c_void) -> Option<(D3D11_T
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         texture.GetDesc(&mut desc);
         Some((desc, texture.as_raw() as usize))
-    }
-}
-
-/// Live D3D11 GPS-only render-target fallback for locked/encrypted truck mods whose GPS `.sii`
-/// script could not be patched on disk. Runs right before `hires::on_present` so the blitter
-/// picks up the frame on the exact same `Present` call.
-///
-/// # Safety
-/// `swapchain` must be the game's live `IDXGISwapChain` on its render thread inside `Present`.
-pub unsafe fn on_present(swapchain: *mut c_void, frame: u64) {
-    // Only engage when NO patched `westplay.scs` screen has been drawn in this truck for a while
-    // and telemetry confirms the player is inside a vehicle.
-    if drawn_lately(ANY_SCREEN_DRAWN.load(Ordering::Acquire), frame) {
-        return;
-    }
-    let in_truck = bridge::get().is_some_and(|b| b.plugin.truck.read().is_some_and(|t| !t.id.as_str().is_empty()));
-    if !in_truck {
-        return;
-    }
-    let chosen = {
-        let rts = LIVE_RTS.lock().unwrap_or_else(|e| e.into_inner());
-        rts.iter()
-            .copied()
-            .filter(|r| {
-                !r.has_cab_mark
-                    && r.seen_frames >= 60
-                    && frame.saturating_sub(r.last_frame) <= 10
-                    && crate::hires::has_rt_views(r.tex_raw)
-            })
-            .max_by_key(|r| (gps_rt_priority(r.width, r.height), r.seen_frames))
-    };
-    let Some(rt) = chosen else { return };
-
-    if LIVE_GPS_LOGGED.swap(rt.tex_raw, Ordering::AcqRel) != rt.tex_raw {
-        log!(
-            "screen: live GPS fallback locked onto RT {:#x} ({}x{}, seen {} frames)",
-            rt.tex_raw,
-            rt.width,
-            rt.height,
-            rt.seen_frames
-        );
-    }
-
-    SUPPORTED_DRAWN.store(frame.max(1), Ordering::Release);
-    ON_SUPPORTED_TRUCK.store(true, Ordering::Release);
-    if let Some(bridge) = bridge::get() {
-        bridge.plugin.truck_supported.store(TRUCK_SUPPORTED, Ordering::Release);
-        bridge.plugin.screen_layout.store(0, Ordering::Release);
-    }
-
-    let powered = bridge::get().is_some_and(|b| {
-        b.plugin.telemetry.read().is_none_or(|t| t.electric_enabled)
-            || b.host.keep_screen_on.load(Ordering::Acquire) == 1
-    });
-    let enabled = powered && bridge::get().is_some_and(|b| b.host.screen_enabled.load(Ordering::Acquire) == 1);
-    if !enabled {
-        crate::hires::disable_for_frame();
-        return;
-    }
-
-    // SAFETY: `swapchain` is the game's live swap chain on its render thread inside `Present`.
-    unsafe {
-        let Some(swapchain) = IDXGISwapChain::from_raw_borrowed(&swapchain) else { return };
-        let Ok(device) = swapchain.GetDevice::<ID3D11Device>() else { return };
-        let Ok(context) = device.GetImmediateContext() else { return };
-        let latest = {
-            let mut state = state();
-            let state = &mut state.0;
-            let _ = state.adopt_device(device.as_raw() as usize);
-            state.frames.update(&device, &context)
-        };
-        if let Some((latest, version)) = latest {
-            SHOWN_AT.store(frame.max(1), Ordering::Release);
-            crate::mirror::note_frame(&latest);
-            let (source, ver) = match crate::mirror::composed() {
-                Some((composed, count)) => (composed, COMPOSED | count),
-                None => (latest, version),
-            };
-            crate::hires::note_live_gps_frame(source, ver, rt.tex_raw, rt.width, rt.height, frame);
-        }
     }
 }
 

@@ -303,6 +303,9 @@ const TRAILER_SUSPENSION_CONTEXT: usize = 0x3000;
 /// Contexts for additional trailers (`trailer.1`..=`trailer.3`) connected and world placement channels.
 const EXTRA_TRAILER_CONNECTED_CONTEXT: usize = 0x4000;
 const EXTRA_TRAILER_PLACEMENT_CONTEXT: usize = 0x4100;
+/// Contexts for wheel road-surface substance indices (`truck.wheel.substance` and `trailer.wheel.substance`).
+const TRUCK_SUBSTANCE_CONTEXT: usize = 0x5000;
+const TRAILER_SUBSTANCE_CONTEXT: usize = 0x6000;
 
 const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::Placement),
@@ -402,6 +405,21 @@ pub unsafe fn register(params: &TelemetryInitParamsV100) {
                 .filter(|&wheel| {
                     let context = (base + wheel) as *mut c_void;
                     register_channel(c_name.as_ptr(), wheel as u32, SCS_VALUE_TYPE_FLOAT, 0, on_channel, context)
+                        == SCS_RESULT_OK
+                })
+                .count();
+            log!("telemetry: {channel} of {wheels} wheels registered");
+        }
+        // Road surface substance under each wheel (Phase 1 dirt simulator).
+        for (channel, base) in [
+            ("truck.wheel.substance", TRUCK_SUBSTANCE_CONTEXT),
+            ("trailer.wheel.substance", TRAILER_SUBSTANCE_CONTEXT),
+        ] {
+            let Ok(c_name) = CString::new(channel) else { continue };
+            let wheels = (0..crate::reversing::MOST_WHEELS)
+                .filter(|&wheel| {
+                    let context = (base + wheel) as *mut c_void;
+                    register_channel(c_name.as_ptr(), wheel as u32, SCS_VALUE_TYPE_U32, 0, on_channel, context)
                         == SCS_RESULT_OK
                 })
                 .count();
@@ -564,6 +582,12 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                 crate::fleet::serve();
                 // The walking test: on the game's main thread too (it calls the game's camera).
                 crate::character::on_frame_end();
+                // Phase 1 dirt simulator: pure CPU telemetry step (zero GPU impact).
+                let trailer_coupled = {
+                    let t = trailer();
+                    t.connected && t.placed
+                };
+                crate::dirt::on_frame_end(speed, paused, trailer_coupled);
             }
             _ => {}
         }
@@ -602,6 +626,17 @@ unsafe fn on_configuration(configuration: &ConfigurationEvent) {
             b"trailer.1" => on_extra_trailer(0, configuration),
             b"trailer.2" => on_extra_trailer(1, configuration),
             b"trailer.3" => on_extra_trailer(2, configuration),
+            b"substances" => {
+                let mut entries = Vec::new();
+                for attribute in configuration.attributes() {
+                    if CStr::from_ptr(attribute.name).to_bytes() == b"id"
+                        && let Some(name) = attribute.value.string()
+                    {
+                        entries.push((attribute.index, name));
+                    }
+                }
+                crate::dirt::set_substances(&entries);
+            }
             _ => {}
         }
     }
@@ -767,6 +802,18 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
     unsafe {
         // A wheel's suspension, the truck's or the trailer's (`register`): metres pressed in.
         let at = context as usize;
+        if (TRUCK_SUBSTANCE_CONTEXT..TRUCK_SUBSTANCE_CONTEXT + crate::reversing::MOST_WHEELS).contains(&at) {
+            if let Some(v) = value.as_ref() {
+                crate::dirt::set_wheel_substance(false, at - TRUCK_SUBSTANCE_CONTEXT, v.u32());
+            }
+            return;
+        }
+        if (TRAILER_SUBSTANCE_CONTEXT..TRAILER_SUBSTANCE_CONTEXT + crate::reversing::MOST_WHEELS).contains(&at) {
+            if let Some(v) = value.as_ref() {
+                crate::dirt::set_wheel_substance(true, at - TRAILER_SUBSTANCE_CONTEXT, v.u32());
+            }
+            return;
+        }
         if (EXTRA_TRAILER_CONNECTED_CONTEXT..EXTRA_TRAILER_CONNECTED_CONTEXT + EXTRA_TRAILERS_COUNT).contains(&at) {
             let slot = at - EXTRA_TRAILER_CONNECTED_CONTEXT;
             let mut extras = EXTRA_TRAILERS.lock().unwrap_or_else(|e| e.into_inner());

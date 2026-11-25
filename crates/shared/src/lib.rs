@@ -199,8 +199,8 @@ pub const TRUCK_UNSUPPORTED: u32 = 2;
 /// until each truck's display is measured (the cab's Adjust Screen fits it meanwhile). The other layouts are their own
 /// trucks' scripts.
 const SHARED_LAYOUT_TRUCKS: &[(&str, &[&str])] = &[
-    // The game's toy GPS (Cabin Accessories), WestPlay's only on Oyuncuyusbis' Setra S 516 HD/2's tablet part.
-    ("setra-516", &["setra516hd"]),
+    // The game's toy GPS (Cabin Accessories), WestPlay's on Oyuncuyusbis' Setra S 516 HD/2 and Shop Pisc Volvo FH23.
+    ("setra-516", &["setra516hd", "pisc.fh23"]),
 ];
 
 /// The trucks WestPlay shows in on the layout `id`, if it's one other trucks share ([`SHARED_LAYOUT_TRUCKS`]); none

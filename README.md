@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Mateuslima09/MaxDevMod/releases/latest"><img alt="Baixar v2.5.1 para Windows" src="https://img.shields.io/badge/baixar-v2.5.1%20Windows-e53935?style=for-the-badge"></a>
+  <a href="https://github.com/Mateuslima09/MaxDevMod/releases/latest"><img alt="Baixar v2.5.2 para Windows" src="https://img.shields.io/badge/baixar-v2.5.2%20Windows-e53935?style=for-the-badge"></a>
   <img alt="Windows 10 e 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-1f232a?style=for-the-badge">
   <img alt="Euro Truck Simulator 2 1.62" src="https://img.shields.io/badge/ETS2-1.62-1f232a?style=for-the-badge">
   <img alt="American Truck Simulator 1.62" src="https://img.shields.io/badge/ATS-1.62-1f232a?style=for-the-badge">
@@ -41,7 +41,7 @@ Instalado nos dois jogos, o MaxDevMod detecta e troca automaticamente para o jog
 
 ---
 
-## Novidades da v2.5.1
+## Novidades da v2.5.2
 
 - **Tutorial interativo de primeiro uso** no celular/iPad (7 etapas guiadas + configuração rápida inicial e botão para rever em *Ajustes*).
 - **Modo iPad (iPadOS)** além do modo iPhone, com widgets Liquid Glass, widget de música interativo e YouTube com controle de volume.
@@ -237,7 +237,7 @@ A música sai dos alto-falantes reais da cabine onde eles existem nos caminhões
 
 ## Instalação e Suporte
 
-1. Baixe o instalador na [última versão (v2.5.1)](https://github.com/Mateuslima09/MaxDevMod/releases/latest) e execute com o ETS2 e o ATS **fechados**.
+1. Baixe o instalador na [última versão (v2.5.2)](https://github.com/Mateuslima09/MaxDevMod/releases/latest) e execute com o ETS2 e o ATS **fechados**.
 2. O app abre e guia você automaticamente: encontra o jogo, instala o plugin (`westplay.dll`) e o mod de telas (`westplay.scs`) e monta seu mapa.
 3. Para instalar também no outro jogo, vá em **Configuração → Outros jogos → Instalar**.
 4. Abra o jogo em **DirectX 11** e entre no caminhão.

@@ -252,6 +252,7 @@ export function HandsetApp({ remote }: { remote: boolean }) {
                 <FloatScreenApp
                   words={FLOAT_SCREEN_WORDS[language === 'pt' ? 'pt' : 'en']}
                   language={language === 'pt' ? 'pt' : 'en'}
+                  fitWords={words}
                 />
               )}
             </div>
