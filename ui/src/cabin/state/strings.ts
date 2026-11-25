@@ -462,6 +462,10 @@ export interface Strings {
     adjustForward: string
     adjustUp: string
     adjustDown: string
+    adjustLeft: string
+    adjustRight: string
+    adjustRollLeft: string
+    adjustRollRight: string
     adjustReset: string
     adjustDone: string
     adjustNote: string
@@ -472,6 +476,8 @@ export interface Strings {
     dark: string
     automatic: string
     automaticFooter: string
+    /** Screen brightness slider in Settings › Appearance (owner 2026-11-22). */
+    brightness: string
     /** The truck's information bar beside MaxDevMod (the DAF's, the Scania Smart Dash's), and what it is. */
     vehicleBar: string
     vehicleBarFooter: string
@@ -514,6 +520,8 @@ export interface Strings {
     wallpaper: string
     dashboard: string
     widgets: string
+    gameMap: string
+    gameMapFooter: string
     showAlbumArt: string
     /** Sound, and in it the Equalizer: the speakers as tuned (Recommended) or the player's own tone (Custom), what
      * it does, its three bands under the graph, and the curve set back. */
@@ -999,6 +1007,10 @@ export const STRINGS: Record<Language, Strings> = {
       adjustForward: 'Further forward',
       adjustUp: 'Higher',
       adjustDown: 'Lower',
+      adjustLeft: 'Left',
+      adjustRight: 'Right',
+      adjustRollLeft: 'Tilt left',
+      adjustRollRight: 'Tilt right',
       adjustReset: 'Default',
       adjustDone: 'Done',
       adjustNote: 'Kept for this truck or trailer.',
@@ -1009,6 +1021,7 @@ export const STRINGS: Record<Language, Strings> = {
       dark: 'Dark',
       automatic: 'Automatic',
       automaticFooter: 'Dark at night and whenever the headlights are on, the way the truck’s light sensor does it.',
+      brightness: 'Brightness',
       vehicleBar: 'Vehicle Bar',
       vehicleBarFooter: 'The truck’s information bar beside MaxDevMod. Turned off, MaxDevMod fills the whole screen.',
       textSize: 'Text Size',
@@ -1050,6 +1063,8 @@ export const STRINGS: Record<Language, Strings> = {
       wallpaper: 'Wallpaper',
       dashboard: 'Dashboard',
       widgets: 'Widgets',
+      gameMap: 'Original Game Map',
+      gameMapFooter: 'Show the truck’s original GPS map in the Dashboard instead of MaxDevMod’s map.',
       showAlbumArt: 'Show Album Art',
       sound: 'Sound',
       equalizer: 'Equalizer',
@@ -1543,6 +1558,10 @@ export const STRINGS: Record<Language, Strings> = {
       adjustForward: 'Mais para frente',
       adjustUp: 'Subir',
       adjustDown: 'Descer',
+      adjustLeft: 'Esquerda',
+      adjustRight: 'Direita',
+      adjustRollLeft: 'Inclinar esq.',
+      adjustRollRight: 'Inclinar dir.',
       adjustReset: 'Padrão',
       adjustDone: 'Pronto',
       adjustNote: 'Fica guardado para este caminhão ou carreta.',
@@ -1553,6 +1572,7 @@ export const STRINGS: Record<Language, Strings> = {
       dark: 'Escuro',
       automatic: 'Automático',
       automaticFooter: 'Escuro à noite e sempre que os faróis estiverem ligados, como o sensor de luz do caminhão.',
+      brightness: 'Brilho',
       vehicleBar: 'Barra do Veículo',
       vehicleBarFooter:
         'A barra de informações do caminhão ao lado do MaxDevMod. Desligada, o MaxDevMod ocupa a tela toda.',
@@ -1594,6 +1614,8 @@ export const STRINGS: Record<Language, Strings> = {
       wallpaper: 'Papel de Parede',
       dashboard: 'Painel',
       widgets: 'Widgets',
+      gameMap: 'Mapa original do jogo',
+      gameMapFooter: 'Mostra o GPS original do caminhão no Painel no lugar do mapa do MaxDevMod.',
       showAlbumArt: 'Mostrar Capa do Álbum',
       sound: 'Som',
       equalizer: 'Equalizador',
@@ -2088,6 +2110,10 @@ export const STRINGS: Record<Language, Strings> = {
       adjustForward: 'Daha ileri',
       adjustUp: 'Yukarı',
       adjustDown: 'Aşağı',
+      adjustLeft: 'Sol',
+      adjustRight: 'Sağ',
+      adjustRollLeft: 'Sola eğ',
+      adjustRollRight: 'Sağa eğ',
       adjustReset: 'Varsayılan',
       adjustDone: 'Tamam',
       adjustNote: 'Bu kamyon veya dorse için saklanır.',
@@ -2098,6 +2124,7 @@ export const STRINGS: Record<Language, Strings> = {
       dark: 'Koyu',
       automatic: 'Otomatik',
       automaticFooter: 'Geceleri ve farlar her yandığında koyu; tıpkı kamyonun ışık sensörü gibi.',
+      brightness: 'Parlaklık',
       vehicleBar: 'Araç Çubuğu',
       vehicleBarFooter: 'MaxDevMod’in yanındaki kamyon bilgi çubuğu. Kapatırsan MaxDevMod tüm ekranı kaplar.',
       textSize: 'Metin Boyutu',
@@ -2137,6 +2164,8 @@ export const STRINGS: Record<Language, Strings> = {
       wallpaper: 'Duvar Kâğıdı',
       dashboard: 'Gösterge Paneli',
       widgets: 'Widget’lar',
+      gameMap: 'Orijinal Oyun Haritası',
+      gameMapFooter: 'Panelde MaxDevMod haritası yerine kamyonun kendi GPS haritasını gösterir.',
       showAlbumArt: 'Albüm Kapağını Göster',
       sound: 'Ses',
       equalizer: 'Ekolayzır',

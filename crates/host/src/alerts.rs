@@ -22,13 +22,23 @@ pub enum Group {
     Fine,
     Fuel,
     Damage,
+    /// Brake fade (owner 2026-11-21): overheating and no brakes left.
+    Brake,
     Rest,
     Job,
 }
 
 impl Group {
-    pub const ALL: [Group; 7] =
-        [Self::MoneyIn, Self::MoneyOut, Self::Fine, Self::Fuel, Self::Damage, Self::Rest, Self::Job];
+    pub const ALL: [Group; 8] = [
+        Self::MoneyIn,
+        Self::MoneyOut,
+        Self::Fine,
+        Self::Fuel,
+        Self::Damage,
+        Self::Brake,
+        Self::Rest,
+        Self::Job,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +47,7 @@ impl Group {
             Self::Fine => "fine",
             Self::Fuel => "fuel",
             Self::Damage => "damage",
+            Self::Brake => "brake",
             Self::Rest => "rest",
             Self::Job => "job",
         }
@@ -73,7 +84,7 @@ pub struct Alert {
 }
 
 impl Alert {
-    fn new(group: Group, app: &'static str, kind: &'static str) -> Self {
+    pub fn new(group: Group, app: &'static str, kind: &'static str) -> Self {
         Self { group, app, kind, amount: None, currency: None, value: None, detail: None, count: None, total: None }
     }
 
@@ -165,6 +176,7 @@ pub fn samples(currency: &'static str) -> Vec<Alert> {
         Alert::new(Group::Fuel, "truck", "fuelLow"),
         pay_attendant(130.5, "R$"),
         with_value(Group::Damage, "truck", "damage", 25, Some("engine")),
+        Alert::new(Group::Brake, "truck", "brakeHot"),
         with_value(Group::Rest, "truck", "rest", 60, None),
         {
             let mut alert = Alert::new(Group::Job, "freight", "jobNew");

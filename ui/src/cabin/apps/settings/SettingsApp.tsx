@@ -14,7 +14,7 @@ import {
   SCREEN_FIT_PRESETS,
   useScreenFits,
 } from '../../state/screenFit'
-import { DASHBOARD_WIDGETS, type DashboardWidget, useCabin, useLive } from '../../state/store'
+import { BRIGHTNESS_LIMITS, DASHBOARD_WIDGETS, type DashboardWidget, useCabin, useLive } from '../../state/store'
 import { useText } from '../../state/text'
 import { TEXT_SIZES } from '../../state/textSize'
 import {
@@ -349,6 +349,8 @@ function AppearancePage() {
   const hasBar = useScreenProfile().oemStrip !== null
   const oemMode = useCabin((state) => state.oemMode)
   const chooseOemMode = useCabin((state) => state.chooseOemMode)
+  const brightness = useCabin((state) => state.brightness)
+  const setBrightness = useCabin((state) => state.setBrightness)
   const open = useSettings((state) => state.open)
   return (
     <Page title={text.settings.appearance}>
@@ -375,6 +377,15 @@ function AppearancePage() {
           on={mode === 'auto'}
           // Off, it keeps what Automatic shows now.
           onToggle={(on) => setMode(on ? 'auto' : wanted)}
+        />
+      </Group>
+      <Group>
+        <FitSlider
+          label={text.settings.brightness}
+          value={brightness}
+          shown={`${Math.round(brightness * 100)}%`}
+          limits={BRIGHTNESS_LIMITS}
+          onChange={setBrightness}
         />
       </Group>
       <Group>
@@ -531,6 +542,8 @@ function DashboardPage() {
   const text = useText()
   const widgets = useCabin((state) => state.dashboardWidgets)
   const setWidget = useCabin((state) => state.setDashboardWidget)
+  const useGameMap = useCabin((state) => state.useGameMap)
+  const setUseGameMap = useCabin((state) => state.setUseGameMap)
   const names: Record<DashboardWidget, string> = {
     nowPlaying: text.nowPlaying,
     destination: text.destination,
@@ -538,6 +551,9 @@ function DashboardPage() {
   }
   return (
     <Page title={text.settings.dashboard}>
+      <Group footer={text.settings.gameMapFooter}>
+        <SwitchRow label={text.settings.gameMap} on={useGameMap} onToggle={setUseGameMap} />
+      </Group>
       <Group header={text.settings.widgets}>
         {DASHBOARD_WIDGETS.map((widget) => (
           <SwitchRow key={widget} label={names[widget]} on={widgets[widget]} onToggle={(on) => setWidget(widget, on)} />

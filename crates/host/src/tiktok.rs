@@ -174,6 +174,8 @@ pub struct TikTok {
     state: RefCell<Option<State>>,
     /// Where the phone's TikTok app shows it (`None`: not open).
     place: Cell<Option<Place>>,
+    /// Active dimensions of the in-game handheld (iPhone 340x720 or vertical iPad 560x760).
+    bounds: Cell<(u32, u32)>,
     /// Whether the phone is out (in the hand, not put away or only peeking).
     out: Cell<bool>,
     /// Whether its videos play, as the page was last told.
@@ -212,6 +214,7 @@ impl TikTok {
             pending: RefCell::new(Vec::new()),
             state: RefCell::new(None),
             place: Cell::new(None),
+            bounds: Cell::new((westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT)),
             out: Cell::new(false),
             sounding: Cell::new(false),
             hovered: Cell::new(false),
@@ -223,6 +226,13 @@ impl TikTok {
             live_heard: Cell::new(None),
             live_on: Cell::new(false),
         })
+    }
+
+    /// Updates the allowed bounds for TikTok's overlay when switching between iPhone and vertical iPad.
+    pub fn set_bounds(&self, width: u32, height: u32) {
+        if self.bounds.replace((width, height)) != (width, height) {
+            self.place.set(None);
+        }
     }
 
     pub fn command(&self, command: &Command) -> windows::core::Result<()> {
@@ -238,8 +248,8 @@ impl TikTok {
                 self.view.navigate(HOME)
             }
             Command::Show { x, y, width, height } => {
-                // Only a place in the phone, and one worth showing in.
-                let (phone_width, phone_height) = (westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT);
+                // Only a place inside the active handheld (iPhone or vertical iPad), and one worth showing in.
+                let (phone_width, phone_height) = self.bounds.get();
                 let fits = x.is_finite()
                     && y.is_finite()
                     && *x >= 0.0
@@ -254,7 +264,9 @@ impl TikTok {
                 let place = Place { x: *x, y: *y, width: *width, height: *height };
                 if self.place.get() != Some(place) {
                     self.place.set(Some(place));
-                    self.view.fit((PAGE_WIDTH, u32::MAX / 4), place.x, place.y, place.width, place.height)?;
+                    // Lay out TikTok cleanly for either iPhone (420px scaled) or wider vertical iPad.
+                    let layout_w = place.width.max(PAGE_WIDTH);
+                    self.view.fit((layout_w, u32::MAX / 4), place.x, place.y, place.width, place.height)?;
                     self.view.show(true)?;
                 }
                 self.sound()

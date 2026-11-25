@@ -50,6 +50,7 @@ struct List {
 
 type SetTargets = unsafe extern "system" fn(*mut u8, u32, *const List, *const List, *const List, *const List);
 type FindNode = unsafe extern "system" fn(*mut u8, u64) -> *mut u8;
+type FindCompanyTarget = unsafe extern "system" fn(*mut u8, *mut Target, *mut u8, u8, u8) -> *mut Target;
 
 struct Game {
     /// The global holding the game's core object (the navigator's owner, and the node table's).
@@ -59,6 +60,8 @@ struct Game {
     lists: NavigatorLists,
     set_targets: SetTargets,
     find_node: FindNode,
+    /// Resolves a `company_item_t*` into a 24-byte navigator `Target` at the company's entrance road node.
+    find_company_target: Option<FindCompanyTarget>,
 }
 
 // SAFETY: the pointers are into the game's own executable, fixed for the process's life, and only used on
@@ -94,6 +97,68 @@ pub unsafe fn serve() {
     log!("route: {action:?} node {node:#x} via {vias:x?}: {answer:?}");
     block.answer.store(answer as i32, Ordering::Relaxed);
     block.answered.store(request, Ordering::Release);
+}
+
+/// Plots the game's native GPS route (mode 1 = active job) to a pickup company's `company_item_t*`
+/// when accepting a Freight or Cargo job remotely leaves the navigator without a plotted route.
+///
+/// Prism3D's `take_freight_job` / `take_cargo_job` create `current_job` (which places the flag on the
+/// map) but skip plotting a GPS line when the pickup company / job trailer is not yet loaded in the
+/// player's local yard. Calling Prism3D's own `find_company_nav_target` + `set_targets` plots the real
+/// red GPS route straight to the company entrance; once the player arrives and hooks up / loads cargo,
+/// the game's own job-navigation updater automatically switches the GPS route to the destination.
+///
+/// # Safety
+/// Must be called on the game's main thread with a live, validated `company_item_t*`.
+pub unsafe fn route_to_job_company(company_item: *mut u8) -> bool {
+    if company_item.is_null() {
+        return false;
+    }
+    let Some(game) = GAME.get_or_init(|| unsafe { locate() }).as_ref() else {
+        log!("job_market: navigator unavailable; cannot plot GPS route");
+        return false;
+    };
+    let Some(find_company_target) = game.find_company_target else {
+        log!("job_market: find_company_nav_target unavailable; cannot plot GPS route");
+        return false;
+    };
+    unsafe {
+        let core = *game.core;
+        if core.is_null() {
+            return false;
+        }
+        let navigator = core.add(game.navigator);
+        let lists = game.lists;
+        let cur_mode = (navigator.add(lists.mode) as *const u32).read();
+        let cur_route_count = (navigator.add(lists.route) as *const List).read().count;
+        // Resolve the pickup company's entrance road node as a native 24-byte navigator Target.
+        // Kind == 2 is Prism3D's invalid/not-found sentinel (checked throughout 0x61ee10 / 0x5fef20).
+        let mut target: Target = [0u8; 0x18];
+        target[0..4].copy_from_slice(&2u32.to_le_bytes());
+        (find_company_target)(core, &mut target, company_item, 1, 0);
+        let kind = u32::from_le_bytes(target[0..4].try_into().unwrap());
+        if kind == 2 {
+            log!("job_market: find_company_nav_target returned invalid target (kind=2) for {company_item:p}");
+            return false;
+        }
+        let allocator = (navigator.add(lists.waypoints) as *const List).read().allocator;
+        let empty = List { allocator, data: std::ptr::null(), count: 0, capacity: 0 };
+        let route = [target];
+        let route_list = List { allocator, data: route.as_ptr(), count: 1, capacity: 1 };
+        (game.set_targets)(
+            navigator,
+            1,
+            &empty,
+            &route_list,
+            navigator.add(lists.avoid) as *const List,
+            &empty,
+        );
+        log!(
+            "job_market: plotted native GPS route to pickup company (prev_mode={cur_mode}, prev_targets={cur_route_count}, kind={kind}, node={:#x})",
+            node_of(&target),
+        );
+        true
+    }
 }
 
 /// Reads the navigator's route, plans the change ([`plan`]) and gives it the result.
@@ -314,18 +379,24 @@ unsafe fn locate() -> Option<Game> {
         let (core, navigator) = image.navigator()?;
         let (set_targets, lists) = find_set_targets(image.code()).map(|(at, lists)| (image.text.0 + at, lists))?;
         let find_node = image.find_node()?;
+        let find_company_target = image.find_company_target();
         log!(
-            "waypoint: game code found: core {:#x}, navigator +{navigator:#x}, set targets {:#x}, find node {:#x}, {lists:x?}",
+            "waypoint: game code found: core {:#x}, navigator +{navigator:#x}, set targets {:#x}, find node {:#x}, find company target {:?}, {lists:x?}",
             core - base,
             set_targets - base,
-            find_node - base
+            find_node - base,
+            find_company_target.map(|a| format!("{:#x}", a - base)),
         );
         // SAFETY: each address is the start of the function its pattern names, found exactly once in the
-        // game's code; the patterns pin their calling conventions (`SetTargets`, `FindNode`).
-        let (set_targets, find_node) = unsafe {
-            (std::mem::transmute::<usize, SetTargets>(set_targets), std::mem::transmute::<usize, FindNode>(find_node))
+        // game's code; the patterns pin their calling conventions (`SetTargets`, `FindNode`, `FindCompanyTarget`).
+        let (set_targets, find_node, find_company_target) = unsafe {
+            (
+                std::mem::transmute::<usize, SetTargets>(set_targets),
+                std::mem::transmute::<usize, FindNode>(find_node),
+                find_company_target.map(|a| std::mem::transmute::<usize, FindCompanyTarget>(a)),
+            )
         };
-        Some(Game { core: core as *const *mut u8, navigator, lists, set_targets, find_node })
+        Some(Game { core: core as *const *mut u8, navigator, lists, set_targets, find_node, find_company_target })
     })();
     if found.is_none() {
         log!("waypoint: the game's waypoint code isn't the version WestPlay knows; waypoints can't be added");
@@ -337,6 +408,24 @@ unsafe fn locate() -> Option<Game> {
 const FIND_IN_TABLE_38: &[u8] = &[
     0x48, 0x89, 0x54, 0x24, 0x10, 0x53, 0x48, 0x83, 0xec, 0x40, 0x48, 0x8d, 0x59, 0x38, 0x48, 0x8b, 0xcb, 0x48, 0x8d,
     0x54, 0x24, 0x58, 0xe8,
+];
+
+/// Prologue + `company_item->vtable[0x70](company_item, 0)` of Prism3D's `find_company_nav_target`.
+/// Verified unique in both ETS2 (`+0x7a05b0`) and ATS (`+0x7a12f0`).
+const FIND_COMPANY_TARGET: &[u8] = &[
+    0x48, 0x89, 0x5c, 0x24, 0x08, // mov [rsp+8], rbx
+    0x48, 0x89, 0x6c, 0x24, 0x10, // mov [rsp+10h], rbp
+    0x48, 0x89, 0x74, 0x24, 0x18, // mov [rsp+18h], rsi
+    0x57, // push rdi
+    0x48, 0x83, 0xec, 0x50, // sub rsp, 50h
+    0x49, 0x8b, 0x00, // mov rax, [r8]
+    0x48, 0x8b, 0xfa, // mov rdi, rdx
+    0x48, 0x8b, 0xe9, // mov rbp, rcx
+    0x33, 0xd2, // xor edx, edx
+    0x49, 0x8b, 0xc8, // mov rcx, r8
+    0x41, 0x0f, 0xb6, 0xf1, // movzx esi, r9b
+    0x49, 0x8b, 0xd8, // mov rbx, r8
+    0xff, 0x50, 0x70, // call qword ptr [rax+70h]
 ];
 
 /// The game's executable, as mapped in its process.
@@ -513,6 +602,14 @@ impl Image {
                     (at..(at + 0x80).min(code.len() - 7)).any(|i| self.lea_target(self.text.0 + i) == Some(name))
                 },
             );
+        let (at, _) = found.next()?;
+        found.next().is_none().then_some(self.text.0 + at)
+    }
+
+    /// Prism3D's `find_company_nav_target(core, &out_target, company_item, use_entrance, flag)`.
+    fn find_company_target(&self) -> Option<usize> {
+        let code = self.code();
+        let mut found = code.windows(FIND_COMPANY_TARGET.len()).enumerate().filter(|(_, w)| *w == FIND_COMPANY_TARGET);
         let (at, _) = found.next()?;
         found.next().is_none().then_some(self.text.0 + at)
     }

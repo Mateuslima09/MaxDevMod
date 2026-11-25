@@ -30,3 +30,12 @@ Se ainda ficar preto, mande o `Documentos\WestPlay\logs\plugin.log` e diga o cam
 
 Para voltar à versão anterior: `westplay.dll.antes-mapa-escondido` (plugin) e `westplay.exe.antes-mapa-escondido`
 (app), em `%LOCALAPPDATA%\MaxDevMod`.
+
+## Scania 2025 (mod): painel de instrumentos piscando com a tela do MaxDevMod (21/11/2026)
+
+O dono viu a nossa tela aparecer piscando dentro do painel de instrumentos de um Scania 2025 de mod; com a
+resolução da tela em "Padrão do Jogo" parou. Causa: a tela nítida (`crates/plugin/src/hires.rs`) troca a imagem do
+GPS em tudo que a usa, e o painel desse caminhão usa a mesma. Correção: a tela nítida fica desligada nos layouts
+`scania-2025*` (`shares_its_target`); a tela deles já é 1024x512. Plugin trocado 21/11 21:02.
+
+- [ ] Volte a resolução para Alta (ou Ultra): o painel não deve mais piscar, e a tela do meio continua nítida.

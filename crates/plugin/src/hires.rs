@@ -115,6 +115,13 @@ fn is_cropped_layout(id: &str) -> bool {
     matches!(id, "scania-7" | "setra-516" | "travego" | "tourismo" | "man-lions-coach")
 }
 
+/// Layouts whose GPS target the cab samples somewhere else too, where the high-res picture must not go (owner
+/// 2026-11-21: a Scania 2025 mod's instrument cluster flashed with WestPlay's screen in it, and stopped with the
+/// game's own resolution). Their target is big already (1024 x 512), so little is lost.
+fn shares_its_target(id: &str) -> bool {
+    id.starts_with("scania-2025")
+}
+
 /// Target dimensions `(width, height)` and unsharp-mask sharpening strength for a live tier.
 fn tier_spec(tier: u32) -> Option<(u32, u32, f32)> {
     match tier {
@@ -218,7 +225,9 @@ pub fn note_frame(
     let split = bridge.host.screen_split.load(Ordering::Acquire);
     // Handed to the truck: the game's own screen (its map) shows, not our picture over it.
     let handed_over = bridge.host.screen_handed_over.load(Ordering::Acquire) != 0;
-    if tier_spec(tier).is_none() || split != 0 || handed_over || !full_viewport || is_cropped_layout(layout_id) || target_tex_raw == 0
+    if tier_spec(tier).is_none() || split != 0 || handed_over || !full_viewport || is_cropped_layout(layout_id)
+        || shares_its_target(layout_id)
+        || target_tex_raw == 0
     {
         if tier_spec(tier).is_none() && LAST_TIER.swap(SCREEN_RES_GAME_DEFAULT, Ordering::AcqRel) != SCREEN_RES_GAME_DEFAULT {
             log!("screen hires: off (game default {target_w}x{target_h})");
@@ -426,19 +435,26 @@ Vertex vs(uint id : SV_VertexID) {
     return v;
 }
 Texture2D picture : register(t0);
+Texture2D under : register(t1);
 SamplerState smooth : register(s0);
 float4 ps(Vertex v) : SV_Target {
     float4 c = picture.SampleLevel(smooth, v.uv, 0);
-    if (params.z <= 0.0) return float4(c.rgb, 1.0);
-    float2 dx = float2(params.x, 0.0);
-    float2 dy = float2(0.0, params.y);
-    float3 n = picture.SampleLevel(smooth, v.uv - dy, 0).rgb;
-    float3 s = picture.SampleLevel(smooth, v.uv + dy, 0).rgb;
-    float3 e = picture.SampleLevel(smooth, v.uv + dx, 0).rgb;
-    float3 w = picture.SampleLevel(smooth, v.uv - dx, 0).rgb;
-    float3 blur = (n + s + e + w) * 0.25;
-    float3 sharp = saturate(c.rgb + (c.rgb - blur) * params.z);
-    return float4(sharp, 1.0);
+    float3 fg = c.rgb;
+    if (params.z > 0.0) {
+        float2 dx = float2(params.x, 0.0);
+        float2 dy = float2(0.0, params.y);
+        float3 n = picture.SampleLevel(smooth, v.uv - dy, 0).rgb;
+        float3 s = picture.SampleLevel(smooth, v.uv + dy, 0).rgb;
+        float3 e = picture.SampleLevel(smooth, v.uv + dx, 0).rgb;
+        float3 w = picture.SampleLevel(smooth, v.uv - dx, 0).rgb;
+        float3 blur = (n + s + e + w) * 0.25;
+        fg = saturate(c.rgb + (c.rgb - blur) * params.z);
+    }
+    // Center the game's GPS map (truck arrow at u=0.50, map area v=0.0..0.84 above status bar)
+    // inside the Dashboard map card (u=0.14..0.60, center u=0.37).
+    float2 bg_uv = float2(saturate(v.uv.x + 0.13), saturate(v.uv.y * 0.84));
+    float3 bg = under.SampleLevel(smooth, bg_uv, 0).rgb;
+    return float4(fg + bg * (1.0 - c.a), 1.0);
 }
 ";
 
@@ -671,7 +687,8 @@ impl Blitter {
         let source_raw = source.as_raw() as usize;
         // SAFETY: `self.device` is live on the render thread.
         let srv_raw = unsafe { self.ensure_target(width, height)? }.srv.as_raw() as usize;
-        if self.last_version == version && self.last_source == source_raw && self.last_tier == tier {
+        let under_srv = crate::float_screen::gps_under_view(&self.device);
+        if under_srv.is_none() && self.last_version == version && self.last_source == source_raw && self.last_tier == tier {
             return Ok(srv_raw);
         }
         // SAFETY: `self.device`, `context`, and `source` are live on the render thread; game state is swapped back.
@@ -719,10 +736,10 @@ impl Blitter {
             context.PSSetShader(&self.pixel, None);
             context.PSSetConstantBuffers(0, Some(&[Some(self.params.clone())]));
             context.PSSetSamplers(0, Some(&[Some(self.sampler.clone())]));
-            context.PSSetShaderResources(0, Some(&[Some(source_srv)]));
+            context.PSSetShaderResources(0, Some(&[Some(source_srv), under_srv]));
             context.Draw(4, 0);
             context.OMSetRenderTargets(Some(&[None]), None);
-            context.PSSetShaderResources(0, Some(&[None]));
+            context.PSSetShaderResources(0, Some(&[None, None]));
             context.GenerateMips(&target.srv);
             if let Some(saved) = &saved {
                 context1.SwapDeviceContextState(saved, None);
@@ -732,5 +749,16 @@ impl Blitter {
             self.last_tier = tier;
             Ok(srv_raw)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_scania_2025_keeps_its_own_screen() {
+        assert!(shares_its_target("scania-2025") && shares_its_target("scania-2025-advanced"));
+        assert!(!shares_its_target("scania-7") && !shares_its_target("generic"));
     }
 }

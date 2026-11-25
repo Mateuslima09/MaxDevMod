@@ -102,6 +102,7 @@ export const words: CompanionWords = {
     phone: 'Phone',
     character: 'Character (on the phone)',
     hideBar: 'Hide the key hints bar',
+    roughRoad: 'Raise suspension (rough road)',
     pressKey: 'Press a key…',
     keybindsNote:
       'Click a keybind, then press its new key. Hold {key} as you press it, and it works only while you use the screen. Esc cancels.',

@@ -22,6 +22,8 @@ const KINDS: GameNotificationKind[] = [
   'jobNew',
   'jobDeadline',
   'jobLate',
+  'brakeHot',
+  'brakeGone',
 ]
 
 const game = (change: Partial<GameNotification>): GameNotification => ({

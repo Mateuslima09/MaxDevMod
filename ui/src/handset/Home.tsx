@@ -26,7 +26,19 @@ const DRAG = 14
 /** The apps in the dock, on every page; and each page's own. */
 const DOCK: AppId[] = ['maps', 'music', 'youtubeMusic', 'spotify']
 const PAGE_ONE: AppId[] = ['freight', 'truck', 'commands', 'settings']
-const PAGE_TWO: AppId[] = ['nupay', 'services', 'character', 'tiktok', 'suspension', 'camera', 'floatScreen']
+const PAGE_TWO: AppId[] = [
+  'jobMarket',
+  'garage',
+  'youtube',
+  'nupay',
+  'services',
+  'character',
+  'tiktok',
+  'suspension',
+  'camera',
+  'floatScreen',
+  'brakes',
+]
 
 /** The home screen's page last shown: back from an app, the phone is on the page it was left on (owner 2026-11-11:
  * out of TikTok, on the second page, it went back to the first, "to drag again each time"). */
@@ -48,16 +60,33 @@ export interface HomeWords {
  * screen's key held), their dots, and the dock under them. The first page has the widgets (the time, the
  * weather or the truck, what plays, where the truck is headed) and the apps; the second, the map.
  */
+const IPAD_DOCK: AppId[] = ['maps', 'youtube', 'youtubeMusic', 'spotify', 'jobMarket', 'settings']
+const IPAD_PAGE_ONE: AppId[] = [
+  'jobMarket',
+  'garage',
+  'youtube',
+  'tiktok',
+  'nupay',
+  'freight',
+  'truck',
+  'commands',
+  'services',
+  'settings',
+]
+const IPAD_PAGE_TWO: AppId[] = ['character', 'music', 'suspension', 'camera', 'floatScreen', 'brakes']
+
 export function Home({
   words,
   open,
   units,
   remote,
+  ipad = false,
 }: {
   words: HomeWords
   open: (app: AppId) => void
   units: Prefs['units']
   remote: boolean
+  ipad?: boolean
 }) {
   const [page, showPage] = useState(lastPage)
   const setPage = (next: number) => {
@@ -65,6 +94,99 @@ export function Home({
     showPage(next)
   }
   const swipe = useSwipe(page, setPage, 2)
+
+  if (ipad) {
+    return (
+      <section className="ios-home ipad-home">
+        <div className="ios-pages" {...swipe.handlers}>
+          <div className="ios-track" style={{ transform: `translateX(calc(${-page * 50}% + ${swipe.offset}px))` }}>
+            {/* iPad Page 1: Clean iPadOS widgets + primary apps */}
+            <div className="ios-page ipad-page">
+              <div className="ipad-widgets">
+                <div className="ipad-widgets-top">
+                  <ClockWidget days={words.days} />
+                  <WeatherOrTruckWidget units={units} noGame={words.noGame} />
+                </div>
+                <div className="ipad-widgets-bottom">
+                  <div className="ios-widget ios-widget-music ipad-widget-music">
+                    <NowPlayingWidget />
+                  </div>
+                  <ArrivalWidget />
+                </div>
+              </div>
+              <Icons apps={IPAD_PAGE_ONE} words={words} open={open} />
+            </div>
+
+            {/* iPad Page 2: Live minimap + new/extra apps (and room for future apps) */}
+            <div className="ios-page ipad-page">
+              {remote ? (
+                <button
+                  type="button"
+                  className="ios-widget ios-widget-map ios-map-card ipad-widget-map"
+                  onClick={() => open('maps')}
+                >
+                  <AppIcon id="maps" />
+                  <span className="ios-arrival-title">{words.apps.maps}</span>
+                  <span className="ios-widget-kicker">{words.openMap}</span>
+                </button>
+              ) : (
+                <Scaled scale={0.5} className="ios-widget ios-widget-map ipad-widget-map">
+                  {(page === 1 || swipe.offset !== 0) && (
+                    <Suspense fallback={null}>
+                      <MapView />
+                    </Suspense>
+                  )}
+                </Scaled>
+              )}
+              <Icons apps={IPAD_PAGE_TWO} words={words} open={open} />
+            </div>
+          </div>
+        </div>
+        <div className="ios-dots" role="tablist">
+          <button
+            type="button"
+            className="ios-page-arrow left"
+            aria-label={words.pageBack}
+            disabled={page === 0}
+            onClick={() => setPage(page - 1)}
+          >
+            <svg viewBox="0 0 12 20" aria-hidden>
+              <path d="M9 3 3 10l6 7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="ios-page-arrow right"
+            aria-label={words.pageNext}
+            disabled={page === 1}
+            onClick={() => setPage(page + 1)}
+          >
+            <svg viewBox="0 0 12 20" aria-hidden>
+              <path d="M3 3l6 7-6 7" />
+            </svg>
+          </button>
+          {[0, 1].map((dot) => (
+            <button
+              key={dot}
+              type="button"
+              role="tab"
+              aria-selected={dot === page}
+              aria-label={String(dot + 1)}
+              className={dot === page ? 'on' : undefined}
+              onClick={() => setPage(dot)}
+            />
+          ))}
+        </div>
+        <nav className="ios-dock ipad-dock">
+          {IPAD_DOCK.map((id) => (
+            <button key={id} type="button" className="ios-app" onClick={() => open(id)} aria-label={words.apps[id]}>
+              <AppIcon id={id} />
+            </button>
+          ))}
+        </nav>
+      </section>
+    )
+  }
   return (
     <section className="ios-home">
       <div className="ios-pages" {...swipe.handlers}>

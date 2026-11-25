@@ -322,12 +322,13 @@ unsafe fn get_device_data(
 ) -> HRESULT {
     // SAFETY: the trampoline was stored before the hooks were switched on (`install`, then `enable_all`), so it's
     // the original function, called with the caller's arguments as they came. The events are looked at only
-    // once counted (`count` set).
+    // once counted (`count` set); `capacity` records the caller's buffer size before the call overwrites `*count`.
     unsafe {
+        let capacity = if count.is_null() { 0 } else { *count };
         let original: GetDeviceDataFn = std::mem::transmute(original.load(Ordering::Acquire));
         let result = original(device, object_size, data, count, flags);
         if result.is_ok() && !count.is_null() {
-            guarded(|| on_device_data(device, object_size, data, count, flags));
+            guarded(|| on_device_data(device, object_size, data, count, capacity, flags));
         }
         result
     }
@@ -356,16 +357,32 @@ unsafe fn on_device_state(device: *mut c_void, size: u32, state: *mut u8) {
         }
         // While walking (`character`), the mouse turns the plugin's view, none of it the game's.
         if let DeviceKind::Mouse(layout) = kind
-            && crate::character::takes_mouse()
             && !interaction_active()
         {
-            for (index, offset) in [layout.x, layout.y].into_iter().enumerate() {
-                if let Some(offset) = offset
-                    && offset + 4 <= size
-                {
-                    let at = state.add(offset as usize) as *mut i32;
-                    crate::character::look(index, at.read_unaligned());
-                    at.write_unaligned(0);
+            if crate::character::takes_mouse() {
+                for (index, offset) in [layout.x, layout.y].into_iter().enumerate() {
+                    if let Some(offset) = offset
+                        && offset + 4 <= size
+                    {
+                        let at = state.add(offset as usize) as *mut i32;
+                        crate::character::look(index, at.read_unaligned());
+                        at.write_unaligned(0);
+                    }
+                }
+            } else {
+                // Post-climb Camera 1 head-settle injection for immediate-mode mouse readers (only if not buffered).
+                let buffered = BUFFERED_READ.lock().unwrap_or_else(|e| e.into_inner()).get(&(device as usize)).copied();
+                if immediate_moves(buffered, Instant::now()) {
+                    let (dx, dy) = crate::character::take_cab_look();
+                    for (offset, delta) in [(layout.x, dx), (layout.y, dy)] {
+                        if delta != 0
+                            && let Some(offset) = offset
+                            && offset + 4 <= size
+                        {
+                            let at = state.add(offset as usize) as *mut i32;
+                            at.write_unaligned(at.read_unaligned().saturating_add(delta));
+                        }
+                    }
                 }
             }
         }
@@ -406,15 +423,18 @@ unsafe fn on_device_state(device: *mut c_void, size: u32, state: *mut u8) {
 /// # Safety
 /// The game's arguments after the original `GetDeviceData` filled them: `count` set, and `data` (if
 /// any) holding that many events of `object_size` bytes.
+static SYNTH_SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
 unsafe fn on_device_data(
     device: *mut c_void,
     object_size: u32,
     data: *mut DIDEVICEOBJECTDATA,
     count: *mut u32,
+    capacity: u32,
     flags: u32,
 ) {
     // SAFETY: `count` events of `object_size` bytes each are what the original call just wrote into `data`
-    // (their size checked to hold an event's head); only those are read, and fewer kept.
+    // (out of `capacity` slots the caller allocated; size checked to hold an event's head).
     unsafe {
         let kind = device_kind(device);
         if kind == DeviceKind::Other {
@@ -435,7 +455,7 @@ unsafe fn on_device_data(
         let events = std::slice::from_raw_parts_mut(data as *mut u8, *count as usize * object_size as usize);
         // A peek leaves the events in the buffer: they're taken when the game reads them for real.
         let peek = flags & DIGDD_PEEK != 0;
-        let kept = match kind {
+        let mut kept = match kind {
             DeviceKind::Mouse(layout) => {
                 let mut held = GAME_HELD.lock().unwrap_or_else(|e| e.into_inner());
                 let held = held.entry(device as usize).or_default();
@@ -469,21 +489,57 @@ unsafe fn on_device_data(
         // While walking (`character`), the mouse turns the plugin's view, none of it the game's (a peek counted
         // only at the real read).
         if let DeviceKind::Mouse(layout) = kind
-            && crate::character::takes_mouse()
             && !interacting
         {
             let size = object_size as usize;
-            for at in (0..kept).map(|index| index * size) {
-                let word = |from: usize| u32::from_le_bytes(events[from..from + 4].try_into().unwrap());
-                let axis = match layout.object(word(at)) {
-                    Some(MouseObject::X) => 0,
-                    Some(MouseObject::Y) => 1,
-                    _ => continue,
-                };
-                if !peek {
-                    crate::character::look(axis, word(at + 4) as i32);
+            if crate::character::takes_mouse() {
+                for at in (0..kept).map(|index| index * size) {
+                    let word = |from: usize| u32::from_le_bytes(events[from..from + 4].try_into().unwrap());
+                    let axis = match layout.object(word(at)) {
+                        Some(MouseObject::X) => 0,
+                        Some(MouseObject::Y) => 1,
+                        _ => continue,
+                    };
+                    if !peek {
+                        crate::character::look(axis, word(at + 4) as i32);
+                    }
+                    events[at + 4..at + 8].copy_from_slice(&0i32.to_le_bytes());
                 }
-                events[at + 4..at + 8].copy_from_slice(&0i32.to_le_bytes());
+            } else if !peek {
+                // Check if the player moved the mouse intentionally during Camera 1 settle; if not, inject the
+                // settle head-movement deltas right into ETS2's buffered mouse queue.
+                let mut real_motion = 0i32;
+                for at in (0..kept).map(|index| index * size) {
+                    let word = |from: usize| u32::from_le_bytes(events[from..from + 4].try_into().unwrap());
+                    if matches!(layout.object(word(at)), Some(MouseObject::X | MouseObject::Y)) {
+                        real_motion = real_motion.saturating_add((word(at + 4) as i32).abs());
+                    }
+                }
+                if real_motion > 18 {
+                    crate::character::cancel_cab_settle();
+                } else {
+                    let (dx, dy) = crate::character::take_cab_look();
+                    if dx != 0 || dy != 0 {
+                        let base = data as *mut u8;
+                        let cap = capacity as usize;
+                        for (axis_ofs, delta) in [(layout.x, dx), (layout.y, dy)] {
+                            if delta != 0
+                                && let Some(axis_ofs) = axis_ofs
+                                && kept < cap
+                            {
+                                let slot = base.add(kept * size);
+                                std::ptr::write_bytes(slot, 0, size);
+                                std::ptr::copy_nonoverlapping(axis_ofs.to_le_bytes().as_ptr(), slot, 4);
+                                std::ptr::copy_nonoverlapping((delta as u32).to_le_bytes().as_ptr(), slot.add(4), 4);
+                                if size >= 16 {
+                                    let seq = SYNTH_SEQ.fetch_add(1, Ordering::Relaxed);
+                                    std::ptr::copy_nonoverlapping(seq.to_le_bytes().as_ptr(), slot.add(12), 4);
+                                }
+                                kept += 1;
+                            }
+                        }
+                    }
+                }
             }
         }
         *count = kept as u32;

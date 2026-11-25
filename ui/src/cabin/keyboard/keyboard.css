@@ -35,7 +35,7 @@
   grid-template-rows: repeat(4, 1fr);
   gap: 12px;
   background: var(--keyboard-glass);
-  backdrop-filter: blur(30px) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur, 5px)) saturate(120%);
   box-shadow:
     inset 0 1px 0 var(--glass-rim),
     var(--shadow-raised-large);
@@ -281,7 +281,7 @@
   font-weight: 650;
   color: #ffc46b;
   background: rgb(255 159 10 / 0.22);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--glass-blur, 5px));
   animation: keyboard-chip-in 300ms var(--motion-ease) both;
 }
 

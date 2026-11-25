@@ -25,34 +25,49 @@ use std::time::{Duration, Instant};
 
 use westplay_shared::{Telemetry, truck_command_bit};
 
+use crate::settings::Damping;
+
+/// Threshold multiplier by suspension stiffness (calibrated from owner's 2026-11-22 log:
+/// good asphalt in Firmest was 0.3–1.6 cm RMS / 0.8–5.1 cm widest; rough asphalt was 2.0–3.2 cm / 7.0–10.5 cm).
+fn stiffness_scale(damping: Damping) -> f32 {
+    match damping {
+        Damping::Soft => 1.35,
+        Damping::Normal => 1.0,
+        Damping::Firm => 0.95,
+        Damping::Firmest => 0.90,
+    }
+}
+
 /// Over this (m/s, 80 km/h) for [`AFTER`], lowered; under [`SLOW`] (60 km/h) for [`AFTER`], back to normal.
 const FAST: f32 = 80.0 / 3.6;
 const SLOW: f32 = 60.0 / 3.6;
 const AFTER: Duration = Duration::from_secs(5);
 /// How long the lowering is held: a little (all the way took about 5 s in the app's Mínima, 1.5 s bottomed out).
 const LOWER_FOR: Duration = Duration::from_millis(400);
-/// How long the raising on a rough road is held.
-const RAISE_FOR: Duration = Duration::from_millis(800);
+/// How long the raising on a rough road is held (owner 2026-11-22: 800 ms barely lifted a lowered truck;
+/// 2400 ms lifts it substantially clear of rough terrain and lowers back the exact same amount when smooth).
+const RAISE_FOR: Duration = Duration::from_millis(2400);
 /// The player's own suspension press: left alone this long.
 const MANUAL: Duration = Duration::from_secs(60);
 
 /// The springs' jumping: their readings over this long, sampled at most this often; rough over [`ROUGH`] (metres,
 /// the root mean square of how far they are from their mean) for [`ROUGH_AFTER`], smooth under [`SMOOTH`] for
 /// [`SMOOTH_AFTER`]; only moving over [`MOVING`].
+/// Recalibrated (owner 2026-11-22 / 2026-11-23): old 1.2 cm / 6 cm thresholds false-triggered on normal asphalt,
+/// and 1.8 cm / 6.2 cm prevented returning to normal height on paved city/country roads while raised (`High` with
+/// Normal/Firm dampers and Lowest front regularly hit 1.2–1.9 cm RMS / 6.2–8.2 cm widest on good asphalt, vs
+/// 2.7–6.3 cm / 9.6–29.1 cm on rough roads).
 const WINDOW: Duration = Duration::from_secs(2);
 const SAMPLE: Duration = Duration::from_millis(40);
-const ROUGH: f32 = 0.012;
-// From the owner's dirt road (2026-11-19 log): dirt 1.2 to 2.7 cm, asphalt 0.5 to 0.9 cm.
-const SMOOTH: f32 = 0.009;
-/// An axle's widest swing over [`WINDOW`] (metres): rough over this, smooth under [`SMOOTH_SWING`] (owner 2026-11-21:
-/// lowered, the spring against its stop swings one way only, its mean swing small on a bad road).
-const ROUGH_SWING: f32 = 0.06;
-const SMOOTH_SWING: f32 = 0.035;
-const ROUGH_AFTER: Duration = Duration::from_secs(2);
-// Up for good on a rough road (owner 2026-11-19: "hold it 15 s or more, never lower while it stays rough").
-const SMOOTH_AFTER: Duration = Duration::from_secs(20);
+const ROUGH: f32 = 0.025;
+const SMOOTH: f32 = 0.021;
+/// An axle's widest swing over [`WINDOW`] (metres): rough over this, smooth under [`SMOOTH_SWING`].
+const ROUGH_SWING: f32 = 0.095;
+const SMOOTH_SWING: f32 = 0.085;
+const ROUGH_AFTER: Duration = Duration::from_secs(3);
+const SMOOTH_AFTER: Duration = Duration::from_secs(7);
 /// After the app's own press, the springs' readings left out this long (the suspension moving isn't the road).
-const QUIET_AFTER: Duration = Duration::from_millis(2500);
+const QUIET_AFTER: Duration = Duration::from_millis(1500);
 const MOVING: f32 = 15.0 / 3.6;
 
 /// Standing still (m/s); the rear more pressed in than this (metres) after coupling: sunk under the load; back
@@ -126,6 +141,11 @@ pub struct AutoSuspension {
     braking_since: Option<Instant>,
     let_go_since: Option<Instant>,
     brake_raised: bool,
+    /// Raised by the emergency rough-road keybind: still lowers back after `smooth_after` even if `suspension_auto`
+    /// is off, and lowers after `smooth_after` when stopped/slow if no rough road was actually encountered.
+    emergency_return: bool,
+    /// Whether real rough terrain was detected while in `Level::High` (stops parked/slow lowering onto a dirt road).
+    saw_rough: bool,
 }
 
 impl Default for AutoSuspension {
@@ -147,6 +167,8 @@ impl Default for AutoSuspension {
             braking_since: None,
             let_go_since: None,
             brake_raised: false,
+            emergency_return: false,
+            saw_rough: false,
         }
     }
 }
@@ -172,6 +194,69 @@ impl AutoSuspension {
         self.levelling = None;
         // Where it is now isn't known: taken as normal, so going fast lowers it again.
         self.level = Level::Normal;
+        self.brake_raised = false;
+        self.emergency_return = false;
+        self.saw_rough = false;
+    }
+
+    /// Emergency rough-road trigger (owner 2026-11-22 / 2026-11-23): lifts immediately into rough-road `Level::High`
+    /// (`LOWER_FOR + RAISE_FOR` if currently lowered on the motorway, else `RAISE_FOR`, adjusted for any active press
+    /// or brake raise), and lets `tick_with_damping` automatically lower back down to its previous position once smooth
+    /// road holds for `smooth_after`.
+    pub fn force_rough_road(&mut self, telemetry: Option<&Telemetry>, now: Instant) -> u64 {
+        if !telemetry.is_some_and(|t| t.engine_enabled && !t.paused) {
+            log!("suspension by itself: emergency rough-road ignored (engine off or paused)");
+            return 0;
+        }
+        if self.level == Level::High {
+            // Already marked High: if not currently lifting, pulse `frontsuspup | rearsuspup` again
+            // (ETS2 clamps at the physical upper stop, so re-lifting is safe and recovers if an earlier
+            // lift was missed while unfocused/paused or manually lowered).
+            self.manual_until = None;
+            self.emergency_return = true;
+            if let Some((held, until)) = self.pressing
+                && now < until
+            {
+                self.smooth_since = (!self.saw_rough).then_some(until);
+                return held;
+            }
+            let press = self.press(&["frontsuspup", "rearsuspup"], RAISE_FOR, now, format_args!("emergency rough-road keybind (re-lift)"));
+            self.smooth_since = (!self.saw_rough).then_some(now + RAISE_FOR);
+            return press;
+        }
+        let mut hold = if self.level == Level::Low { LOWER_FOR + RAISE_FOR } else { RAISE_FOR };
+        if self.brake_raised {
+            hold = hold.saturating_sub(BRAKE_RAISE);
+            self.brake_raised = false;
+        }
+        if let Some((held, until)) = self.pressing
+            && now < until
+        {
+            let rem = until.saturating_duration_since(now);
+            if held & bits(&["frontsuspdwn", "rearsuspdwn"]) != 0 {
+                hold = hold.saturating_sub(rem);
+            } else if held & bits(&["frontsuspup", "rearsuspup"]) != 0 {
+                hold += rem;
+            }
+        }
+        self.level = Level::High;
+        self.manual_until = None;
+        self.emergency_return = true;
+        self.saw_rough = false;
+        let press = if hold.is_zero() {
+            self.pressing = None;
+            self.samples.clear();
+            self.rough_since = None;
+            self.quiet_until = Some(now + QUIET_AFTER);
+            log!("suspension by itself: emergency rough-road keybind (already at target height)");
+            0
+        } else {
+            self.press(&["frontsuspup", "rearsuspup"], hold, now, format_args!("emergency rough-road keybind"))
+        };
+        // Start counting smooth return from when raising finishes; once `QUIET_AFTER` ends and road readings arrive,
+        // any actual rough road clears `smooth_since` and marks `saw_rough = true` so it stays up while rough.
+        self.smooth_since = Some(now + hold);
+        press
     }
 
     /// How rough the road is now: the axle that jumps most's ([`Swing`]).
@@ -203,15 +288,31 @@ impl AutoSuspension {
         press
     }
 
-    /// The commands to hold now (bits, with the phones'), `on` as the player set it.
+    /// The commands to hold now (bits, with the phones'), `on` as the player set it, using Normal stiffness scale.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn tick(&mut self, on: bool, telemetry: Option<&Telemetry>, now: Instant) -> u64 {
+        self.tick_with_damping(on, Damping::Normal, ROUGH_AFTER, SMOOTH_AFTER, BRAKE_AFTER, telemetry, now)
+    }
+
+    /// The commands to hold now (bits, with the phones'), scaling rough/smooth road thresholds to match `damping`
+    /// and using `rough_after` / `smooth_after` / `brake_after` as the player-configured delays.
+    pub fn tick_with_damping(
+        &mut self,
+        on: bool,
+        damping: Damping,
+        rough_after: Duration,
+        smooth_after: Duration,
+        brake_after: Duration,
+        telemetry: Option<&Telemetry>,
+        now: Instant,
+    ) -> u64 {
         if let Some((held, until)) = self.pressing {
             if now < until {
                 return held;
             }
             self.pressing = None;
         }
-        let Some(t) = telemetry.filter(|t| on && t.engine_enabled && !t.paused) else {
+        let Some(t) = telemetry.filter(|t| (on || self.emergency_return) && t.engine_enabled && !t.paused) else {
             self.fast_since = None;
             self.slow_since = None;
             self.rough_since = None;
@@ -239,7 +340,7 @@ impl AutoSuspension {
         if speed > MOVING && self.logged_at.is_none_or(|at| now.saturating_duration_since(at) >= LOG_EVERY) {
             self.logged_at = Some(now);
             log!(
-                "suspension by itself: {:.0} km/h, road {}, {:?}",
+                "suspension by itself: {:.0} km/h, road {}, {:?}, {damping:?}",
                 speed * 3.6,
                 roughness.map_or("not read".to_owned(), |r| format!("{:.1} cm (widest {:.1} cm)", r.rms * 100.0, r.widest * 100.0)),
                 self.level
@@ -265,81 +366,103 @@ impl AutoSuspension {
             return 0;
         }
 
-        if let Some(mut levelling) = self.levelling
-            && now >= levelling.next_at
-            && let Some(rear) = rear
-        {
-            let sunk = rear - levelling.before;
-            if levelling.presses == 0 && sunk < SANK {
-                self.levelling = None;
-            } else if sunk <= LEVEL || levelling.presses >= LEVEL_PRESSES {
-                log!(
-                    "suspension by itself: the load levelled ({:.1} cm left, {} presses, {:.0} s)",
-                    sunk * 100.0,
-                    levelling.presses,
-                    now.saturating_duration_since(levelling.coupled_at).as_secs_f32()
-                );
-                self.levelling = None;
-            } else {
-                levelling.presses += 1;
-                levelling.next_at = now + LEVEL_EVERY;
-                self.levelling = Some(levelling);
-                return self.press(
-                    &["rearsuspup"],
-                    LEVEL_PRESS,
-                    now,
-                    format_args!("the rear {:.1} cm down under the load: raised", sunk * 100.0),
-                );
+        if on {
+            if let Some(mut levelling) = self.levelling
+                && now >= levelling.next_at
+                && let Some(rear) = rear
+            {
+                let sunk = rear - levelling.before;
+                if levelling.presses == 0 && sunk < SANK {
+                    self.levelling = None;
+                } else if sunk <= LEVEL || levelling.presses >= LEVEL_PRESSES {
+                    log!(
+                        "suspension by itself: the load levelled ({:.1} cm left, {} presses, {:.0} s)",
+                        sunk * 100.0,
+                        levelling.presses,
+                        now.saturating_duration_since(levelling.coupled_at).as_secs_f32()
+                    );
+                    self.levelling = None;
+                } else {
+                    levelling.presses += 1;
+                    levelling.next_at = now + LEVEL_EVERY;
+                    self.levelling = Some(levelling);
+                    return self.press(
+                        &["rearsuspup"],
+                        LEVEL_PRESS,
+                        now,
+                        format_args!("the rear {:.1} cm down under the load: raised", sunk * 100.0),
+                    );
+                }
             }
-        }
 
-        // Braking long: up a little from where it is, held while braking, down as much once let go. Nothing else
-        // meanwhile (it would undo it).
-        self.braking_since = since(self.braking_since, t.brake > BRAKE_HARD && speed > BRAKE_MOVING, now);
-        self.let_go_since = since(self.let_go_since, t.brake < BRAKE_LET_GO, now);
-        if !self.brake_raised && held_for(self.braking_since, BRAKE_AFTER, now) {
-            self.brake_raised = true;
-            let kmh = speed * 3.6;
-            return self.press(
-                &["frontsuspup", "rearsuspup"],
-                BRAKE_RAISE,
-                now,
-                format_args!("raised a little, braking long at {kmh:.0} km/h"),
-            );
-        }
-        if self.brake_raised {
-            if held_for(self.let_go_since, BRAKE_RELEASED, now) {
-                self.brake_raised = false;
+            // Braking long: up a little from where it is, held while braking, down as much once let go. Nothing else
+            // meanwhile (it would undo it). Skipped when already `Level::High` (already raised clear, and releasing
+            // the brake would wipe smooth-road sampling).
+            self.braking_since = since(self.braking_since, t.brake > BRAKE_HARD && speed > BRAKE_MOVING, now);
+            self.let_go_since = since(self.let_go_since, t.brake < BRAKE_LET_GO, now);
+            if !self.brake_raised && self.level != Level::High && held_for(self.braking_since, brake_after, now) {
+                self.brake_raised = true;
+                let kmh = speed * 3.6;
                 return self.press(
-                    &["frontsuspdwn", "rearsuspdwn"],
+                    &["frontsuspup", "rearsuspup"],
                     BRAKE_RAISE,
                     now,
-                    format_args!("the brake let go: down as much again"),
+                    format_args!("raised a little, braking long at {kmh:.0} km/h"),
                 );
             }
-            return 0;
+            if self.brake_raised {
+                if held_for(self.let_go_since, BRAKE_RELEASED, now) {
+                    self.brake_raised = false;
+                    return self.press(
+                        &["frontsuspdwn", "rearsuspdwn"],
+                        BRAKE_RAISE,
+                        now,
+                        format_args!("the brake let go: down as much again"),
+                    );
+                }
+                return 0;
+            }
         }
 
         self.fast_since = since(self.fast_since, speed > FAST, now);
         self.slow_since = since(self.slow_since, speed < SLOW, now);
-        // Only what was read moving counts: standing, or the suspension moving, leaves both as they were.
+        // Only what was read moving (and not braking hard) counts as a rough road; stopping or braking clears
+        // `rough_since` so it can never false-trigger "rough road at 0 km/h" (owner 2026-11-22).
+        // Thresholds scale with the chosen suspension stiffness (Soft moves more, Firm/Firmest move less).
+        let scale = stiffness_scale(damping);
+        let braking = t.brake > BRAKE_HARD;
         if let Some(r) = roughness {
-            self.rough_since = since(self.rough_since, r.rms > ROUGH || r.widest > ROUGH_SWING, now);
-            self.smooth_since = since(self.smooth_since, r.rms < SMOOTH && r.widest < SMOOTH_SWING, now);
+            let is_rough = !braking && (r.rms > ROUGH * scale || r.widest > ROUGH_SWING * scale);
+            let is_smooth = r.rms < SMOOTH * scale && r.widest < SMOOTH_SWING * scale;
+            self.rough_since = since(self.rough_since, is_rough, now);
+            if is_rough && self.level == Level::High {
+                self.saw_rough = true;
+            }
+            if !braking {
+                self.smooth_since = since(self.smooth_since, is_smooth, now);
+            }
+        } else {
+            self.rough_since = None;
+            if self.level == Level::High && !self.saw_rough && !quiet {
+                self.smooth_since = since(self.smooth_since, true, now);
+            }
         }
-        let rough = held_for(self.rough_since, ROUGH_AFTER, now);
+        let rough = held_for(self.rough_since, rough_after, now);
         let kmh = speed * 3.6;
 
         match self.level {
             // A rough road: up a little (from lowered, as far again as it went down).
-            Level::Normal | Level::Low if rough => {
+            Level::Normal | Level::Low if on && rough => {
                 let hold = if self.level == Level::Low { LOWER_FOR + RAISE_FOR } else { RAISE_FOR };
                 self.level = Level::High;
+                self.saw_rough = true;
                 self.press(&["frontsuspup", "rearsuspup"], hold, now, format_args!("raised on a rough road at {kmh:.0} km/h"))
             }
-            // Down again only after a long while smooth (never while it stays rough, whatever the speed).
-            Level::High if held_for(self.smooth_since, SMOOTH_AFTER, now) => {
+            // Down again only after a while smooth (never while it stays rough, whatever the speed).
+            Level::High if held_for(self.smooth_since, smooth_after, now) => {
                 self.level = Level::Normal;
+                self.emergency_return = false;
+                self.saw_rough = false;
                 self.press(
                     &["frontsuspdwn", "rearsuspdwn"],
                     RAISE_FOR,
@@ -347,11 +470,11 @@ impl AutoSuspension {
                     format_args!("down as much again (smooth again) at {kmh:.0} km/h"),
                 )
             }
-            Level::Normal if held_for(self.fast_since, AFTER, now) => {
+            Level::Normal if on && held_for(self.fast_since, AFTER, now) => {
                 self.level = Level::Low;
                 self.press(&["frontsuspdwn", "rearsuspdwn"], LOWER_FOR, now, format_args!("lowered a little at {kmh:.0} km/h"))
             }
-            Level::Low if held_for(self.slow_since, AFTER, now) => {
+            Level::Low if on && held_for(self.slow_since, AFTER, now) => {
                 self.level = Level::Normal;
                 self.press(&["frontsuspup", "rearsuspup"], LOWER_FOR, now, format_args!("up as much again at {kmh:.0} km/h"))
             }
@@ -443,11 +566,28 @@ mod tests {
         let mut held = 0;
         for i in 0..200u32 {
             let mut t = driving(40.0);
-            let hit = if i % 10 == 0 { -0.07 } else { 0.0 };
+            let hit = if i % 10 == 0 { -0.10 } else { 0.0 };
             t.suspension = [0.2 + hit, 0.2, -1.0];
             held |= auto.tick(true, Some(&t), start + SAMPLE * i);
         }
         assert_ne!(held & bits(&["frontsuspup"]), 0);
+    }
+
+    #[test]
+    fn never_raises_for_rough_road_when_stopped() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        // Brief rough samples while moving (not long enough to trigger), then stop.
+        for i in 0..30u32 {
+            let mut t = driving(30.0);
+            let bump = if i % 2 == 0 { 0.04 } else { -0.04 };
+            t.suspension = [0.1 + bump, 0.1 + bump, -1.0];
+            auto.tick(true, Some(&t), start + SAMPLE * i);
+        }
+        let stopped = start + SAMPLE * 30;
+        let held = auto.tick(true, Some(&driving(0.0)), stopped + ROUGH_AFTER + Duration::from_secs(1));
+        assert_eq!(held, 0);
+        assert_eq!(auto.level, Level::Normal);
     }
 
     #[test]
@@ -502,5 +642,166 @@ mod tests {
         auto.manual(start);
         auto.tick(true, Some(&driving(90.0)), start);
         assert_eq!(auto.tick(true, Some(&driving(90.0)), start + AFTER), 0);
+    }
+
+    #[test]
+    fn emergency_raises_and_returns_after_smooth_delay_while_driving() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        let smooth_delay = Duration::from_secs(5);
+        let up = bits(&["frontsuspup", "rearsuspup"]);
+        let down = bits(&["frontsuspdwn", "rearsuspdwn"]);
+        let smooth = driving(45.0);
+
+        assert_eq!(auto.force_rough_road(Some(&smooth), start), up);
+        assert_eq!(auto.level, Level::High);
+
+        let mut lowered_at = None;
+        for i in 1..=250u32 {
+            let now = start + SAMPLE * i;
+            let held = auto.tick_with_damping(true, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&smooth), now);
+            if held == down && lowered_at.is_none() {
+                lowered_at = Some(now.saturating_duration_since(start));
+            }
+        }
+        assert_eq!(auto.level, Level::Normal);
+        let lowered_at = lowered_at.expect("should lower after smooth_delay");
+        assert!(
+            lowered_at >= RAISE_FOR + smooth_delay && lowered_at <= RAISE_FOR + smooth_delay + SAMPLE * 2,
+            "lowered at {lowered_at:?}, expected ~{:?}",
+            RAISE_FOR + smooth_delay
+        );
+    }
+
+    #[test]
+    fn emergency_raises_and_returns_when_parked_if_never_rough() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        let smooth_delay = Duration::from_secs(5);
+        let up = bits(&["frontsuspup", "rearsuspup"]);
+        let down = bits(&["frontsuspdwn", "rearsuspdwn"]);
+        let parked = driving(0.0);
+
+        assert_eq!(auto.force_rough_road(Some(&parked), start), up);
+        let mut saw_down = false;
+        for i in 1..=220u32 {
+            let now = start + SAMPLE * i;
+            if auto.tick_with_damping(true, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&parked), now) == down {
+                saw_down = true;
+            }
+        }
+        assert!(saw_down, "parked emergency lift should return after smooth_delay");
+        assert_eq!(auto.level, Level::Normal);
+    }
+
+    #[test]
+    fn emergency_stays_up_on_rough_road_then_lowers_when_smooth() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        let smooth_delay = Duration::from_secs(5);
+        let down = bits(&["frontsuspdwn", "rearsuspdwn"]);
+
+        auto.force_rough_road(Some(&driving(35.0)), start);
+        // Enter rough road right after pressing emergency: must stay High and never lower while rough.
+        for i in 1..=400u32 {
+            let now = start + SAMPLE * i;
+            let mut t = driving(35.0);
+            let bump = if i % 2 == 0 { 0.03 } else { -0.03 };
+            t.suspension = [0.1 + bump, 0.1 + bump, -1.0];
+            let held = auto.tick_with_damping(true, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&t), now);
+            assert_eq!(held & down, 0, "must not lower while rough");
+        }
+        assert_eq!(auto.level, Level::High);
+        assert!(auto.saw_rough);
+
+        // Stopping in the middle of the rough road must not lower it either.
+        let stopped_at = start + SAMPLE * 400;
+        for i in 1..=200u32 {
+            let now = stopped_at + SAMPLE * i;
+            let held = auto.tick_with_damping(true, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&driving(0.0)), now);
+            assert_eq!(held & down, 0, "must not lower while stopped on rough road");
+        }
+        assert_eq!(auto.level, Level::High);
+
+        // Back on smooth road for smooth_delay: lowers once.
+        let smooth_start = stopped_at + SAMPLE * 200;
+        let mut saw_down = false;
+        for i in 1..=250u32 {
+            let now = smooth_start + SAMPLE * i;
+            if auto.tick_with_damping(true, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&driving(40.0)), now) == down {
+                saw_down = true;
+            }
+        }
+        assert!(saw_down, "should lower once smooth road holds for smooth_delay");
+        assert_eq!(auto.level, Level::Normal);
+    }
+
+    #[test]
+    fn emergency_returns_even_with_auto_off_and_ignores_engine_off() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        let off = Telemetry { engine_enabled: false, ..driving(30.0) };
+        assert_eq!(auto.force_rough_road(Some(&off), start), 0);
+        assert_eq!(auto.level, Level::Normal);
+
+        let smooth = driving(40.0);
+        let smooth_delay = Duration::from_secs(5);
+        let down = bits(&["frontsuspdwn", "rearsuspdwn"]);
+        assert_ne!(auto.force_rough_road(Some(&smooth), start), 0);
+        let mut saw_down = false;
+        for i in 1..=250u32 {
+            let now = start + SAMPLE * i;
+            if auto.tick_with_damping(false, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&smooth), now) == down {
+                saw_down = true;
+            }
+        }
+        assert!(saw_down, "emergency lift should still return even when suspension_auto is off");
+        assert_eq!(auto.level, Level::Normal);
+    }
+
+    #[test]
+    fn emergency_not_interrupted_by_braking_while_high() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        let smooth_delay = Duration::from_secs(5);
+        let down = bits(&["frontsuspdwn", "rearsuspdwn"]);
+        let smooth = driving(45.0);
+
+        auto.force_rough_road(Some(&smooth), start);
+        let mut saw_down = false;
+        for i in 1..=250u32 {
+            let now = start + SAMPLE * i;
+            // Brake hard for 3 s right after raising (t = 2.6 s .. 5.6 s), then release and drive smoothly.
+            let t = if (65..=140).contains(&i) {
+                Telemetry { brake: 0.7, ..driving(30.0) }
+            } else {
+                smooth
+            };
+            let held = auto.tick_with_damping(true, Damping::Normal, Duration::from_secs(1), smooth_delay, BRAKE_AFTER, Some(&t), now);
+            assert!(!auto.brake_raised, "must not trigger brake_raised while already High");
+            if held == down {
+                saw_down = true;
+            }
+        }
+        assert!(saw_down, "should still lower after smooth_delay despite braking");
+        assert_eq!(auto.level, Level::Normal);
+    }
+
+    #[test]
+    fn braking_raise_respects_configured_delay() {
+        let start = Instant::now();
+        let mut auto = AutoSuspension::default();
+        let braking = Telemetry { brake: 0.6, ..driving(70.0) };
+        let up = bits(&["frontsuspup", "rearsuspup"]);
+        let four_secs = Duration::from_secs(4);
+        assert_eq!(auto.tick_with_damping(true, Damping::Normal, ROUGH_AFTER, SMOOTH_AFTER, four_secs, Some(&braking), start), 0);
+        assert_eq!(
+            auto.tick_with_damping(true, Damping::Normal, ROUGH_AFTER, SMOOTH_AFTER, four_secs, Some(&braking), start + Duration::from_secs(3)),
+            0
+        );
+        assert_eq!(
+            auto.tick_with_damping(true, Damping::Normal, ROUGH_AFTER, SMOOTH_AFTER, four_secs, Some(&braking), start + four_secs),
+            up
+        );
     }
 }

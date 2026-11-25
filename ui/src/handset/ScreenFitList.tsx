@@ -69,7 +69,7 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
             <button
               key={preset.id}
               type="button"
-              className="ios-row"
+              className="ios-row ios-row-button"
               aria-pressed={on}
               onClick={() =>
                 preset.id === 'auto'
@@ -77,8 +77,14 @@ export function ScreenFitList({ words }: { words: ScreenFitWords }) {
                   : postToHost({ type: 'screenFit', change: preset.fit })
               }
             >
-              <span className="ios-row-label">{presets[preset.id]}</span>
-              <span className="ios-row-value">{on ? '✓' : ''}</span>
+              <span className="ios-row-text">
+                <span className="ios-row-label">{presets[preset.id]}</span>
+              </span>
+              {on && (
+                <span className="ios-row-value" style={{ color: 'var(--ios-blue)', fontWeight: 600 }}>
+                  ✓
+                </span>
+              )}
             </button>
           )
         })}

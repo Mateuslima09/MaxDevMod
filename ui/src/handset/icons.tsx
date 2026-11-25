@@ -17,6 +17,10 @@ export type AppId =
   | 'suspension'
   | 'camera'
   | 'floatScreen'
+  | 'brakes'
+  | 'jobMarket'
+  | 'garage'
+  | 'youtube'
 
 /**
  * The apps that are the cab's too: their real icons (owner 2026-11-03: "the apps' real logos"), the cab's light
@@ -72,8 +76,40 @@ const STROKE = {
 } as const
 
 const GLYPHS: Record<AppId, ReactNode> = {
+  // YouTube: iconic red play pill with centered white triangle.
+  youtube: (
+    <>
+      <rect x="2.2" y="5.2" width="19.6" height="13.6" rx="4.2" fill="#ff0000" />
+      <path d="M10 8.8 15.8 12 10 15.2Z" fill="#ffffff" />
+    </>
+  ),
+  // Bolsa de Fretes / Job Market: a shipping manifest clipboard with an active route arrow.
+  jobMarket: (
+    <>
+      <rect x="4.5" y="4" width="15" height="17" rx="2.5" fill="none" stroke="#ffffff" strokeWidth={1.8} />
+      <rect x="8.5" y="2.2" width="7" height="3.2" rx="1.2" fill="#ffffff" />
+      <path d="M8 10h8M8 13.5h5.5" {...STROKE} stroke="#ffffff" strokeWidth={1.8} />
+      <path d="M13.5 17h4.5m0 0-1.8-1.8M18 17l-1.8 1.8" {...STROKE} stroke="#a7f3d0" strokeWidth={1.8} />
+    </>
+  ),
+  // Minha Empresa / Garagem: sleek modern garage building with bay doors and roof accent.
+  garage: (
+    <>
+      <path d="M3 10.2 12 4l9 6.2V20H3Z" fill="none" stroke="#ffffff" strokeWidth={1.8} strokeLinejoin="round" />
+      <rect x="7" y="12.5" width="10" height="7.5" rx="1.2" fill="none" stroke="#ffd60a" strokeWidth={1.7} />
+      <path d="M7 15.3h10M7 17.8h10" {...STROKE} stroke="#ffd60a" strokeWidth={1.5} />
+    </>
+  ),
   // The reversing camera (owner 2026-11-20: "make an app for it"): a camera, and the reverse arrow under it.
   // MaxDevMod's floating screen in the cab (owner 2026-11-20): a screen on a stand, its picture in red.
+  // The brakes (owner 2026-11-21): a disc, red hot, its caliper over it.
+  brakes: (
+    <>
+      <circle cx="12" cy="12" r="8.5" fill="#ff453a" />
+      <circle cx="12" cy="12" r="3" fill="#ffffff" />
+      <path d="M17 3.5a9.5 9.5 0 0 1 4 5l-3 1.4a6.5 6.5 0 0 0-2.6-3.4Z" fill="#ffffff" />
+    </>
+  ),
   floatScreen: (
     <>
       <rect x="3" y="4.5" width="18" height="11" rx="2" fill="none" stroke="#ffffff" strokeWidth={1.8} />

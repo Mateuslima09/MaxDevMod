@@ -258,6 +258,131 @@ pub fn money(units: &[Unit]) -> Option<i64> {
     units.iter().find(|unit| unit.class == "bank")?.get("money_account")?.parse().ok()
 }
 
+/// One active bank loan in a save (`bank_loan` unit referenced by `bank.loans`, owner 2026-11-22).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Loan {
+    pub amount: i64,
+    pub original_amount: i64,
+    pub interest_rate: f32,
+    pub duration: i32,
+    pub daily_payment: i64,
+}
+
+/// Active bank loans in a save's units, for the phone's Nupay Financiamentos tab.
+pub fn loans(units: &[Unit]) -> Vec<Loan> {
+    let referenced: std::collections::HashSet<&str> = units
+        .iter()
+        .find(|u| u.class == "bank")
+        .map(|bank| bank.all("loans").collect())
+        .unwrap_or_default();
+    units
+        .iter()
+        .filter(|u| u.class == "bank_loan" && (referenced.is_empty() || referenced.contains(u.name.as_str())))
+        .filter_map(|u| {
+            let amount: i64 = u.get("amount")?.parse().ok()?;
+            if amount <= 0 {
+                return None;
+            }
+            let original_amount: i64 = u.get("original_amount").and_then(|v| v.parse().ok()).unwrap_or(amount);
+            let interest_rate: f32 = u.get("interest_rate").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let duration: i32 = u.get("duration").and_then(|v| v.parse().ok()).unwrap_or(35).max(1);
+            let daily_payment =
+                ((original_amount as f64) * (1.0 + f64::from(interest_rate)) / f64::from(duration)).round() as i64;
+            Some(Loan { amount, original_amount, interest_rate, duration, daily_payment })
+        })
+        .collect()
+}
+
+/// Adds a new bank loan and credits `amount` to `bank.money_account` in a text `game.sii` (encrypted `ScsC` or
+/// plain `SiiN`). Returns `Ok(None)` for binary `BSII` saves so they are never corrupted.
+pub fn add_loan(data: &[u8], amount: i64, interest_rate: f32, duration: i32) -> Result<Option<Vec<u8>>, SaveError> {
+    match data.get(..4) {
+        Some(b"ScsC") => add_loan(&decrypt(data)?, amount, interest_rate, duration),
+        Some(b"BSII") => Ok(None),
+        Some(b"SiiN") => Ok(text_add_loan(&String::from_utf8_lossy(data), amount, interest_rate, duration)
+            .map(String::into_bytes)),
+        _ => Err(SaveError::UnknownFormat),
+    }
+}
+
+fn text_add_loan(text: &str, amount: i64, interest_rate: f32, duration: i32) -> Option<String> {
+    if amount <= 0 || duration <= 0 {
+        return None;
+    }
+    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    // Read game_time from `economy` if present so `time_stamp` matches the save's clock.
+    let mut game_time: u64 = 0;
+    let mut in_economy = false;
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with("economy :") {
+            in_economy = true;
+        } else if in_economy && t == "}" {
+            in_economy = false;
+        } else if in_economy && let Some(rest) = t.strip_prefix("game_time:") {
+            if let Ok(v) = rest.trim().parse::<u64>() {
+                game_time = v;
+            }
+        }
+    }
+    let loan_id = format!("_nameless.westplay.loan.{game_time}.{}", amount.unsigned_abs());
+    let mut out = String::with_capacity(text.len() + 256);
+    let mut in_bank = false;
+    let mut bank_done = false;
+    let mut loan_count: usize = 0;
+    let mut inserted_loan_ref = false;
+    let mut money_updated = false;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if !bank_done && trimmed.starts_with("bank :") {
+            in_bank = true;
+            out.push_str(line);
+            continue;
+        }
+        if in_bank {
+            if let Some(rest) = trimmed.strip_prefix("money_account:")
+                && let Ok(now) = rest.trim().parse::<i64>()
+            {
+                let indent = &line[..line.len() - line.trim_start().len()];
+                out.push_str(&format!("{indent}money_account: {}{newline}", now.saturating_add(amount)));
+                money_updated = true;
+                continue;
+            }
+            if let Some(rest) = trimmed.strip_prefix("loans:")
+                && let Ok(count) = rest.trim().parse::<usize>()
+            {
+                loan_count = count;
+                let indent = &line[..line.len() - line.trim_start().len()];
+                out.push_str(&format!("{indent}loans: {}{newline}", count + 1));
+                if count == 0 {
+                    out.push_str(&format!("{indent}loans[0]: {loan_id}{newline}"));
+                    inserted_loan_ref = true;
+                }
+                continue;
+            }
+            if trimmed == "}" {
+                if !inserted_loan_ref {
+                    out.push_str(&format!(" loans[{loan_count}]: {loan_id}{newline}"));
+                    inserted_loan_ref = true;
+                }
+                in_bank = false;
+                bank_done = true;
+            }
+        }
+        out.push_str(line);
+    }
+    if !money_updated || !inserted_loan_ref {
+        return None;
+    }
+    // Insert the new `bank_loan` unit right before the final closing `}` of `SiiNunit`.
+    let last_brace = out.rfind('}')?;
+    let unit = format!(
+        "{newline}bank_loan : {loan_id} {{{newline} amount: {amount}{newline} original_amount: {amount}{newline} time_stamp: {game_time}{newline} interest_rate: {interest_rate:.4}{newline} duration: {duration}{newline}}}{newline}{newline}"
+    );
+    out.insert_str(last_brace, &unit);
+    Some(out)
+}
+
 /// The mods a profile has enabled (its `profile.sii`, read with [`read`]), as the game lists them:
 /// `<package>|<name as shown>` (a Steam Workshop mod's package is `mod_workshop_package.<id>`). The list's
 /// length, which a text profile writes as an entry of its own (`active_mods: 50`), isn't a mod.

@@ -109,13 +109,13 @@ pub(super) fn pump_panel(text: &str) -> bool {
 /// What the pump's panel says instead, filling by hand (its Enter fills no more).
 fn panel_words(language: &str) -> &'static str {
     match language {
-        "pt" => "Abasteça a pé: desça e segure Enter ao lado do tanque",
-        "es" => "Reposta a pie: baja y mantén Enter junto al depósito",
-        _ => "Refuel on foot: get out and hold Enter by the tank",
+        "pt" => "Abasteça a pé: desça e aperte E ao lado do tanque",
+        "es" => "Reposta a pie: baja y pulsa E junto al depósito",
+        _ => "Refuel on foot: get out and press E by the tank",
     }
 }
 
-/// The key that fills, on foot: E (as `freight`'s).
+/// The key that toggles refuelling mode / interacts on foot: E (as `freight`'s).
 const USE_KEY: (u16, u32) = (b'E' as u16, 0x12);
 const LITRES_A_GALLON: f32 = 3.785_41;
 /// The meter's last reading stays this long after filling.
@@ -126,15 +126,16 @@ const METER_AFTER: Duration = Duration::from_secs(6);
 enum Say {
     /// The `activate` key in the cab, at the pump.
     GetOut,
-    /// By the tank at a pump: hold Enter (or E) to fill.
-    HoldToFill,
+    /// By the tank at a pump: press E to enter refuelling mode.
+    PressToEnter,
+    /// Entered refuelling mode: hold Enter to pump, press E to exit.
+    EnteredMode,
     /// E by the tank, the engine running.
     EngineOff,
-    /// E by the tank, and no fuel came.
+    /// Enter in refuelling mode, and no fuel came.
     NoFuel,
     /// E by the tank, the tank already full.
     AlreadyFull,
-    Filling,
     /// Stopped by the player: how much went in (litres).
     Filled(f32),
     /// The tank full: how much went in (litres).
@@ -152,7 +153,9 @@ enum Say {
 impl Say {
     fn icon(self) -> i32 {
         match self {
-            Say::Filling | Say::Filled(_) | Say::Full(_) | Say::Paid(_) | Say::HoldToFill => notice::ANNOUNCEMENT,
+            Say::EnteredMode | Say::Filled(_) | Say::Full(_) | Say::Paid(_) | Say::PressToEnter => {
+                notice::ANNOUNCEMENT
+            }
             _ => notice::ALERT,
         }
     }
@@ -189,9 +192,16 @@ impl Say {
             ("pt", Say::StillOwed(total)) => format!("Você ainda não pagou o frentista: {}", money(total)),
             ("es", Say::StillOwed(total)) => format!("Aún no pagaste al empleado: {}", money(total)),
             (_, Say::StillOwed(total)) => format!("You haven't paid the attendant yet: {}", money(total)),
-            ("pt", Say::HoldToFill) => "Segure Enter (ou E) para abastecer; solte para parar".to_owned(),
-            ("es", Say::HoldToFill) => "Mantén Enter (o E) para repostar; suelta para parar".to_owned(),
-            (_, Say::HoldToFill) => "Hold Enter (or E) to refuel; let go to stop".to_owned(),
+            ("pt", Say::PressToEnter) => "Aperte E ao lado do tanque para entrar no modo abastecimento".to_owned(),
+            ("es", Say::PressToEnter) => "Pulsa E junto al depósito para entrar en modo repostaje".to_owned(),
+            (_, Say::PressToEnter) => "Press E by the tank to enter refuelling mode".to_owned(),
+            ("pt", Say::EnteredMode) => {
+                "Modo abastecimento: segure Enter para abastecer · aperte E para sair".to_owned()
+            }
+            ("es", Say::EnteredMode) => {
+                "Modo repostaje: mantén Enter para repostar · pulsa E para salir".to_owned()
+            }
+            (_, Say::EnteredMode) => "Refuelling mode: hold Enter to pump · press E to exit".to_owned(),
             ("pt", Say::Paid(total)) => format!("Pago: {}", money(total)),
             ("es", Say::Paid(total)) => format!("Pagado: {}", money(total)),
             (_, Say::Paid(total)) => format!("Paid: {}", money(total)),
@@ -206,19 +216,16 @@ impl Say {
             ("es", Say::AlreadyFull) => "El depósito ya está lleno".to_owned(),
             (_, Say::AlreadyFull) => "The tank is already full".to_owned(),
             ("pt", Say::NoFuel) => "A bomba n\u{e3}o abasteceu: pare o caminh\u{e3}o no lugar de abastecer".to_owned(),
-            ("pt", Say::Filling) => "Abastecendo: solte para parar".to_owned(),
             ("pt", Say::Filled(litres)) => format!("Abastecido: {}", amount(litres)),
             ("pt", Say::Full(litres)) => format!("Tanque cheio: {}", amount(litres)),
             ("es", Say::GetOut) => "Baja del cami\u{f3}n y reposta por el dep\u{f3}sito".to_owned(),
             ("es", Say::NoFuel) => {
                 "El surtidor no repost\u{f3}: para el cami\u{f3}n en el lugar de repostar".to_owned()
             }
-            ("es", Say::Filling) => "Repostando: suelta para parar".to_owned(),
             ("es", Say::Filled(litres)) => format!("Repostado: {}", amount(litres)),
             ("es", Say::Full(litres)) => format!("Dep\u{f3}sito lleno: {}", amount(litres)),
             (_, Say::GetOut) => "Get out and refuel at the truck's tank".to_owned(),
             (_, Say::NoFuel) => "The pump gave no fuel: stop the truck where it refuels".to_owned(),
-            (_, Say::Filling) => "Refuelling: let go to stop".to_owned(),
             (_, Say::Filled(litres)) => format!("Refuelled: {}", amount(litres)),
             (_, Say::Full(litres)) => format!("Tank full: {}", amount(litres)),
         };
@@ -244,13 +251,23 @@ fn by_tank(player: [f64; 3], truck: &Truck) -> bool {
     TANK_OUT.contains(&x.abs()) && z >= from && z < to
 }
 
-/// The tank being filled.
-struct Filling {
-    since: Instant,
-    /// The fuel as it started (litres).
-    from: f32,
-    /// When fuel last came in.
-    rose: Option<Instant>,
+/// An active 2-stage refuelling session (entered with E, pumped by holding Enter, exited with E).
+struct RefuelSession {
+    /// The fuel as the player entered refuelling mode (litres).
+    start_fuel: f32,
+    /// Whether Enter is currently held and pumping fuel.
+    pumping: bool,
+    /// Whether any fuel actually entered the tank during this session.
+    ever_rose: bool,
+    /// When the current continuous pump hold began (for `NO_FUEL_AFTER`).
+    pump_started: Option<Instant>,
+    /// When fuel last rose during the current pump hold (for `DONE_AFTER`).
+    pump_rose: Option<Instant>,
+    /// Tank reached full during this session (stays calmly in mode until player presses E).
+    full_reached: bool,
+    /// Brief initial `ACTIVATE` pulse on entering refuelling mode to read this station's live
+    /// fuel price before the player holds Enter.
+    price_probe_until: Option<Instant>,
 }
 
 pub(super) struct Refuel {
@@ -261,7 +278,7 @@ pub(super) struct Refuel {
     last_fuel: f32,
     /// When the player's `activate` key was last down.
     key_down: Option<Instant>,
-    filling: Option<Filling>,
+    session: Option<RefuelSession>,
     /// What E does now, on foot (the key hints bar's).
     offer: Option<Action>,
     was_use: AtomicBool,
@@ -377,6 +394,7 @@ fn let_go(state: &mut State) {
 }
 
 fn close_bill_only(state: &mut State) {
+    crate::fuel_bubble::set(None);
     let Some(bill) = state.refuel.as_mut().and_then(|refuel| refuel.bill.take()) else { return };
     owe(None, false);
     if bill.asked {
@@ -432,27 +450,39 @@ pub(super) fn fills(player: [f64; 3], truck: &Truck) -> bool {
     CAN_FILL.load(Ordering::Acquire) && by_tank(player, truck)
 }
 
-/// While the tank is filled on foot: the heading toward the truck from where the player stands (radians, as
-/// `super::heading_of`), and how far ahead of their eyes the nozzle's grip goes (metres); NaN when not filling.
+/// While in refuelling mode on foot: the heading toward the truck from where the player stands (radians, as
+/// `super::heading_of`), how far ahead of their eyes the nozzle's grip goes (metres), and whether fuel is actively
+/// pumping (trigger squeezed); yaw is NaN when not in refuelling mode.
 static NOZZLE_YAW: AtomicU32 = AtomicU32::new(0x7fc0_0000);
 static NOZZLE_AHEAD: AtomicU32 = AtomicU32::new(0);
+static NOZZLE_PUMPING: AtomicBool = AtomicBool::new(false);
 /// The tank's side, out from the truck's middle (metres): the nozzle's grip held this far out, its spout in the
 /// tank (owner 2026-11-12: "not the tank's mouth itself, more or less that way").
 const GRIP_OUT: f64 = 1.6;
 /// How far ahead of the eyes the grip may go (metres): the arm's reach.
 const GRIP_AHEAD: std::ops::RangeInclusive<f64> = 0.32..=0.6;
 
-/// While the tank is filled on foot: where the nozzle goes (`NOZZLE_YAW`), for the first-person view
-/// (`super::nozzle_frame`).
-pub(super) fn nozzle() -> Option<(f32, f64)> {
+/// While in refuelling mode on foot: `(yaw, ahead, pumping)` for the first-person view (`super::nozzle_frame`).
+pub(super) fn nozzle() -> Option<(f32, f64, bool)> {
     let yaw = f32::from_bits(NOZZLE_YAW.load(Ordering::Acquire));
-    (!yaw.is_nan()).then(|| (yaw, f64::from(f32::from_bits(NOZZLE_AHEAD.load(Ordering::Acquire)))))
+    (!yaw.is_nan()).then(|| {
+        (
+            yaw,
+            f64::from(f32::from_bits(NOZZLE_AHEAD.load(Ordering::Acquire))),
+            NOZZLE_PUMPING.load(Ordering::Acquire),
+        )
+    })
 }
 
-fn set_nozzle(at: Option<(f32, f64)>) {
+fn set_nozzle(at: Option<(f32, f64)>, pumping: bool) {
     let (yaw, ahead) = at.unwrap_or((f32::NAN, 0.0));
+    NOZZLE_PUMPING.store(at.is_some() && pumping, Ordering::Release);
     NOZZLE_AHEAD.store((ahead as f32).to_bits(), Ordering::Release);
     NOZZLE_YAW.store(yaw.to_bits(), Ordering::Release);
+}
+
+fn set_nozzle_pumping(pumping: bool) {
+    NOZZLE_PUMPING.store(pumping, Ordering::Release);
 }
 
 /// Toward the truck from `player` (a place in the world), square to it (the way to its tank), and how far ahead
@@ -471,6 +501,39 @@ pub(super) fn offer(state: &State) -> Option<Action> {
     state.refuel.as_ref().and_then(|refuel| refuel.offer)
 }
 
+/// Whether the player is currently inside 2-stage Refuelling Mode (nozzle in tank, holding Enter pumps, E exits).
+pub(super) fn in_mode(state: &State) -> bool {
+    state.refuel.as_ref().is_some_and(|refuel| refuel.session.is_some())
+}
+
+/// Primary virtual key for `activate` (defaults to Enter `0x0D`) for the HUD key hints bar.
+pub(super) fn activate_vk(state: &State) -> u32 {
+    state
+        .refuel
+        .as_ref()
+        .and_then(|refuel| refuel.keys.first().copied())
+        .filter(|&k| k != 0)
+        .unwrap_or(0x0D)
+}
+
+/// Floating payment speech bubble target above the attendant, when a fuel bill is pending payment on foot:
+/// `(attendant_world_pos, total_amount, gallons, in_range, distance_m)`.
+pub(super) fn bubble_target(refuel: Option<&Refuel>, player_pos: [f64; 3]) -> Option<([f64; 3], f32, bool, bool, f32)> {
+    let refuel = refuel?;
+    if refuel.session.is_some() {
+        return None;
+    }
+    let bill = refuel.bill.as_ref()?;
+    if bill.asked {
+        return None;
+    }
+    let gallons = crate::log::game_dir().to_string_lossy().contains("American");
+    let anchor = if bill.attendant.is_some() { bill.attendant_at } else { bill.truck_at };
+    let dist = apart(player_pos, anchor);
+    let within = if bill.attendant.is_some() { PAY_WITHIN } else { PAY_WITHOUT_ATTENDANT };
+    Some((bill.attendant_at, bill.total, gallons, dist < within, dist as f32))
+}
+
 fn on() -> bool {
     super::enabled()
         && crate::bridge::get().is_some_and(|bridge| bridge.host.manual_refuel.load(Ordering::Acquire) == 1)
@@ -484,10 +547,11 @@ fn rest(state: &mut State) {
     CAN_FILL.store(false, Ordering::Release);
     notice::hide_pump_panel(false);
     crate::commands::hold(crate::commands::ACTIVATE, false);
-    set_nozzle(None);
+    set_nozzle(None, false);
     crate::fuel_meter::set(None);
+    crate::fuel_bubble::set(None);
     if let Some(refuel) = state.refuel.as_mut() {
-        if refuel.filling.take().is_some() {
+        if refuel.session.take().is_some() {
             super::HELD_STILL.store(false, Ordering::Release);
         }
         refuel.offer = None;
@@ -536,7 +600,7 @@ pub(super) unsafe fn frame(state: &mut State) {
         pump: None,
         last_fuel: fuel,
         key_down: None,
-        filling: None,
+        session: None,
         offer: None,
         was_use: AtomicBool::new(false),
         was_activate: AtomicBool::new(false),
@@ -569,19 +633,16 @@ pub(super) unsafe fn frame(state: &mut State) {
     let activate_pressed = crate::input::newly_down(&refuel.was_activate, activate_down);
     let use_down = shown && really_down(VIRTUAL_KEY(super::virtual_key(USE_KEY)));
     let use_pressed = crate::input::newly_down(&refuel.was_use, use_down) && on_foot.is_some();
-    // Filling by hand: held, Enter (the player's `activate`, kept from the game at the pump) or E, as long as they
-    // want (owner 2026-11-20).
-    let hold_down = on_foot.is_some() && (use_down || activate_down);
-    let hold_pressed = use_pressed || (activate_pressed && on_foot.is_some());
     let mut to_say = None;
 
     // The pump: known once the player's own key fills the tank in the cab; forgotten as the truck leaves it.
     if refuel.pump.is_some_and(|pump| apart(pump, truck.position) > PUMP_LEFT) {
         log!("refuel: the pump left behind");
         refuel.pump = None;
+        notice::clear_fresh_pump_price();
     }
     let by_key = refuel.key_down.is_some_and(|at| at.elapsed() < KEY_LATELY);
-    if refuel.pump.is_none() && refuel.filling.is_none() && rising && by_key && standing {
+    if refuel.pump.is_none() && refuel.session.is_none() && rising && by_key && standing {
         log!("refuel: a pump here (the game filled the tank at the player's key)");
         refuel.pump = Some(truck.position);
         to_say = Some(Say::GetOut);
@@ -601,7 +662,7 @@ pub(super) unsafe fn frame(state: &mut State) {
         let notices = state.game.as_ref().and_then(|game| game.as_ref()).and_then(|game| game.notices.as_ref());
         // SAFETY: on the game's main thread (`frame`'s contract).
         let texts = notices.map(|notices| unsafe { notices.texts() }).unwrap_or_default();
-        let own_up = refuel.said.is_some_and(|(_, at)| at.elapsed() < OWN_NOTICE_FOR) || refuel.filling.is_some();
+        let own_up = refuel.said.is_some_and(|(_, at)| at.elapsed() < OWN_NOTICE_FOR) || refuel.session.is_some();
         for text in &texts {
             if refuel.logged.len() < NOTICES_LOGGED && !refuel.logged.contains(text) {
                 log!("refuel: the game says {text:?}{}", if says_fuel(text) { " (fuel)" } else { "" });
@@ -616,8 +677,8 @@ pub(super) unsafe fn frame(state: &mut State) {
         }
     }
     // The game's big panel at the pump ("press and hold Enter"), its words the plugin's while filling by hand is
-    // on and not filling (owner 2026-11-11: "can that one go too?"); each frame, the game writing it again.
-    if standing && refuel.filling.is_none() {
+    // on and not in refuelling mode (owner 2026-11-11: "can that one go too?"); each frame, the game writing it again.
+    if standing && refuel.session.is_none() {
         // SAFETY: the code is the game's, read as it lies.
         state.game.get_or_insert_with(|| unsafe { super::locate() });
         if let Some(notices) = state.game.as_ref().and_then(|game| game.as_ref()).and_then(|game| game.notices.as_ref())
@@ -641,20 +702,23 @@ pub(super) unsafe fn frame(state: &mut State) {
     // tank full looked broken.)
     let offered = crate::commands::registered() && standing && (at_pump || refuel.game_says_fuel);
     CAN_FILL.store(offered, Ordering::Release);
-    keep(&refuel.keys.clone(), blocked);
+    keep(&refuel.keys.clone(), blocked || refuel.session.is_some());
     USE_KEPT.store(on_foot.is_some(), Ordering::Release);
-    if activate_pressed && blocked && refuel.filling.is_none() && on_foot.is_none() && to_say.is_none() {
+    if activate_pressed && blocked && refuel.session.is_none() && on_foot.is_none() && to_say.is_none() {
         to_say = Some(Say::GetOut);
     }
 
-    // On foot, beside the tank: E fills, E again stops.
+    // 2-stage Refuelling Mode on foot beside the tank:
+    //   1. Tap E to enter Refuelling Mode (nozzle inserted, camera smoothly focuses tank).
+    //   2. Hold Enter (`activate`) as long as you want to pump; release Enter to pause while staying in mode.
+    //   3. Tap E again to exit Refuelling Mode (nozzle holstered, camera eases back, attendant bill spawned).
     refuel.offer = None;
     let at_tank = !freights && standing && player.is_some_and(|player| by_tank(player, &truck));
     // Coming by the tank or leaving it, at a pump: in the log, with the fuel (to tell why E is offered or not).
     let by_it = player.is_some_and(|player| by_tank(player, &truck));
-    // Come by the tank at a pump, the tank not full: how to fill, in the game's corner (the game's own panel hidden).
-    if by_it && !refuel.was_by_tank && offered && !is_full && refuel.filling.is_none() && !freights {
-        to_say = Some(Say::HoldToFill);
+    // Come by the tank at a pump, the tank not full: tell how to enter refuelling mode.
+    if by_it && !refuel.was_by_tank && offered && !is_full && refuel.session.is_none() && !freights {
+        to_say = Some(Say::PressToEnter);
     }
     if by_it != refuel.was_by_tank && (offered || at_pump || refuel.game_says_fuel) {
         log!(
@@ -664,10 +728,10 @@ pub(super) unsafe fn frame(state: &mut State) {
     }
     refuel.was_by_tank = by_it;
     // E at a pump, on foot, not by the tank: where they stood (the truck's own space), to set the place by.
-    if hold_pressed
+    if use_pressed
         && offered
         && !at_tank
-        && refuel.filling.is_none()
+        && refuel.session.is_none()
         && let Some(player) = player
     {
         let [side, back] = in_vehicle(truck.position, truck.heading, player);
@@ -676,75 +740,149 @@ pub(super) unsafe fn frame(state: &mut State) {
             back - f64::from(truck.head[2])
         );
     }
-    let mut ended = None;
+    let mut exit_mode = false;
     let mut filled_now = None;
-    if refuel.filling.is_some() {
+    if refuel.session.is_some() {
         refuel.offer = Some(Action::StopRefuel);
-        // Let go: stopped, what went in is what they wanted.
-        if !hold_down {
-            ended = Some(false);
+        if use_pressed || on_foot.is_none() {
+            exit_mode = true;
         }
-    } else if at_tank {
-        if offered {
-            refuel.offer = Some(Action::Refuel);
-            if hold_pressed && is_full {
+    } else if at_tank && offered {
+        refuel.offer = Some(Action::Refuel);
+        if use_pressed {
+            if is_full {
                 to_say = Some(Say::AlreadyFull);
-            } else if hold_pressed && crate::telemetry::engine_on() {
+            } else if crate::telemetry::engine_on() {
                 // The game fills only a truck switched off, and says so itself; here too.
                 to_say = Some(Say::EngineOff);
-            } else if hold_pressed {
-                refuel.filling = Some(Filling { since: Instant::now(), from: fuel, rose: None });
+            } else {
+                let needs_probe = !notice::pump_price_fresh();
+                let price_probe_until = needs_probe.then(|| Instant::now() + Duration::from_millis(280));
+                if needs_probe {
+                    crate::commands::hold(crate::commands::ACTIVATE, true);
+                }
+                refuel.session = Some(RefuelSession {
+                    start_fuel: fuel,
+                    pumping: false,
+                    ever_rose: false,
+                    pump_started: None,
+                    pump_rose: None,
+                    full_reached: false,
+                    price_probe_until,
+                });
                 super::HELD_STILL.store(true, Ordering::Release);
-                crate::commands::hold(crate::commands::ACTIVATE, true);
-                // The nozzle in the tank (the door's sound: the plugin has no other).
+                // Nozzle inserted into the tank.
                 super::steps::door(super::steps::Door::Shut, 0.0);
-                log!("refuel: filling the tank by hand, from {fuel:.1} l of {capacity:.0}");
-                // The nozzle in the hand, at the tank (first person: `super::nozzle_frame`).
-                set_nozzle(player.map(|player| toward_tank(player, &truck)));
-                to_say = Some(Say::Filling);
+                log!("refuel: entered refuelling mode at {fuel:.1} l of {capacity:.0} (price_probe={needs_probe})");
+                set_nozzle(player.map(|player| toward_tank(player, &truck)), false);
+                to_say = Some(Say::EnteredMode);
             }
         }
     }
-    // Filling: held where they stand each frame (`freight` may let go of it), until the pump stops giving.
-    if let Some(filling) = refuel.filling.as_mut() {
+    // Active Refuelling Mode: keep player standing by the tank; hold Enter to pump, release Enter to pause.
+    if !exit_mode
+        && let Some(session) = refuel.session.as_mut()
+    {
         super::HELD_STILL.store(true, Ordering::Release);
-        if rising {
-            filling.rose = Some(Instant::now());
-            // The pump, for sure: the player's own key is the plugin's here from now on.
-            if refuel.pump.is_none() {
-                log!("refuel: a pump here (it filled the tank)");
-                refuel.pump = Some(truck.position);
+        // Complete the initial live-price probe as soon as Prism3D reports the station's price
+        // (typically 1-2 frames) or after the short timeout, then zero the session counter.
+        if let Some(until) = session.price_probe_until {
+            if notice::pump_price_fresh() || Instant::now() >= until || activate_down {
+                session.price_probe_until = None;
+                if !activate_down {
+                    crate::commands::hold(crate::commands::ACTIVATE, false);
+                    session.start_fuel = fuel;
+                }
+                log!(
+                    "refuel: price probe finished (fresh={}, price={:?})",
+                    notice::pump_price_fresh(),
+                    notice::pump_price()
+                );
             }
         }
-        match filling.rose {
-            _ if on_foot.is_none() => ended = Some(false),
-            None if filling.since.elapsed() >= NO_FUEL_AFTER => ended = Some(false),
-            Some(rose) if rose.elapsed() >= DONE_AFTER => ended = Some(true),
-            _ => {}
+        if is_full && !session.full_reached {
+            session.full_reached = true;
+            if session.pumping {
+                session.pumping = false;
+                session.pump_started = None;
+                session.pump_rose = None;
+                crate::commands::hold(crate::commands::ACTIVATE, false);
+                set_nozzle_pumping(false);
+                super::steps::door(super::steps::Door::Shut, 0.0);
+            }
+            let litres = (fuel - session.start_fuel).max(0.0);
+            if session.ever_rose {
+                to_say = Some(Say::Full(litres));
+            }
+        }
+        if !session.full_reached && session.price_probe_until.is_none() {
+            let wants_pump = activate_down && on_foot.is_some();
+            if wants_pump && !session.pumping {
+                // Player squeezed Enter trigger: start pumping fuel.
+                session.pumping = true;
+                session.pump_started = Some(Instant::now());
+                session.pump_rose = None;
+                crate::commands::hold(crate::commands::ACTIVATE, true);
+                set_nozzle_pumping(true);
+            } else if !wants_pump && session.pumping {
+                // Player released Enter trigger: pause pumping, stay smoothly in Refuelling Mode!
+                session.pumping = false;
+                session.pump_started = None;
+                session.pump_rose = None;
+                crate::commands::hold(crate::commands::ACTIVATE, false);
+                set_nozzle_pumping(false);
+            }
+            if session.pumping {
+                if rising {
+                    session.ever_rose = true;
+                    session.pump_rose = Some(Instant::now());
+                    // Confirmed pump: lock in pump location.
+                    if refuel.pump.is_none() {
+                        log!("refuel: a pump here (it filled the tank)");
+                        refuel.pump = Some(truck.position);
+                    }
+                }
+                match session.pump_rose {
+                    None if session.pump_started.is_some_and(|s| s.elapsed() >= NO_FUEL_AFTER) => {
+                        session.pumping = false;
+                        session.pump_started = None;
+                        crate::commands::hold(crate::commands::ACTIVATE, false);
+                        set_nozzle_pumping(false);
+                        to_say = Some(Say::NoFuel);
+                    }
+                    Some(rose) if rose.elapsed() >= DONE_AFTER => {
+                        session.pumping = false;
+                        session.pump_started = None;
+                        session.pump_rose = None;
+                        session.full_reached = true;
+                        crate::commands::hold(crate::commands::ACTIVATE, false);
+                        set_nozzle_pumping(false);
+                        super::steps::door(super::steps::Door::Shut, 0.0);
+                        let litres = (fuel - session.start_fuel).max(0.0);
+                        to_say = Some(if is_full { Say::Full(litres) } else { Say::Filled(litres) });
+                    }
+                    _ => {}
+                }
+            }
         }
     }
-    if let Some(by_pump) = ended
-        && let Some(filling) = refuel.filling.take()
+    if exit_mode
+        && let Some(session) = refuel.session.take()
     {
         crate::commands::hold(crate::commands::ACTIVATE, false);
         super::HELD_STILL.store(false, Ordering::Release);
-        set_nozzle(None);
-        let litres = (fuel - filling.from).max(0.0);
-        refuel.meter_until = Some((Instant::now() + METER_AFTER, litres));
-        if filling.rose.is_some() {
+        set_nozzle(None, false);
+        super::steps::door(super::steps::Door::Shut, 0.0);
+        let litres = (fuel - session.start_fuel).max(0.0);
+        log!(
+            "refuel: exited refuelling mode, filled {litres:.1} l (ever_rose: {}, full: {is_full})",
+            session.ever_rose
+        );
+        if session.ever_rose && litres > 0.0 {
+            refuel.meter_until = Some((Instant::now() + METER_AFTER, litres));
             filled_now = Some(litres);
+            to_say = Some(if is_full || session.full_reached { Say::Full(litres) } else { Say::Filled(litres) });
         }
-        log!("refuel: filled {litres:.1} l (the pump stopped: {by_pump}, full: {is_full})");
-        to_say = Some(match filling.rose {
-            // Let go before the pump began: nothing in, how it goes said again.
-            None if filling.since.elapsed() < NO_FUEL_AFTER => Say::HoldToFill,
-            None => Say::NoFuel,
-            Some(_) if by_pump || is_full => {
-                super::steps::door(super::steps::Door::Shut, 0.0);
-                if is_full { Say::Full(litres) } else { Say::Filled(litres) }
-            }
-            Some(_) => Say::Filled(litres),
-        });
     }
 
     let gallons = crate::log::game_dir().to_string_lossy().contains("American");
@@ -821,7 +959,7 @@ pub(super) unsafe fn frame(state: &mut State) {
     if refuel.say_pay_at.is_some_and(|at| Instant::now() >= at) {
         refuel.say_pay_at = None;
         if let Some(bill) = refuel.bill.as_ref().filter(|bill| !bill.asked) {
-            if to_say.is_none() && refuel.filling.is_none() {
+            if to_say.is_none() && refuel.session.is_none() {
                 to_say = Some(Say::PayAttendant(bill.total));
             }
             // Said again while it's owed (owner 2026-11-20: "a notice to pay").
@@ -854,11 +992,11 @@ pub(super) unsafe fn frame(state: &mut State) {
     }
     // Left the pump without paying: the truck gone from where it filled.
     let left = refuel.bill.as_ref().is_some_and(|bill| apart(bill.truck_at, truck.position) > BILL_LEFT);
-    // Paying: by the attendant, on foot, not filling.
+    // Paying: by the attendant, on foot, not in refuelling mode.
     if let Some(bill) = refuel.bill.as_mut()
         && paid.is_none()
         && !left
-        && refuel.filling.is_none()
+        && refuel.session.is_none()
     {
         if bill.asked && on_foot.is_none() {
             // Back in the cab with the phone showing it: put away, still owed.
@@ -953,20 +1091,32 @@ pub(super) unsafe fn frame(state: &mut State) {
     }
     let Some(refuel) = state.refuel.as_mut() else { return };
 
-    // The pump's meter (owner 2026-11-12: "the litres and the price, going up as it fills"): while filling, the
-    // last of it a moment after, and while it's owed.
-    let reading = match (&refuel.filling, refuel.meter_until, &refuel.bill) {
-        (Some(filling), _, _) => Some(((fuel - filling.from).max(0.0), false, false)),
-        (None, _, Some(bill)) => Some((bill.litres, true, true)),
-        (None, Some((until, litres)), None) if Instant::now() < until => Some((litres, true, false)),
+    // The pump's meter (owner 2026-11-12: "the litres and the price, going up as it fills"): while in refuelling
+    // mode (ready / pumping / full), a moment after, and while a bill is owed to the attendant.
+    let tank_fill = if capacity > 0.0 { (fuel / capacity).clamp(0.0, 1.0) } else { -1.0 };
+    let reading = match (&refuel.session, refuel.meter_until, &refuel.bill) {
+        (Some(session), _, _) => {
+            let mode = if session.full_reached || is_full {
+                crate::fuel_meter::MeterMode::Full
+            } else if session.pumping {
+                crate::fuel_meter::MeterMode::Pumping
+            } else {
+                crate::fuel_meter::MeterMode::Ready
+            };
+            Some(((fuel - session.start_fuel).max(0.0), mode))
+        }
+        (None, _, Some(bill)) => Some((bill.litres, crate::fuel_meter::MeterMode::Owed)),
+        (None, Some((until, litres)), None) if Instant::now() < until => {
+            Some((litres, crate::fuel_meter::MeterMode::Done))
+        }
         _ => None,
     };
-    crate::fuel_meter::set(reading.map(|(litres, done, owed)| crate::fuel_meter::Reading {
+    crate::fuel_meter::set(reading.map(|(litres, mode)| crate::fuel_meter::Reading {
         amount: unit(litres),
         price: refuel.bill.as_ref().map(|bill| bill.price).or_else(notice::pump_price),
         gallons,
-        done,
-        owed,
+        tank_fill,
+        mode,
     }));
     // Told in the game's corner (its notices found), and in the log; the same again only after a while.
     let Some(what) = to_say else { return };
@@ -1109,12 +1259,12 @@ mod tests {
             Say::EngineOff,
             Say::NoFuel,
             Say::AlreadyFull,
-            Say::Filling,
+            Say::PressToEnter,
+            Say::EnteredMode,
             Say::Filled(10.0),
             Say::Full(10.0),
             Say::PayAttendant(130.0),
             Say::StillOwed(130.0),
-            Say::HoldToFill,
             Say::Paid(477.2),
             Say::LeftUnpaid,
         ] {

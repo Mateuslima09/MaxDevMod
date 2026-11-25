@@ -26,7 +26,8 @@ pub fn on_frame() {
     let in_game = crate::d3d::game_shown();
     for keybind in Keybind::ALL {
         let i = keybind as usize;
-        let Some((key, with_interaction_key)) = keybind_of(bridge.host.keybinds[i].load(Ordering::Acquire)) else {
+        let Some((key, with_interaction_key)) = keybind_of(bridge.host.keybind_slot(keybind).load(Ordering::Acquire))
+        else {
             WAS_DOWN[i].store(false, Ordering::Release);
             continue;
         };
@@ -39,7 +40,7 @@ pub fn on_frame() {
                 crate::hints::toggle();
                 continue;
             }
-            bridge.plugin.keybind_presses[i].fetch_add(1, Ordering::AcqRel);
+            bridge.plugin.keybind_press_slot(keybind).fetch_add(1, Ordering::AcqRel);
             log!("keybind {keybind:?} pressed");
         }
     }
@@ -67,11 +68,12 @@ fn counts(with_interaction_key: bool) -> bool {
 pub fn taken(key: u32) -> bool {
     let Some(bridge) = bridge::get() else { return false };
     let sides = sides(key);
-    bridge.host.keybinds.iter().filter_map(|value| keybind_of(value.load(Ordering::Acquire))).any(
-        |(bound, with_interaction_key)| {
+    Keybind::ALL
+        .into_iter()
+        .filter_map(|kb| keybind_of(bridge.host.keybind_slot(kb).load(Ordering::Acquire)))
+        .any(|(bound, with_interaction_key)| {
             !is_mouse_button(bound) && sides.contains(&bound) && counts(with_interaction_key)
-        },
-    )
+        })
 }
 
 /// The keys `key` stands for: both sides for the generic Shift, Ctrl and Alt, else itself.

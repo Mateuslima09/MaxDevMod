@@ -3,6 +3,39 @@
 What changed in each release of WestPlay. The newest release's notes are what the app shows when it offers the
 update.
 
+## 2.4.8 (beta, 2026-11-21)
+- Brake fade: no brake left at 400 °C. Braking from about 320 °C grinds, a steady sound while the pedal is held;
+  the dashboard's warning, longer now, comes at the temperature you choose in the Freios app (320 to 380 °C, 360
+  at first), with the phone's "no brakes".
+
+## 2.4.7 (beta, 2026-11-21)
+- Brake fade: with the brakes at their limit, the dashboard's warning sounds over and over, and braking grinds
+  iron on iron; the phone says when they overheat and when they're gone. A Freios app on the phone shows both
+  discs live and has its options: on or off, how soon (light, realistic, hard), the sounds' volumes. They cool
+  faster the faster you go. A little HUD of its own in the game shows both discs, their °C and colour (blue to
+  red), pulsing while the brakes are weak; its corner and size are chosen in the Freios app.
+
+## 2.4.6 (beta, 2026-11-21)
+- Brake fade: the brakes heat up as you use them and, overheated (from about 250 °C), lose force, down to 15 % at
+  the worst, coming back as they cool; they cool faster in the rain and at night. The trailer's brakes heat on
+  their own, more with a load. Use the engine brake and the retarder down long hills.
+
+## 2.4.5 (beta, 2026-11-21)
+- Brake fade, first step: the plugin writes the brakes' temperature to its log while driving, and can try taking
+  brake away for a test (nothing changes in the game unless that test is switched on).
+
+## 2.4.4 (beta, 2026-11-21)
+- Virtual mirrors: with one side chosen, only that one shows again (on ETS2 1.62 both showed).
+
+## 2.4.3 (beta, 2026-11-21)
+- The floating screen shows MaxDevMod in any truck, also where the truck's own screen isn't WestPlay's (it stayed
+  black there), and its frame stays in the cab until it's switched off in the app.
+- With MaxDevMod hidden on the truck's screen, the game's own map shows there again (it went black with the sharper
+  screen on).
+- A site in a screen asking for the camera or the microphone is refused, never asked of the player.
+- Uninstalling from the app runs the uninstaller first and waits for it, so a new installer started right after
+  no longer stops with "couldn't install".
+
 ## 2.4.2 (beta, 2026-11-21)
 - The floating screen stays with the truck switched off, its picture black; it lights up again as the truck's own
   screen does (MaxDevMod first), and with the ignition on it stays on.

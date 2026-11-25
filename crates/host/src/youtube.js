@@ -129,6 +129,19 @@
   let played = ''
   // How often YouTube held the video back, for the log (the diagnosis below).
   let holds = 0
+  const kickPlay = (p) => {
+    try {
+      p?.playVideo?.()
+      const el = document.querySelector('#movie_player video')
+      if (el && el.paused) el.play?.().catch(() => {})
+    } catch {}
+  }
+
+  let wantPlay = null
+  const armAutoplay = (video) => {
+    wantPlay = { video: video || null, until: Date.now() + 8000, lastKick: 0 }
+  }
+
   const heldBack = () => {
     const p = player()
     const video = p?.getVideoData?.()?.video_id
@@ -138,8 +151,10 @@
     const attempt = `${video}:${way}`
     if (way >= WAYS.length || retried === attempt) return
     retried = attempt
+    armAutoplay(video)
     p.loadVideoById({ videoId: video, startSeconds: p.getCurrentTime?.() ?? 0 })
-    setTimeout(() => p.playVideo(), 300)
+    kickPlay(p)
+    setTimeout(() => kickPlay(p), 100)
   }
 
   // And any ad slots that come anyway taken out of the player data, wherever it comes from, as uBlock does.
@@ -721,9 +736,11 @@
     }
     const p = player()
     if (command.action === 'load') {
+      armAutoplay(command.video)
       if (p) {
         p.loadVideoById({ videoId: command.video, startSeconds: command.start ?? 0 })
-        setTimeout(() => p.playVideo(), 300)
+        kickPlay(p)
+        setTimeout(() => kickPlay(p), 80)
       } else if (app()) {
         watch(command.video, command.start)
       } else {
@@ -737,9 +754,12 @@
     }
     switch (command.action) {
       case 'play':
-        p.playVideo()
+        armAutoplay(p.getVideoData?.()?.video_id)
+        cab.tick()
+        kickPlay(p)
         break
       case 'pause':
+        wantPlay = null
         p.pauseVideo()
         break
       case 'seek':
@@ -835,7 +855,22 @@
     const data = p.getVideoData?.() ?? {}
     // Nothing to tell before the player has a video.
     if (!data.video_id) return
-    if (state === 1) played = data.video_id
+    if (state === 1) {
+      played = data.video_id
+      if (wantPlay && (!wantPlay.video || wantPlay.video === data.video_id)) wantPlay = null
+    } else if (wantPlay) {
+      const nowKick = Date.now()
+      if (nowKick > wantPlay.until) {
+        wantPlay = null
+      } else if (
+        (!wantPlay.video || wantPlay.video === data.video_id) &&
+        (state === -1 || state === 5 || state === 2) &&
+        nowKick - wantPlay.lastKick >= 220
+      ) {
+        wantPlay.lastKick = nowKick
+        kickPlay(p)
+      }
+    }
     // YouTube's warning standing in for the video (it came with YouTube's own move to it, asked before this
     // page could say continue): asked for again, once a video, this time saying so (the request's
     // contentCheckOk, above).
@@ -932,5 +967,5 @@
       lastAt = now
       window.chrome?.webview?.postMessage(report)
     }
-  }, 250)
+  }, 120)
 })()

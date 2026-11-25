@@ -58,6 +58,145 @@ pub struct Settings {
     /// (`auto_suspension`). Off at first.
     #[serde(deserialize_with = "lenient")]
     pub suspension_auto: bool,
+    /// Seconds of rough road before automatic suspension raises (1..=5, 0 = default 3 s; owner 2026-11-22).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_delay: u8,
+    /// Seconds of smooth road before automatic suspension lowers back down (3..=15, 0 = default 7 s; owner 2026-11-22).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_return: u8,
+    /// Seconds of hard braking before automatic suspension raises a little (1..=5, 0 = default 2 s; owner 2026-11-23).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_brake: u8,
+    /// Brake fade (owner 2026-11-21, brake_fade.rs): the brakes heat up and, overheated, lose force. On at first.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_fade: Shown,
+    /// How soon it comes on: `light`, `realistic` or `hard`.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_fade_level: crate::brake_fade::Level,
+    /// The brake fade's sounds' volumes, 0 (off) to 100: the iron grinding with the brake gone, the dashboard's
+    /// warning (owner 2026-11-21: "an option to turn it off, or louder").
+    #[serde(deserialize_with = "lenient")]
+    pub brake_squeal_volume: Volume70,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_warning_volume: Volume70,
+    /// The brakes' HUD (plugin brake_hud.rs): shown, its corner, its size, and whether to show it on foot in Modo
+    /// Personagem (owner 2026-11-21; off at first so the screen stays clean while walking).
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud: Shown,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud_corner: BrakeHudCorner,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud_size: BrakeHudSize,
+    #[serde(deserialize_with = "lenient")]
+    pub brake_hud_on_foot: bool,
+    /// 3D smoke rising from overheated brake hubs (owner 2026-11-23; separate truck and trailer wheels). On at first.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_smoke: Shown,
+    /// At what temperature the dashboard's warning and the phone's "no brakes" come (°C on the realistic level; the
+    /// light and hard ones move it with the fade); 0, the usual 360.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_alarm_c: u16,
+    /// Where media audio plays (`cabin` = truck cab speakers + muffled outside/on foot; `device` = directly on the
+    /// phone/iPad in clean stereo even in Modo Personagem).
+    #[serde(deserialize_with = "lenient")]
+    pub audio_output: AudioOutput,
+}
+
+/// Where YouTube / music audio is routed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AudioOutput {
+    /// Through the truck's 3D cab speakers (muffled when outside the cab / on foot).
+    #[default]
+    Cabin,
+    /// Directly on the handheld phone/iPad (clear stereo even on foot in Modo Personagem).
+    Device,
+}
+
+impl AudioOutput {
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "cabin" => Some(Self::Cabin),
+            "device" => Some(Self::Device),
+            _ => None,
+        }
+    }
+}
+
+/// Rough-road activation delay in seconds (1..=5, default 3 when unset/0).
+pub fn suspension_auto_delay(settings: &Settings) -> u8 {
+    match settings.suspension_auto_delay {
+        0 => 3,
+        secs => secs.clamp(1, 5),
+    }
+}
+
+/// Smooth-road return delay in seconds (3..=15, default 7 when unset/0).
+pub fn suspension_auto_return(settings: &Settings) -> u8 {
+    match settings.suspension_auto_return {
+        0 => 7,
+        secs => secs.clamp(3, 15),
+    }
+}
+
+/// Hard-braking raise delay in seconds (1..=5, default 2 when unset/0).
+pub fn suspension_auto_brake(settings: &Settings) -> u8 {
+    match settings.suspension_auto_brake {
+        0 => 2,
+        secs => secs.clamp(1, 5),
+    }
+}
+
+/// The brake alarm's temperature on the realistic level (`Settings::brake_alarm_c`, 0 the usual).
+pub fn brake_alarm_c(settings: &Settings) -> u16 {
+    match settings.brake_alarm_c {
+        0 => 360,
+        c => c.clamp(260, 395),
+    }
+}
+
+/// A volume, 0..100, 70 at first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
+pub struct Volume70(pub u8);
+
+impl Default for Volume70 {
+    fn default() -> Self {
+        Self(70)
+    }
+}
+
+impl From<u8> for Volume70 {
+    fn from(value: u8) -> Self {
+        Self(value.min(100))
+    }
+}
+
+impl From<Volume70> for u8 {
+    fn from(value: Volume70) -> Self {
+        value.0
+    }
+}
+
+/// Where the brakes' HUD sits (`westplay_shared::BRAKE_HUD_*`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BrakeHudCorner {
+    #[default]
+    BottomLeft,
+    BottomRight,
+    TopLeft,
+    TopRight,
+}
+
+/// How big the brakes' HUD is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BrakeHudSize {
+    #[default]
+    Small,
+    Medium,
+    Large,
 }
 
 /// How big the mouse's dot is (`Settings::cursor_size`), times the one drawn at first.
@@ -574,6 +713,8 @@ pub struct Keybinds {
     pub character: Binding,
     /// Hides the key hints bar over the game, or shows it again (owner 2026-11-07).
     pub hints: Binding,
+    /// Emergency rough-road suspension trigger (owner 2026-11-22).
+    pub rough_road: Binding,
 }
 
 impl<'de> Deserialize<'de> for Keybinds {
@@ -592,6 +733,7 @@ impl<'de> Deserialize<'de> for Keybinds {
             phone: binding("phone", defaults.phone),
             character: binding("character", defaults.character),
             hints: binding("hints", defaults.hints),
+            rough_road: binding("roughRoad", defaults.rough_road),
         })
     }
 }
@@ -599,7 +741,8 @@ impl<'de> Deserialize<'de> for Keybinds {
 impl Default for Keybinds {
     /// The interaction key with 1, 2 and 3 (as promised to the players who asked: Alt+1, Alt+2, Alt+3), in a
     /// row as on a stereo (owner 2026-10-21): volume down, play/pause between, volume up; the phone next, with 4;
-    /// then the phone's Personagem with 5 and the key hints bar with 6 (owner 2026-11-07).
+    /// then the phone's Personagem with 5, the key hints bar with 6 (owner 2026-11-07), and emergency rough-road
+    /// suspension with 7 (owner 2026-11-22).
     fn default() -> Self {
         let with_key = |code| Binding { key: KeyCode(code), with_interaction_key: true };
         Self {
@@ -609,6 +752,7 @@ impl Default for Keybinds {
             phone: with_key(0x34),
             character: with_key(0x35),
             hints: with_key(0x36),
+            rough_road: with_key(0x37),
         }
     }
 }
@@ -624,6 +768,7 @@ impl Keybinds {
                 Keybind::Phone => self.phone,
                 Keybind::Character => self.character,
                 Keybind::Hints => self.hints,
+                Keybind::RoughRoad => self.rough_road,
             };
             keybind_value(binding.key.virtual_key(), binding.with_interaction_key)
         })

@@ -28,7 +28,7 @@ pub fn bridge_name() -> String {
     format!("Local\\WestPlay.Bridge.v{BRIDGE_VERSION}")
 }
 pub const BRIDGE_MAGIC: u32 = u32::from_le_bytes(*b"WPB7");
-pub const BRIDGE_VERSION: u32 = 53;
+pub const BRIDGE_VERSION: u32 = 60;
 
 /// Live D3D11 screen sharpness tier in `HostBlock::screen_resolution`: applied immediately by the plugin on the next
 /// frame without restarting the game.
@@ -250,6 +250,21 @@ pub fn frame_texture_name(generation: u32) -> String {
 pub const PHONE_WIDTH: u32 = 340;
 pub const PHONE_HEIGHT: u32 = 720;
 
+/// Vertical iPad (portrait iPadOS) mode for the in-game handheld overlay (owner 2026-11-24).
+pub const IPAD_WIDTH: u32 = 560;
+pub const IPAD_HEIGHT: u32 = 760;
+
+/// Active dimensions of the in-game handheld overlay (iPhone or vertical iPad), falling back to iPhone when unset.
+pub fn phone_size(host: &HostBlock) -> (u32, u32) {
+    let w = host.phone_width.load(Ordering::Acquire);
+    let h = host.phone_height.load(Ordering::Acquire);
+    if (w, h) == (IPAD_WIDTH, IPAD_HEIGHT) {
+        (IPAD_WIDTH, IPAD_HEIGHT)
+    } else {
+        (PHONE_WIDTH, PHONE_HEIGHT)
+    }
+}
+
 /// `HostBlock::phone_shown` while the phone is put away but its top shows for a notification (owner 2026-11-11:
 /// as GTA RP's phones). A plugin from before it draws the phone whole meanwhile.
 pub const PHONE_PEEKS: u32 = 2;
@@ -286,6 +301,9 @@ pub struct Bridge {
     pub host: HostBlock,
     pub route: RouteBlock,
     pub typing: TypingBlock,
+    pub job_market: JobMarketBlock,
+    pub bank: BankBlock,
+    pub fleet: FleetBlock,
 }
 
 /// Written by the game plugin.
@@ -316,8 +334,8 @@ pub struct PluginBlock {
     pub pointer: PointerBlock,
     /// Under TruckersMP: the players around the player, from TruckersMP's SDK (the plugin's `truckersmp`).
     pub nearby: SeqLock<Nearby>,
-    /// Each [`Keybind`]'s presses so far: the plugin counts them, the app acts on each new one.
-    pub keybind_presses: [AtomicU32; KEYBIND_COUNT],
+    /// Each [`Keybind`]'s presses so far (first 6): kept at fixed size 6 so existing shared-memory offsets never shift.
+    pub keybind_presses: [AtomicU32; 6],
     /// The money the game moved as the player played (the SDK's gameplay events), for the phone's Nupay.
     pub money: SeqLock<MoneyEvents>,
     /// The mouse's speed while walking (Modo Personagem), in percent, as the player set it in the game (`-` and
@@ -336,6 +354,17 @@ pub struct PluginBlock {
     /// The fuel filled by hand and still owed to the pump's attendant (its `id` 0: nothing owed), as soon as it's
     /// owed: the app tells it on the phone (owner 2026-11-20: "there's no message saying you have to pay").
     pub fuel_owed: SeqLock<FuelBill>,
+    /// Presses of `Keybind::RoughRoad` (appended at end to preserve shared-memory layout compatibility).
+    pub rough_road_presses: AtomicU32,
+}
+
+impl PluginBlock {
+    pub fn keybind_press_slot(&self, keybind: Keybind) -> &AtomicU32 {
+        match keybind {
+            Keybind::RoughRoad => &self.rough_road_presses,
+            other => &self.keybind_presses[other as usize],
+        }
+    }
 }
 
 /// The fuel filled by hand at a pump, as its meter said it (owner 2026-11-12: "pay at the attendant, on the phone"):
@@ -537,8 +566,8 @@ pub struct HostBlock {
     pub interaction_key: AtomicU32,
     /// 1: the interaction key is pressed once to use the screen and again to stop (toggled), not held.
     pub interaction_toggle: AtomicU32,
-    /// Each [`Keybind`]'s key ([`keybind_value`]): 0 until the app has set them, meaning none.
-    pub keybinds: [AtomicU32; KEYBIND_COUNT],
+    /// Each [`Keybind`]'s key ([`keybind_value`], first 6): kept at fixed size 6 so existing offsets never shift.
+    pub keybinds: [AtomicU32; 6],
     /// The phone's shared frame ([`phone_texture_name`]), as `frame_generation` and `frame_seq` the screen's.
     pub phone_generation: AtomicU32,
     pub phone_seq: AtomicU64,
@@ -617,7 +646,56 @@ pub struct HostBlock {
     /// a count of the presses (above the low byte) and the last one ([`FLOAT_TOGGLE`]…). The plugin keeps whether
     /// it's on and each truck's place (crates/plugin float_screen.rs).
     pub float_screen: AtomicU32,
+    /// Brake fade (owner 2026-11-21, host brake_fade.rs): how much of the player's brake is left, an `f32`'s bits,
+    /// 0.15..1; 0 (never set) or 1, all of it. The plugin takes the rest away (plugin/src/commands.rs).
+    pub brake_strength: AtomicU32,
+    /// The truck's and the trailer's disc temperatures (°C, `f32` bits; the trailer's NaN without one), for the
+    /// brakes' HUD and sounds.
+    pub brake_temp_truck: AtomicU32,
+    pub brake_temp_trailer: AtomicU32,
+    /// The brake fade's sounds (owner 2026-11-21): bit 16 set once the app said; bits 0-7 the squeal's volume and
+    /// bits 8-15 the warning's, 0 (off) to 100; bit 17 set while braking grinds (host brake_fade.rs `grinds`: the
+    /// hottest disc, later with a cooler one beside it).
+    pub brake_sound: AtomicU32,
+    /// The brakes' HUD (owner 2026-11-21, plugin/src/brake_hud.rs): bit 8 set once the app said; bit 0 shown,
+    /// bits 1-2 its corner ([`BRAKE_HUD_BOTTOM_LEFT`]…), bits 3-4 its size (0 small, 1 medium, 2 large),
+    /// bit 5 shown while walking in Modo Personagem (0 hides it on foot).
+    pub brake_hud: AtomicU32,
+    /// The brake left from which the dashboard's warning sounds, as the player chose its temperature on the phone
+    /// (owner 2026-11-21: "an option for when the alarm comes"): an `f32`'s bits; 0, not said
+    /// ([`BRAKE_ALARM_STRENGTH`]).
+    pub brake_alarm: AtomicU32,
+    /// Keybind for `Keybind::RoughRoad` (appended at end to preserve shared-memory layout compatibility).
+    pub rough_road_key: AtomicU32,
+    /// Active width and height of the in-game handheld shared texture (iPhone or vertical iPad).
+    pub phone_width: AtomicU32,
+    pub phone_height: AtomicU32,
 }
+
+impl HostBlock {
+    pub fn keybind_slot(&self, keybind: Keybind) -> &AtomicU32 {
+        match keybind {
+            Keybind::RoughRoad => &self.rough_road_key,
+            other => &self.keybinds[other as usize],
+        }
+    }
+}
+
+/// Brake fade: the brake left from which it counts as gone (owner 2026-11-21: "under 380 °C there was almost no
+/// brake already, and no sound": the weakened brake never heats the discs to the least, 400 °C, so the alarm
+/// waited for nothing). About 0.38 is 360 °C on the realistic level, the brake almost gone (owner: "the Toyota
+/// warning right at the end, around 360 °C"): the dashboard's warning and the phone's "no brakes" from here.
+pub const BRAKE_ALARM_STRENGTH: f32 = 0.38;
+/// The grinding braking from about 320 °C (0.6), as the discs go from orange to red (owner 2026-11-21).
+pub const BRAKE_SQUEAL_STRENGTH: f32 = 0.6;
+/// The phone's first word, "overheating", a little before (about 280 °C).
+pub const BRAKE_HOT_STRENGTH: f32 = 0.85;
+
+/// The brakes' HUD's corners (`HostBlock::brake_hud` bits 1-2).
+pub const BRAKE_HUD_BOTTOM_LEFT: u32 = 0;
+pub const BRAKE_HUD_BOTTOM_RIGHT: u32 = 1;
+pub const BRAKE_HUD_TOP_LEFT: u32 = 2;
+pub const BRAKE_HUD_TOP_RIGHT: u32 = 3;
 
 /// [`HostBlock::float_screen`]'s presses: on or off, moved (in the truck's axes: forward, back, up, down, left,
 /// right), turned (yaw left or right, tilted up or down, rolled left or right), or as it was.
@@ -653,6 +731,13 @@ pub const CAMERA_NUDGE_TURN_LEFT: u32 = 8;
 pub const CAMERA_NUDGE_TURN_RIGHT: u32 = 9;
 pub const CAMERA_NUDGE_WIDER: u32 = 10;
 pub const CAMERA_NUDGE_NARROWER: u32 = 11;
+/// Sideways shift (left/right), lateral tilt (roll), and fast 50 cm distance steps for long trailers (owner 2026-11-24).
+pub const CAMERA_NUDGE_LEFT: u32 = 12;
+pub const CAMERA_NUDGE_RIGHT: u32 = 13;
+pub const CAMERA_NUDGE_ROLL_LEFT: u32 = 14;
+pub const CAMERA_NUDGE_ROLL_RIGHT: u32 = 15;
+pub const CAMERA_NUDGE_BACK_FAR: u32 = 16;
+pub const CAMERA_NUDGE_FORWARD_FAR: u32 = 17;
 
 /// The virtual mirrors shown (`HostBlock::virtual_mirrors`): none, the right one only, the left one only, both.
 pub const VIRTUAL_MIRRORS_NONE: u32 = 1;
@@ -723,6 +808,8 @@ pub const TRUCK_COMMANDS: &[&str] = &[
     "hblight",
     "camreset",
     "looksteer",
+    // Cycles the truck's built-in dashboard GPS map zoom (owner 2026-11-22: zoom button on Dashboard GameMapHole).
+    "dashmapzoom",
 ];
 
 const _: () = assert!(TRUCK_COMMANDS.len() <= 64);
@@ -746,6 +833,9 @@ pub enum Keybind {
     /// Hides the key hints bar over the game, or shows it again (the plugin's own: owner 2026-11-07, "the key
     /// that hides the bar, on the bar").
     Hints = 5,
+    /// Emergency rough-road suspension trigger: immediately lifts into rough-road mode and automatically lowers back
+    /// once smooth pavement is detected (owner 2026-11-22).
+    RoughRoad = 6,
 }
 
 impl Keybind {
@@ -756,10 +846,11 @@ impl Keybind {
         Keybind::Phone,
         Keybind::Character,
         Keybind::Hints,
+        Keybind::RoughRoad,
     ];
 }
 
-pub const KEYBIND_COUNT: usize = 6;
+pub const KEYBIND_COUNT: usize = 7;
 
 /// A keybind as the bridge carries it: its key's virtual-key code, and whether it's pressed while holding the
 /// interaction key (using the screen) rather than alone.
@@ -904,6 +995,382 @@ impl RouteAnswer {
     }
 }
 
+/// Live in-memory job market file written atomically by the plugin inside `Documents\WestPlay\` when the phone
+/// app refreshes the job board.
+pub const JOB_MARKET_FILE: &str = "job_market.json";
+
+/// Phone Job Market (Bolsa de Fretes) RPC block: the host asks the plugin to snapshot live Freight / Cargo / Quick
+/// offers or accept a chosen offer on the game's main thread without opening the game menu or restarting.
+#[repr(C)]
+pub struct JobMarketBlock {
+    /// Action requested by the host ([`JobMarketAction`]).
+    pub action: AtomicU32,
+    /// Market tab for `Accept` ([`JobMarketMode`]).
+    pub mode: AtomicU32,
+    /// Live `company_u*` pointer from the latest snapshot (re-validated against live `economy_u->companies`).
+    pub company_ptr: AtomicU64,
+    /// Live `job_offer_data_u*` / `cargo_offer_data_u*` pointer from the latest snapshot (re-validated before call).
+    pub offer_ptr: AtomicU64,
+    /// Incremented by the host (Release) after setting the fields above.
+    pub request: AtomicU32,
+    /// Set to `request` by the plugin (Release) after writing `answer` (and `snapshot_seq` on Refresh).
+    pub answered: AtomicU32,
+    /// Result code ([`JobMarketAnswer`]).
+    pub answer: AtomicI32,
+    /// Incremented whenever the plugin writes a fresh [`JOB_MARKET_FILE`].
+    pub snapshot_seq: AtomicU32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum JobMarketAction {
+    /// Read live offers from `economy_u->companies` and write [`JOB_MARKET_FILE`].
+    Refresh = 1,
+    /// Accept `(company_ptr, offer_ptr)` in `mode` directly via the game's native take-job function.
+    Accept = 2,
+    /// Cancel the player's currently active job via the game's native `cancel_player_job` function.
+    Cancel = 3,
+}
+
+impl JobMarketAction {
+    pub fn from_code(code: u32) -> Option<Self> {
+        [Self::Refresh, Self::Accept, Self::Cancel].into_iter().find(|a| *a as u32 == code)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum JobMarketMode {
+    /// Freight Market (frete normal com caminhão próprio e carreta da empresa).
+    Freight = 0,
+    /// Cargo Market (mercado de cargas com carreta própria acoplada).
+    Cargo = 1,
+    /// Quick Job (trabalho rápido com caminhão da empresa).
+    Quick = 2,
+}
+
+impl JobMarketMode {
+    pub fn from_code(code: u32) -> Option<Self> {
+        [Self::Freight, Self::Cargo, Self::Quick].into_iter().find(|m| *m as u32 == code)
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "freight" => Some(Self::Freight),
+            "cargo" => Some(Self::Cargo),
+            "quick" => Some(Self::Quick),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Freight => "freight",
+            Self::Cargo => "cargo",
+            Self::Quick => "quick",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum JobMarketAnswer {
+    Ok = 1,
+    Unsupported = -1,
+    Multiplayer = -2,
+    OnJob = -3,
+    NoTruck = -4,
+    NoTrailer = -5,
+    OfferExpired = -6,
+    NotReady = -7,
+    Failed = -8,
+}
+
+impl JobMarketAnswer {
+    pub fn from_code(code: i32) -> Option<Self> {
+        [
+            Self::Ok,
+            Self::Unsupported,
+            Self::Multiplayer,
+            Self::OnJob,
+            Self::NoTruck,
+            Self::NoTrailer,
+            Self::OfferExpired,
+            Self::NotReady,
+            Self::Failed,
+        ]
+        .into_iter()
+        .find(|a| *a as i32 == code)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unsupported => "unsupported",
+            Self::Multiplayer => "multiplayer",
+            Self::OnJob => "onJob",
+            Self::NoTruck => "noTruck",
+            Self::NoTrailer => "noTrailer",
+            Self::OfferExpired => "offerExpired",
+            Self::NotReady => "notReady",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Maximum number of active bank loans mirrored live from `bank_u->loans`.
+pub const LIVE_LOANS_MAX: usize = 16;
+/// Maximum number of bank loan offers mirrored live from `bank_data_u->loan_offers`.
+pub const LIVE_OFFERS_MAX: usize = 16;
+
+/// One active in-game bank loan read live from `bank_loan_u`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LiveLoan {
+    /// Remaining principal owed (`bank_loan_u::amount`).
+    pub amount: i64,
+    /// Initial loan amount (`bank_loan_u::original_amount`).
+    pub original_amount: i64,
+    /// Exact daily installment (principal + interest) computed with ETS2/ATS's native formula.
+    pub daily_payment: i64,
+    /// Daily principal reduction (`ceil(original_amount / days_total)`).
+    pub daily_principal: i64,
+    /// Game time (minutes) when the loan was taken (`bank_loan_u::time_stamp`).
+    pub time_stamp: u32,
+    /// Duration in weeks (`bank_loan_u::duration`, e.g. 5 = 35 days, 10 = 70 days).
+    pub duration_weeks: u32,
+    /// Annual interest rate (e.g. `0.12` = 12%).
+    pub interest_rate: f32,
+    /// Total daily installments (`duration_weeks * 7`).
+    pub days_total: u32,
+    /// Daily installments already paid.
+    pub days_paid: u32,
+    /// Daily installments still remaining.
+    pub days_remaining: u32,
+    /// 1 if the player currently has enough funds to pay off this loan (`money_account >= amount + min_after_repay`).
+    pub can_repay: u32,
+    pub _pad: u32,
+}
+
+/// One in-game bank loan offer read live from `bank_data_u->loan_offers`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LiveLoanOffer {
+    pub amount: i64,
+    pub daily_payment: i64,
+    pub total_repayment: i64,
+    pub index: u32,
+    /// Duration in weeks (`bank_loan_data_u::duration`; days = `duration_weeks * 7`).
+    pub duration_weeks: u32,
+    pub interest_rate: f32,
+    /// 1 if the player can take this loan right now (`app_enabled` and fits in `available_credit`).
+    pub can_take: u32,
+}
+
+/// Live snapshot of the game's `bank_u` & `bank_data_u`, updated continuously by the plugin in memory.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LiveBank {
+    /// 1 when populated from a live running game's `economy_u->bank`.
+    pub valid: u32,
+    /// 1 when the in-game bank is unlocked (`bank_u::app_enabled != 0`).
+    pub app_enabled: u32,
+    pub game_time: u32,
+    pub payment_timer: u32,
+    /// Exact live in-game account balance (`bank_u::money_account`).
+    pub balance: i64,
+    /// Total maximum credit line (`bank_u::loan_limit`).
+    pub loan_limit: i64,
+    /// Remaining credit available to borrow right now.
+    pub available_credit: i64,
+    /// Minimum balance the game requires to remain after repaying a loan (`bank_data_u::min_after_loan_repay`).
+    pub min_after_repay: i32,
+    pub loans_count: u32,
+    pub offers_count: u32,
+    pub _pad: u32,
+    pub loans: [LiveLoan; LIVE_LOANS_MAX],
+    pub offers: [LiveLoanOffer; LIVE_OFFERS_MAX],
+}
+
+impl Default for LiveBank {
+    fn default() -> Self {
+        Self {
+            valid: 0,
+            app_enabled: 0,
+            game_time: 0,
+            payment_timer: 0,
+            balance: 0,
+            loan_limit: 0,
+            available_credit: 0,
+            min_after_repay: 0,
+            loans_count: 0,
+            offers_count: 0,
+            _pad: 0,
+            loans: [LiveLoan::default(); LIVE_LOANS_MAX],
+            offers: [LiveLoanOffer::default(); LIVE_OFFERS_MAX],
+        }
+    }
+}
+
+/// Phone Nupay live Bank RPC & telemetry block: keeps balance, active loans, and game loan offers synced
+/// directly from memory and lets the player take or repay loans immediately without restarting the game.
+#[repr(C)]
+pub struct BankBlock {
+    pub live: SeqLock<LiveBank>,
+    /// Incremented whenever `live` changes so the host can detect updates cheaply.
+    pub live_seq: AtomicU32,
+    /// Requested RPC action ([`BankAction`]).
+    pub action: AtomicU32,
+    /// Offer index for `TakeLoan` or active loan index for `RepayLoan`.
+    pub index: AtomicU32,
+    pub request: AtomicU32,
+    pub answered: AtomicU32,
+    pub answer: AtomicI32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum BankAction {
+    Refresh = 1,
+    TakeLoan = 2,
+    RepayLoan = 3,
+}
+
+impl BankAction {
+    pub fn from_code(code: u32) -> Option<Self> {
+        [Self::Refresh, Self::TakeLoan, Self::RepayLoan].into_iter().find(|a| *a as u32 == code)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum BankAnswer {
+    Ok = 1,
+    Unsupported = -1,
+    Multiplayer = -2,
+    Locked = -3,
+    LimitExceeded = -4,
+    InsufficientFunds = -5,
+    InvalidIndex = -6,
+    NotReady = -7,
+    Failed = -8,
+}
+
+impl BankAnswer {
+    pub fn from_code(code: i32) -> Option<Self> {
+        [
+            Self::Ok,
+            Self::Unsupported,
+            Self::Multiplayer,
+            Self::Locked,
+            Self::LimitExceeded,
+            Self::InsufficientFunds,
+            Self::InvalidIndex,
+            Self::NotReady,
+            Self::Failed,
+        ]
+        .into_iter()
+        .find(|a| *a as i32 == code)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unsupported => "unsupported",
+            Self::Multiplayer => "multiplayer",
+            Self::Locked => "locked",
+            Self::LimitExceeded => "limitExceeded",
+            Self::InsufficientFunds => "insufficientFunds",
+            Self::InvalidIndex => "invalidIndex",
+            Self::NotReady => "notReady",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Live in-memory fleet/garage snapshot file written atomically by the plugin inside `Documents\WestPlay\`.
+pub const FLEET_FILE: &str = "fleet.json";
+
+/// Phone "Minha Empresa / Garagem" RPC block: browse owned trucks, trailers, and garages, switch trucks,
+/// attach/store owned trailers, and upgrade garage capacity live in memory without restarting the game.
+#[repr(C)]
+pub struct FleetBlock {
+    pub action: AtomicU32,
+    /// Live `vehicle_u*` / `trailer_u*` / `garage_u*` pointer from the latest snapshot (re-validated before call).
+    pub target_ptr: AtomicU64,
+    pub request: AtomicU32,
+    pub answered: AtomicU32,
+    pub answer: AtomicI32,
+    pub snapshot_seq: AtomicU32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum FleetAction {
+    Refresh = 1,
+    DriveTruck = 2,
+    UseTrailer = 3,
+    StoreTrailer = 4,
+    UpgradeGarage = 5,
+}
+
+impl FleetAction {
+    pub fn from_code(code: u32) -> Option<Self> {
+        [Self::Refresh, Self::DriveTruck, Self::UseTrailer, Self::StoreTrailer, Self::UpgradeGarage]
+            .into_iter()
+            .find(|a| *a as u32 == code)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum FleetAnswer {
+    Ok = 1,
+    Unsupported = -1,
+    Multiplayer = -2,
+    OnJob = -3,
+    AlreadyActive = -4,
+    InsufficientFunds = -5,
+    AlreadyMax = -6,
+    NotFound = -7,
+    NotReady = -8,
+    Failed = -9,
+}
+
+impl FleetAnswer {
+    pub fn from_code(code: i32) -> Option<Self> {
+        [
+            Self::Ok,
+            Self::Unsupported,
+            Self::Multiplayer,
+            Self::OnJob,
+            Self::AlreadyActive,
+            Self::InsufficientFunds,
+            Self::AlreadyMax,
+            Self::NotFound,
+            Self::NotReady,
+            Self::Failed,
+        ]
+        .into_iter()
+        .find(|a| *a as i32 == code)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unsupported => "unsupported",
+            Self::Multiplayer => "multiplayer",
+            Self::OnJob => "onJob",
+            Self::AlreadyActive => "alreadyActive",
+            Self::InsufficientFunds => "insufficientFunds",
+            Self::AlreadyMax => "alreadyMax",
+            Self::NotFound => "notFound",
+            Self::NotReady => "notReady",
+            Self::Failed => "failed",
+        }
+    }
+}
+
 /// Left Alt (`VK_LMENU`): the interaction key until the app says otherwise. The game binds no Alt by default.
 pub const DEFAULT_INTERACTION_KEY: u32 = 0xa4;
 
@@ -1014,6 +1481,11 @@ pub struct Telemetry {
     /// How hard the truck brakes (0..1, the SDK's `truck.effective.brake`): the automatic suspension raises it a little
     /// under long braking (owner 2026-11-19: "braking long, lowered, it touches the ground").
     pub brake: f32,
+    /// Brake fade (owner 2026-11-21): the brakes temperature, degrees C, as the game has it (the SDK `truck.brake.temperature`,
+    /// one value for the whole truck).
+    pub brake_temperature: f32,
+    /// The brake pedal as the player gives it, before the game (`truck.input.brake`, 0..1); `brake` is after it.
+    pub input_brake: f32,
     /// Whether the plugin's reversing camera has settled on the mirror and can be shown (plugin/src/rear_camera.rs
     /// `ready`): the page covers the screen going into reverse until then.
     pub camera_ready: bool,
@@ -1038,6 +1510,9 @@ pub struct Telemetry {
     pub float_on: bool,
     pub float_seen: bool,
     pub float_pose: [f32; 6],
+    /// Reversing camera lateral shift (metres, right positive) and lateral tilt / roll (degrees, right positive).
+    pub camera_side: f32,
+    pub camera_roll: f32,
 }
 
 /// Identity of the current truck, from the SDK's "truck" configuration.
@@ -1169,6 +1644,8 @@ unsafe impl Plain for FuelBill {}
 unsafe impl Plain for Nearby {}
 // SAFETY: integers and byte strings only (see `Plain`); a count read torn only says which events are new.
 unsafe impl Plain for MoneyEvents {}
+// SAFETY: plain integers and floats only (see `Plain`); counts are bounded by `LIVE_LOANS_MAX` / `LIVE_OFFERS_MAX`.
+unsafe impl Plain for LiveBank {}
 
 // SAFETY: the value is only ever written by one writer at a time (`write`'s contract) and read whole, a
 // read that overlapped a write being thrown away (`read`).

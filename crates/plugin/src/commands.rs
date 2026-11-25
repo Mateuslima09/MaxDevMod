@@ -303,6 +303,104 @@ fn toward(target: f32, game: f32) -> f32 {
     if still.abs() < RELATIVE_NEAR { 0.0 } else { (still * RELATIVE_GAIN).clamp(-1.0, 1.0) }
 }
 
+/// Brake fade (owner 2026-11-21, host brake_fade.rs): how much of the player's brake the app says is left (1 with
+/// no app, or before it said).
+fn brake_strength() -> f32 {
+    let Some(bridge) = bridge::get().filter(|_| bridge::host_alive()) else { return 1.0 };
+    let strength = f32::from_bits(bridge.host.brake_strength.load(Ordering::Acquire));
+    if strength.is_finite() && strength > 0.0 { strength.clamp(0.15, 1.0) } else { 1.0 }
+}
+
+/// What the game's `abackward` is given to take the faded part of the player's brake away: a negative value, which
+/// the game adds to the pedal (owner's test 2026-11-21: -0.4 with the pedal down gave 0.60). The game's
+/// `truck.input.brake` already has what was given added, so the player's own pedal is it less that; with no pedal
+/// (the sum held at 0) nothing is given, so the next frame reads the pedal as it is. -0.85 at most.
+fn fade_axis() -> f32 {
+    let strength = brake_strength();
+    if strength >= 0.999 {
+        return 0.0;
+    }
+    let Some(t) = bridge::get().and_then(|bridge| bridge.plugin.telemetry.read()) else { return 0.0 };
+    if t.paused || t.input_brake <= 0.001 {
+        return 0.0;
+    }
+    let told = f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed));
+    let pedal = (t.input_brake - told.min(0.0)).clamp(0.0, 1.0);
+    (-(1.0 - strength) * pedal).clamp(-0.85, 0.0)
+}
+
+/// The brake fade's sounds (owner 2026-11-21), checked every 100 ms: with the brake at its least, the dashboard's
+/// warning over and over (stopping as soon as the brake comes back a little) and, with the pedal down and the truck
+/// moving, iron grinding on iron. Their volumes from the app (`HostBlock::brake_sound`; 0 off).
+fn brake_sounds() {
+    struct Sounds {
+        checked: Option<Instant>,
+        warning_until: Option<Instant>,
+        squeal_until: Option<Instant>,
+    }
+    static SOUNDS: Mutex<Sounds> = Mutex::new(Sounds { checked: None, warning_until: None, squeal_until: None });
+    let mut sounds = SOUNDS.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if sounds.checked.is_some_and(|at| now.duration_since(at) < Duration::from_millis(100)) {
+        return;
+    }
+    sounds.checked = Some(now);
+    let Some(bridge) = bridge::get().filter(|_| bridge::host_alive()) else { return };
+    let Some(t) = bridge.plugin.telemetry.read().filter(|t| !t.paused) else { return };
+    let said = bridge.host.brake_sound.load(Ordering::Acquire);
+    let (squeal, warning) =
+        if said & 0x1_0000 != 0 { ((said & 0xff) as f32 / 100.0, ((said >> 8) & 0xff) as f32 / 100.0) } else { (0.7, 0.7) };
+    let strength = brake_strength();
+    let chosen = f32::from_bits(bridge.host.brake_alarm.load(Ordering::Acquire));
+    let alarm = if chosen.is_finite() && chosen > 0.0 { chosen } else { westplay_shared::BRAKE_ALARM_STRENGTH };
+    let least = strength <= alarm;
+    // The grinding braking from orange to red (about 320 °C).
+    // As the app says (the hottest disc, later with a cooler one beside it); an app that hasn't said, by the brake left.
+    let hot = if said & 0x1_0000 != 0 { said & 0x2_0000 != 0 } else { strength <= westplay_shared::BRAKE_SQUEAL_STRENGTH };
+    let due = |until: Option<Instant>| until.is_none_or(|until| now >= until);
+    if least && warning > 0.0 && due(sounds.warning_until) {
+        let lasts = crate::character::brake_sound(crate::character::BrakeSound::Warning, warning);
+        sounds.warning_until = Some(now + lasts + Duration::from_millis(300));
+        log!("brake fade: the warning");
+    }
+    if !least {
+        sounds.warning_until = None;
+    }
+    let pedal = (t.input_brake - f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed)).min(0.0)).clamp(0.0, 1.0);
+    // The grinding as a seamless loop while braking hot, louder the harder; let go the moment it isn't.
+    let grinding = hot && squeal > 0.0 && pedal > 0.05 && t.speed.abs() > 1.0;
+    if grinding || sounds.squeal_until.is_some() {
+        crate::character::brake_loop(grinding, squeal * (0.5 + 0.5 * pedal));
+        sounds.squeal_until = grinding.then_some(now);
+    }
+}
+
+/// Brake fade: the game's brake temperature, the pedal before and after the game, the speed and the brake left,
+/// every second while the truck moves or brakes (the owner's tests; to be let down to only while fading).
+fn brake_log() {
+    static LOGGED: Mutex<Option<Instant>> = Mutex::new(None);
+    let mut logged = LOGGED.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if logged.is_some_and(|at| now.duration_since(at) < Duration::from_secs(1)) {
+        return;
+    }
+    *logged = Some(now);
+    drop(logged);
+    let Some(t) = bridge::get().and_then(|bridge| bridge.plugin.telemetry.read()) else { return };
+    if t.speed.abs() < 0.5 && t.input_brake < 0.01 && t.brake < 0.01 {
+        return;
+    }
+    log!(
+        "brake fade: temp {:.1} C, pedal {:.2}, effective {:.2}, speed {:.0} km/h, strength {:.2}, told {:+.2}",
+        t.brake_temperature,
+        t.input_brake,
+        t.brake,
+        t.speed * 3.6,
+        brake_strength(),
+        f32::from_bits(AXES_REPORTED[2].load(Ordering::Relaxed))
+    );
+}
+
 /// Whether an axis told `reported` should be told `wanted`: a change worth it, or back to exactly 0.
 fn axis_changed(reported: f32, wanted: f32) -> bool {
     (wanted - reported).abs() > 0.0005 || (wanted == 0.0 && reported != 0.0)
@@ -314,7 +412,13 @@ fn next_axis(event: Option<&mut InputEvent>, flags: u32) -> ScsResult {
     if AXES_FRAME.swap(frame, Ordering::Relaxed) != frame || flags & FIRST_IN_FRAME != 0 {
         AXES_TOLD.store(0, Ordering::Relaxed);
     }
-    let wanted = wheel_values().unwrap_or([0.0; 3]);
+    brake_log();
+    brake_sounds();
+    let wanted = match wheel_values() {
+        // The phone wheel's brake, faded as the player's own is.
+        Some([steering, throttle, brake]) => [steering, throttle, brake * brake_strength()],
+        None => [0.0, 0.0, fade_axis()],
+    };
     let told = AXES_TOLD.load(Ordering::Relaxed);
     let Some(axis) = (0..AXES.len()).find(|&axis| {
         told & (1 << axis) == 0

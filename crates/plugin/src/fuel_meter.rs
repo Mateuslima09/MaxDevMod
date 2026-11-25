@@ -26,6 +26,21 @@ use windows::core::{Interface, w};
 use crate::handset::{Quad, view_format};
 use crate::log;
 
+/// Visual operating state of the fuel pump meter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MeterMode {
+    /// Player is in Refueling Mode with nozzle inserted, ready to pump (Enter not held).
+    Ready,
+    /// Player is actively holding Enter and pumping fuel into the tank.
+    Pumping,
+    /// Tank reached full while still inside Refueling Mode.
+    Full,
+    /// Finished filling (held briefly when no attendant bill is pending).
+    Done,
+    /// Finished filling, amount still owed to the attendant.
+    Owed,
+}
+
 /// What the meter shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Reading {
@@ -34,10 +49,10 @@ pub struct Reading {
     /// The pump's price for one of that unit, as the game's panel said it (`None`: not heard).
     pub price: Option<f32>,
     pub gallons: bool,
-    /// Done filling (the last of it, held a moment).
-    pub done: bool,
-    /// Done, and still to pay at the pump's attendant (`character::refuel`'s bill).
-    pub owed: bool,
+    /// Current tank fill ratio `0.0..=1.0` (`< 0.0` if capacity unknown).
+    pub tank_fill: f32,
+    /// Operating state driving the header band colour, badge text, and control hint footer.
+    pub mode: MeterMode,
 }
 
 /// What's there now (rounded as it's shown: a change to it is a new picture), and a count of its changes.
@@ -46,10 +61,18 @@ static NOW: Mutex<(u64, Option<Reading>)> = Mutex::new((0, None));
 /// What the meter shows now (`None`: nothing), the game thread.
 pub fn set(reading: Option<Reading>) {
     // Rounded as shown, so a picture isn't painted again each frame for what looks the same.
-    // (Done, to the hundredth: as the phone's bill says it.)
+    // (Done/Owed/Full, to the hundredth: as the phone's bill says it.)
     let reading = reading.map(|r| {
-        let steps = if r.done { 100.0 } else { 10.0 };
-        Reading { amount: (r.amount * steps).round() / steps, ..r }
+        let steps = match r.mode {
+            MeterMode::Pumping => 10.0,
+            _ => 100.0,
+        };
+        let fill = if r.tank_fill < 0.0 {
+            -1.0
+        } else {
+            (r.tank_fill.clamp(0.0, 1.0) * 200.0).round() / 200.0
+        };
+        Reading { amount: (r.amount * steps).round() / steps, tank_fill: fill, ..r }
     });
     let mut now = NOW.lock().unwrap_or_else(|e| e.into_inner());
     if now.1 != reading {
@@ -59,24 +82,34 @@ pub fn set(reading: Option<Reading>) {
 }
 
 /// Its look, as a fuel pump's face (owner 2026-11-12: "like a real fuel pump's panel, its letters, its numbers"):
-/// a light face with the fuel's name on a blue band, and three liquid-crystal windows of seven-segment digits (the
-/// unlit segments faint behind, as on a pump): the total to pay, the amount, the price. Its size by the screen's
-/// height (`LETTERS_OF_SCREEN`), its gaps to the screen's top and right (of the screen's height).
+/// a light face with the fuel's name on a status-coloured band, three liquid-crystal windows of seven-segment digits
+/// (the unlit segments faint behind, as on a pump): the total to pay, the amount, the price; a live tank fill gauge;
+/// and a compact control legend strip.
 const LETTERS_OF_SCREEN: f32 = 0.0135;
 const TOP_GAP_OF_SCREEN: f32 = 0.12;
 /// (At the left: the phone comes out at the right, owner 2026-11-12, "it's over the phone".)
 const LEFT_GAP_OF_SCREEN: f32 = 0.025;
-/// Colours (0xBBGGRR): the face, its rim, the band and its letters, the labels, a window, its lit and unlit
-/// segments; the face's opacity.
+/// Colours (0xBBGGRR): the face, its rim, the status bands and letters, the labels, a window, its lit and unlit
+/// segments, tank bar and footer strip; the face's opacity.
 const FACE: u32 = 0xe9e6e3;
 const RIM: u32 = 0x8c8782;
-const BAND: u32 = 0x9c4e1f;
+const BAND_READY: u32 = 0x9c4e1f;
+const BAND_PUMPING: u32 = 0x457d18;
+const BAND_FULL: u32 = 0x3b7824;
+const BAND_DONE: u32 = 0x5c5550;
+const BAND_OWED: u32 = 0x204da6;
 const BAND_TEXT: u32 = 0xffffff;
 const LABEL: u32 = 0x3a3530;
 const WINDOW: u32 = 0xa9c4b4;
 const WINDOW_EDGE: u32 = 0x4a4a46;
 const LIT: u32 = 0x1c2018;
 const UNLIT: u32 = 0x98b2a2;
+const BAR_TRACK: u32 = 0xd0ccc7;
+const BAR_FILL_OK: u32 = 0x458a24;
+const BAR_FILL_MID: u32 = 0x1888cc;
+const BAR_FILL_LOW: u32 = 0x2c34c4;
+const FOOTER_BG: u32 = 0xdad6d1;
+const FOOTER_TEXT: u32 = 0x2f2a26;
 const OPACITY: u32 = 248;
 
 /// The money's sign: dollars in the American game, reais in Portuguese (the owner's game shows R$), else euros.
@@ -98,22 +131,61 @@ struct Window {
     tall: f32,
 }
 
+fn band_colour(mode: MeterMode) -> u32 {
+    match mode {
+        MeterMode::Ready => BAND_READY,
+        MeterMode::Pumping => BAND_PUMPING,
+        MeterMode::Full => BAND_FULL,
+        MeterMode::Done => BAND_DONE,
+        MeterMode::Owed => BAND_OWED,
+    }
+}
+
+fn footer_hint(mode: MeterMode, language: &str) -> Option<&'static str> {
+    match (mode, language) {
+        (MeterMode::Ready | MeterMode::Pumping, "pt") => Some("[ENTER] Abastecer  ·  [E] Sair"),
+        (MeterMode::Ready | MeterMode::Pumping, "es") => Some("[ENTER] Repostar  ·  [E] Salir"),
+        (MeterMode::Ready | MeterMode::Pumping, _) => Some("[ENTER] Refuel  ·  [E] Exit"),
+        (MeterMode::Full, "pt") => Some("Tanque cheio  ·  [E] Sair"),
+        (MeterMode::Full, "es") => Some("Depósito lleno  ·  [E] Salir"),
+        (MeterMode::Full, _) => Some("Tank full  ·  [E] Exit"),
+        (MeterMode::Owed, "pt") => Some("Pague ao frentista  [E]"),
+        (MeterMode::Owed, "es") => Some("Paga al empleado  [E]"),
+        (MeterMode::Owed, _) => Some("Pay the attendant  [E]"),
+        (MeterMode::Done, _) => None,
+    }
+}
+
+fn tank_label(language: &str) -> &'static str {
+    match language {
+        "pt" => "TANQUE",
+        "es" => "DEPÓSITO",
+        _ => "TANK",
+    }
+}
+
 /// The pump's face: its band's words (the fuel; whether still filling) and its windows.
 fn face(reading: &Reading, language: &str) -> (String, String, Vec<Window>) {
     let fuel = match language {
         "es" => "DIÉSEL",
         _ => "DIESEL",
     };
-    let state = match (language, reading.done) {
-        ("pt", _) if reading.owed => "A PAGAR",
-        ("es", _) if reading.owed => "A PAGAR",
-        (_, _) if reading.owed => "TO PAY",
-        ("pt", false) => "ABASTECENDO",
-        ("pt", true) => "FIM",
-        ("es", false) => "REPOSTANDO",
-        ("es", true) => "FIN",
-        (_, false) => "FUELLING",
-        (_, true) => "DONE",
+    let state = match (language, reading.mode) {
+        ("pt", MeterMode::Ready) => "PRONTO",
+        ("pt", MeterMode::Pumping) => "● ABASTECENDO",
+        ("pt", MeterMode::Full) => "TANQUE CHEIO",
+        ("pt", MeterMode::Done) => "FIM",
+        ("pt", MeterMode::Owed) => "A PAGAR",
+        ("es", MeterMode::Ready) => "LISTO",
+        ("es", MeterMode::Pumping) => "● REPOSTANDO",
+        ("es", MeterMode::Full) => "LLENO",
+        ("es", MeterMode::Done) => "FIN",
+        ("es", MeterMode::Owed) => "A PAGAR",
+        (_, MeterMode::Ready) => "READY",
+        (_, MeterMode::Pumping) => "● FUELLING",
+        (_, MeterMode::Full) => "TANK FULL",
+        (_, MeterMode::Done) => "DONE",
+        (_, MeterMode::Owed) => "TO PAY",
     };
     let (total, amount, price) = match (language, reading.gallons) {
         ("pt", false) => ("TOTAL A PAGAR", "LITROS", "PREÇO / LITRO"),
@@ -265,13 +337,14 @@ fn paint(reading: &Reading, letters: i32, language: &str) -> Option<(u32, u32, V
         let state_font = font((em * 0.75).round() as i32, FW_BOLD.0 as i32);
         let label_font = font((em * 0.78).round() as i32, FW_BOLD.0 as i32);
         let unit_font = font((em * 1.0).round() as i32, FW_SEMIBOLD.0 as i32);
+        let footer_font = font((em * 0.76).round() as i32, FW_SEMIBOLD.0 as i32);
         let measure = |dc: HDC, font: HFONT, text: &[u16]| -> (i32, i32) {
             SelectObject(dc, HGDIOBJ(font.0));
             let mut size = SIZE::default();
             let _ = GetTextExtentPoint32W(dc, text, &mut size);
             (size.cx, size.cy)
         };
-        // The layout: the band, then each window under its label, all as wide as the widest.
+        // The layout: the band, each window under its label, optional tank fill bar, optional footer hint.
         let (fuel_w, state_w) = (wide(&fuel), wide(&state));
         let (_, band_text_h) = measure(dc, band_font, &fuel_w);
         let band_h = band_text_h + 2 * gap;
@@ -281,7 +354,10 @@ fn paint(reading: &Reading, letters: i32, language: &str) -> Option<(u32, u32, V
             n * digit_w(w.tall) + (n - 1) * spacing(w.tall) + if w.cells.1 > 0 { point_gap(w.tall) } else { 0 }
         };
         let window_w = windows.iter().map(|w| inner * 3 + unit_w + digits_w(w)).max().unwrap_or(0);
-        let width = window_w + 2 * pad;
+        let footer_text = footer_hint(reading.mode, language);
+        let footer_w_text = footer_text.map(wide);
+        let footer_need_w = footer_w_text.as_ref().map_or(0, |t| measure(dc, footer_font, t).0);
+        let width = window_w.max(footer_need_w) + 2 * pad;
         let (_, label_h) = measure(dc, label_font, &wide("A"));
         let mut y = band_h + gap;
         let mut places = Vec::new();
@@ -290,7 +366,20 @@ fn paint(reading: &Reading, letters: i32, language: &str) -> Option<(u32, u32, V
             places.push((y, y + label_h + gap / 2, window_h));
             y += label_h + gap / 2 + window_h + gap;
         }
-        let height = y + pad - gap;
+        let show_bar = reading.tank_fill >= 0.0;
+        let bar_y = y;
+        let bar_h = (em * 0.55).round().max(6.0) as i32;
+        if show_bar {
+            y += label_h + gap / 2 + bar_h + gap;
+        }
+        let footer_y = y;
+        let footer_h = if let Some(ref fw) = footer_w_text {
+            let (_, fh) = measure(dc, footer_font, fw);
+            fh + (gap * 3) / 2
+        } else {
+            0
+        };
+        let height = if footer_h > 0 { footer_y + footer_h + rim } else { y + pad - gap };
         let info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -324,10 +413,10 @@ fn paint(reading: &Reading, letters: i32, language: &str) -> Option<(u32, u32, V
             SelectObject(dc, old);
             let _ = DeleteObject(HGDIOBJ(brush.0));
         };
-        // The face, its rim, the band with the fuel and how it stands.
+        // The face, its rim, the status-coloured band with the fuel and how it stands.
         fill(RECT { left: 0, top: 0, right: width, bottom: height }, RIM);
         fill(RECT { left: rim, top: rim, right: width - rim, bottom: height - rim }, FACE);
-        fill(RECT { left: rim, top: rim, right: width - rim, bottom: band_h }, BAND);
+        fill(RECT { left: rim, top: rim, right: width - rim, bottom: band_h }, band_colour(reading.mode));
         SetBkMode(dc, TRANSPARENT);
         SelectObject(dc, HGDIOBJ(band_font.0));
         SetTextColor(dc, COLORREF(BAND_TEXT));
@@ -375,12 +464,52 @@ fn paint(reading: &Reading, letters: i32, language: &str) -> Option<(u32, u32, V
                 }
             }
         }
+        // Live tank fill gauge bar.
+        if show_bar {
+            let pct = (reading.tank_fill.clamp(0.0, 1.0) * 100.0).round() as i32;
+            let left_lbl = wide(tank_label(language));
+            let right_lbl = wide(&format!("{pct}%"));
+            SelectObject(dc, HGDIOBJ(label_font.0));
+            SetTextColor(dc, COLORREF(LABEL));
+            let _ = TextOutW(dc, pad, bar_y, &left_lbl);
+            let (rw, _) = measure(dc, label_font, &right_lbl);
+            let _ = TextOutW(dc, width - pad - rw, bar_y, &right_lbl);
+            let track_top = bar_y + label_h + gap / 2;
+            let track_left = pad;
+            let track_right = width - pad;
+            let edge = (rim / 2).max(1);
+            fill(RECT { left: track_left, top: track_top, right: track_right, bottom: track_top + bar_h }, WINDOW_EDGE);
+            let inner_l = track_left + edge;
+            let inner_t = track_top + edge;
+            let inner_r = track_right - edge;
+            let inner_b = track_top + bar_h - edge;
+            fill(RECT { left: inner_l, top: inner_t, right: inner_r, bottom: inner_b }, BAR_TRACK);
+            let fill_w = ((inner_r - inner_l) as f32 * reading.tank_fill.clamp(0.0, 1.0)).round() as i32;
+            if fill_w > 0 {
+                let fill_col = if reading.tank_fill < 0.18 {
+                    BAR_FILL_LOW
+                } else if reading.tank_fill < 0.40 {
+                    BAR_FILL_MID
+                } else {
+                    BAR_FILL_OK
+                };
+                fill(RECT { left: inner_l, top: inner_t, right: inner_l + fill_w, bottom: inner_b }, fill_col);
+            }
+        }
+        // Compact control legend strip at bottom.
+        if let Some(ref fw) = footer_w_text {
+            fill(RECT { left: rim, top: footer_y, right: width - rim, bottom: height - rim }, FOOTER_BG);
+            let (tw, th) = measure(dc, footer_font, fw);
+            SelectObject(dc, HGDIOBJ(footer_font.0));
+            SetTextColor(dc, COLORREF(FOOTER_TEXT));
+            let _ = TextOutW(dc, (width - tw) / 2, footer_y + (footer_h - th) / 2, fw);
+        }
         let _ = GdiFlush();
         let mut pixels = std::slice::from_raw_parts(bits as *const u8, (width * height * 4) as usize).to_vec();
         SelectObject(dc, before_pen);
         SelectObject(dc, before);
         let _ = DeleteObject(HGDIOBJ(bitmap.0));
-        for font in [band_font, state_font, label_font, unit_font] {
+        for font in [band_font, state_font, label_font, unit_font, footer_font] {
             let _ = DeleteObject(HGDIOBJ(font.0));
         }
         let _ = DeleteDC(dc);
@@ -498,15 +627,23 @@ mod tests {
 
     #[test]
     fn the_pump_shows_total_amount_and_price() {
-        let reading = Reading { amount: 120.0, price: Some(5.46), gallons: false, done: false, owed: false };
+        let reading = Reading {
+            amount: 120.0,
+            price: Some(5.46),
+            gallons: false,
+            tank_fill: 0.65,
+            mode: MeterMode::Pumping,
+        };
         let (fuel, state, windows) = face(&reading, "pt");
-        assert_eq!((fuel.as_str(), state.as_str()), ("DIESEL", "ABASTECENDO"));
+        assert_eq!((fuel.as_str(), state.as_str()), ("DIESEL", "● ABASTECENDO"));
         assert_eq!(windows[0].label, "TOTAL A PAGAR");
         assert!((windows[0].value.unwrap() - 655.2).abs() < 0.01);
         assert_eq!(windows[1].unit, "L");
         assert_eq!(windows[2].unit, "R$");
         let unknown = Reading { price: None, ..reading };
         assert_eq!(face(&unknown, "pt").2[0].value, None);
+        let ready = Reading { mode: MeterMode::Ready, ..reading };
+        assert_eq!(face(&ready, "pt").1.as_str(), "PRONTO");
     }
 
     #[test]
@@ -523,11 +660,17 @@ mod tests {
         assert_eq!(segments('1'), [false, true, true, false, false, false, false]);
     }
 
-    /// A look at the meter (\`WESTPLAY_METER\` a .bmp file to write).
+    /// A look at the meter (`WESTPLAY_METER` a .bmp file to write).
     #[test]
     #[ignore]
     fn write_a_meter() {
-        let reading = Reading { amount: 87.4, price: Some(5.46), gallons: false, done: false, owed: false };
+        let reading = Reading {
+            amount: 87.4,
+            price: Some(5.46),
+            gallons: false,
+            tank_fill: 0.72,
+            mode: MeterMode::Pumping,
+        };
         let (w, h, pixels) = paint(&reading, (1080.0 * LETTERS_OF_SCREEN).round() as i32, "pt").unwrap();
         let mut out = Vec::new();
         let size = 54 + pixels.len() as u32;
@@ -546,7 +689,13 @@ mod tests {
 
     #[test]
     fn the_meter_is_painted_and_placed_top_right() {
-        let reading = Reading { amount: 12.3, price: Some(5.46), gallons: false, done: false, owed: false };
+        let reading = Reading {
+            amount: 12.3,
+            price: Some(5.46),
+            gallons: false,
+            tank_fill: 0.45,
+            mode: MeterMode::Ready,
+        };
         let (w, h, pixels) = paint(&reading, 18, "pt").unwrap();
         assert_eq!(pixels.len(), (w * h * 4) as usize);
         assert!(w > 18 * 5 && h > 18 * 5);

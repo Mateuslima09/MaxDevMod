@@ -86,8 +86,49 @@ export function installDragScroll(): () => void {
     press = { target: event.target, x: event.clientX, y: event.clientY, pointer: event.pointerId }
   }
 
+  const finish = (swallowClick: boolean) => {
+    press = null
+    if (!drag) return
+    const { scroller, axis, samples, snap } = drag
+    drag = null
+    if (swallowClick) {
+      // What it's let go over isn't clicked: the drag was the gesture.
+      const swallow = (click: Event) => {
+        click.stopPropagation()
+        click.preventDefault()
+      }
+      window.addEventListener('click', swallow, { capture: true, once: true })
+      setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0)
+    }
+
+    const speed = -releaseSpeed(samples)
+    scroller.style.scrollSnapType = snap
+    if (getComputedStyle(scroller).scrollSnapType !== 'none') {
+      // A list that snaps settles on a snap point, carried on the way it was flung.
+      const by = glideDistance(speed) * 0.35
+      scroller.scrollBy(axis === 'x' ? { left: by, behavior: 'smooth' } : { top: by, behavior: 'smooth' })
+      return
+    }
+    let velocity = speed
+    let last = performance.now()
+    const glide = (now: number) => {
+      const elapsed = Math.min(now - last, 50)
+      last = now
+      setScroll(scroller, axis, scrollOf(scroller, axis) + velocity * elapsed)
+      velocity *= (1 - GLIDE_FALL) ** elapsed
+      if (Math.abs(velocity) >= GLIDE_STOP) gliding = requestAnimationFrame(glide)
+    }
+    if (Math.abs(velocity) >= GLIDE_STOP) gliding = requestAnimationFrame(glide)
+  }
+
   const move = (event: PointerEvent) => {
     if (!press || event.pointerId !== press.pointer) return
+    // If the mouse button was released outside the page (missed pointerup), stop dragging at once
+    // so pages never get stuck following the cursor (owner 2026-11-22).
+    if (event.pointerType === 'mouse' && (event.buttons & 1) === 0) {
+      finish(false)
+      return
+    }
     if (!drag) {
       const axis = dragAxis(event.clientX - press.x, event.clientY - press.y)
       if (!axis) return
@@ -110,47 +151,26 @@ export function installDragScroll(): () => void {
 
   const up = (event: PointerEvent) => {
     if (!press || event.pointerId !== press.pointer) return
-    press = null
-    if (!drag) return
-    const { scroller, axis, samples, snap } = drag
-    drag = null
-    // What it's let go over isn't clicked: the drag was the gesture.
-    const swallow = (click: Event) => {
-      click.stopPropagation()
-      click.preventDefault()
-    }
-    window.addEventListener('click', swallow, { capture: true, once: true })
-    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 0)
+    finish(true)
+  }
 
-    const speed = -releaseSpeed(samples)
-    scroller.style.scrollSnapType = snap
-    if (getComputedStyle(scroller).scrollSnapType !== 'none') {
-      // A list that snaps settles on a snap point, carried on the way it was flung.
-      const by = glideDistance(speed) * 0.35
-      scroller.scrollBy(axis === 'x' ? { left: by, behavior: 'smooth' } : { top: by, behavior: 'smooth' })
-      return
-    }
-    let velocity = speed
-    let last = performance.now()
-    const glide = (now: number) => {
-      const elapsed = Math.min(now - last, 50)
-      last = now
-      setScroll(scroller, axis, scrollOf(scroller, axis) + velocity * elapsed)
-      velocity *= (1 - GLIDE_FALL) ** elapsed
-      if (Math.abs(velocity) >= GLIDE_STOP) gliding = requestAnimationFrame(glide)
-    }
-    if (Math.abs(velocity) >= GLIDE_STOP) gliding = requestAnimationFrame(glide)
+  const cancel = () => {
+    if (press || drag) finish(false)
   }
 
   window.addEventListener('pointerdown', down, true)
   window.addEventListener('pointermove', move, true)
   window.addEventListener('pointerup', up, true)
   window.addEventListener('pointercancel', up, true)
+  window.addEventListener('blur', cancel)
+  document.addEventListener('visibilitychange', cancel)
   return () => {
     cancelAnimationFrame(gliding)
     window.removeEventListener('pointerdown', down, true)
     window.removeEventListener('pointermove', move, true)
     window.removeEventListener('pointerup', up, true)
     window.removeEventListener('pointercancel', up, true)
+    window.removeEventListener('blur', cancel)
+    document.removeEventListener('visibilitychange', cancel)
   }
 }

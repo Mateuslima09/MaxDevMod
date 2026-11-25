@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
-import { hasVideoUnder, isInHost } from '../../shared/host'
+import { hasVideoUnder, isInHost, postToHost } from '../../shared/host'
 import { useLook, useLookChanges, useOemStrip, useScreenFit, useScreenProfile, useSplitShown } from '../state/hooks'
 import { announceFit, fitStyle, NO_FIT, type ScreenFit } from '../state/screenFit'
 import { usePreparedIcons } from '../state/looks'
@@ -55,8 +55,10 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
   const halved = phone ? null : cabHalved
   // YouTube's picture under the page, in full or in small: nothing the page paints may cover it.
   const videoShown = useYouTube((state) => state.open || state.hole !== null)
+  // Transparent cutout for the game's original GPS map in the Dashboard (Settings › Dashboard › Original Game Map).
+  const mapHole = useCabin((state) => state.mapHole)
   // The cab's fit is the truck's screen's, not the phone's (owner 2026-11-03: it cut the panel's edges off there).
-  useFittedRoot(phone ? NO_FIT : fit, handedOver || videoShown, halved)
+  useFittedRoot(phone ? NO_FIT : fit, handedOver || videoShown || mapHole !== null, halved)
   // With the game's map on the left, the sidebar on WestPlay's outer edge, the right (shell.css `.sidebar-right`): not in
   // the middle of the screen, against the map (owner 2026-11-02).
   useLayoutEffect(() => {
@@ -94,6 +96,7 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
   // The apps' text size (state/textSize.ts), on <html> so menus portalled out of the apps and the screen
   // changes' snapshots take it too.
   const textSize = useCabin((state) => state.textSize)
+  const brightness = useCabin((state) => state.brightness)
   useLayoutEffect(() => {
     document.documentElement.style.setProperty('--text-scale', String(textScale(textSize)))
   }, [textSize])
@@ -118,6 +121,12 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
     if (peek) useYouTube.setState({ holdSidebar: false })
   }, [peek])
 
+  const activeHoles: Hole[] = []
+  if (!watching) {
+    if (hole && hasVideoUnder()) activeHoles.push(hole)
+    if (mapHole) activeHoles.push(mapHole)
+  }
+
   return (
     <main className={`shell appearance-${appearance}`} style={style}>
       {strip && !isInHost() && <GameStripPreview name={strip.name} />}
@@ -126,7 +135,7 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
         className={`carplay${truckScreen ? ' handed-over' : ''}${watching ? ' watching' : ''}${watching && holdSidebar ? ' hold-sidebar' : ''}${peek ? ' peek-sidebar' : ''}`}
         style={{
           transformOrigin: `${button.x - insets.left}px ${button.y}px`,
-          ...(hole && !watching && hasVideoUnder() ? holeMask(hole) : {}),
+          ...holeMask(activeHoles),
         }}
         aria-hidden={truckScreen}
       >
@@ -145,9 +154,39 @@ export function Shell({ children, overlay, entering = false, phone }: ShellProps
           <Keyboard />
           <VolumeHud />
         </div>
+        {!phone && brightness < 1 && (
+          <div className="screen-dimmer" style={{ opacity: 1 - brightness }} aria-hidden="true" />
+        )}
       </div>
       {/* What's drawn over the video where it shows through the CarPlay area (apps/youtube/VideoHole.tsx). */}
       <div id="video-over" className={truckScreen ? 'video-over handed-over' : 'video-over'} />
+      {/* Zoom button over the original game GPS cutout (outside .carplay so holeMask does not hide it). */}
+      {mapHole && !watching && !truckScreen && (
+        <button
+          type="button"
+          className="game-map-zoom glass"
+          style={{
+            left: insets.left + mapHole.x + mapHole.width - 16,
+            top: mapHole.y + mapHole.height - 16,
+            right: 'auto',
+            bottom: 'auto',
+            transform: 'translate(-100%, -100%)',
+          }}
+          aria-label="Zoom"
+          onClick={() => {
+            postToHost({ type: 'truckCommand', command: 'dashmapzoom', down: true })
+            window.setTimeout(() => postToHost({ type: 'truckCommand', command: 'dashmapzoom', down: false }), 160)
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+            <path
+              d="M11 4a7 7 0 1 0 4.9 12l4.1 4.1 1.4-1.4-4.1-4.1A7 7 0 0 0 11 4Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm-1 2v2H8v2h2v2h2v-2h2v-2h-2V8h-2Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span>Zoom</span>
+        </button>
+      )}
       <button
         type="button"
         className={truckScreen ? 'return-button shown' : 'return-button'}
@@ -207,13 +246,19 @@ function useFittedRoot(
   }, [top, bottom, left, right, stretch, under, halved])
 }
 
-/** A mask showing everything but a rounded rectangle, through which what's under the page shows. */
-function holeMask({ x, y, width, height, radius }: Hole): CSSProperties {
-  const shape = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'><rect width='${width}' height='${height}' rx='${radius}'/></svg>`
+/** A mask showing everything except one or more non-overlapping rounded rectangles (e.g. Game Map + Video widget). */
+function holeMask(holes: Hole[]): CSSProperties {
+  if (holes.length === 0) return {}
   return {
-    maskImage: `linear-gradient(#000 0 0), url("data:image/svg+xml,${encodeURIComponent(shape)}")`,
-    maskPosition: `0 0, ${x}px ${y}px`,
-    maskSize: `100% 100%, ${width}px ${height}px`,
+    maskImage: [
+      'linear-gradient(#000 0 0)',
+      ...holes.map(({ width, height, radius }) => {
+        const shape = `<svg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'><rect width='${width}' height='${height}' rx='${radius}'/></svg>`
+        return `url("data:image/svg+xml,${encodeURIComponent(shape)}")`
+      }),
+    ].join(', '),
+    maskPosition: ['0 0', ...holes.map(({ x, y }) => `${x}px ${y}px`)].join(', '),
+    maskSize: ['100% 100%', ...holes.map(({ width, height }) => `${width}px ${height}px`)].join(', '),
     maskRepeat: 'no-repeat',
     maskComposite: 'exclude',
   }

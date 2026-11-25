@@ -57,13 +57,37 @@ pub enum Damping {
 }
 
 impl Damping {
-    /// The factor the game's damping is multiplied by (`None`: the game's own).
+    /// The damping multiplier for `def/vehicle/physics.sii` (`None`: Normal — the game's own).
+    /// Kept within PhysX's stable range (<= 2.0x damping) so the cab/chassis never jitter or bounce (owner 2026-11-22).
     pub fn factor(self) -> Option<f32> {
         match self {
             Self::Soft => Some(0.6),
             Self::Normal => None,
-            Self::Firm => Some(1.5),
-            Self::Firmest => Some(2.2),
+            Self::Firm => Some(1.35),
+            Self::Firmest => Some(2.0),
+        }
+    }
+
+    /// How much to tighten the cab's pitch/roll angle stops and sway bars (`None`: Normal).
+    /// Kinematic angle limits hold the cab steady on acceleration/braking without triggering PhysX spring jitter.
+    fn cab_limit_factor(self) -> Option<f32> {
+        match self {
+            Self::Soft => Some(0.7),
+            Self::Normal => None,
+            Self::Firm => Some(2.5),
+            Self::Firmest => Some(6.0),
+        }
+    }
+
+    /// The profile physics sliders `(g_suspension_stiffness, g_cabin_suspension_stiffness, g_truck_stability)`
+    /// to write in each profile's `config.cfg` (`None`: Normal — leave the player's own profile sliders untouched).
+    /// Calibrated by the owner (2026-11-22): Firmest = 100% suspension, 90% cabin (>90% causes cab bounce), 100% stability.
+    pub fn spring_stiffness(self) -> Option<(f32, f32, f32)> {
+        match self {
+            Self::Soft => Some((0.15, 0.15, 0.25)),
+            Self::Normal => None,
+            Self::Firm => Some((0.75, 0.65, 0.75)),
+            Self::Firmest => Some((1.0, 0.9, 1.0)),
         }
     }
 
@@ -93,33 +117,36 @@ pub fn damping() -> Damping {
     }
 }
 
-/// The game's physics with its damping factors times `factor` (`None`: no physics file, or no such factor).
-fn damped_physics(files: &GameFiles, factor: f32) -> Option<(String, Vec<u8>)> {
+/// The game's physics with its damping and cab limits scaled for `damping` (`None`: Normal or no physics file).
+fn damped_physics(files: &GameFiles, damping: Damping) -> Option<(String, Vec<u8>)> {
+    let factor = damping.factor()?;
+    let cab_limit = damping.cab_limit_factor()?;
     const PATH: &str = "def/vehicle/physics.sii";
     let text = String::from_utf8_lossy(&files.read(PATH).ok()??).into_owned();
-    with_damping(&text, factor).map(|text| (PATH.to_owned(), text.into_bytes()))
+    with_damping(&text, factor, cab_limit).map(|text| (PATH.to_owned(), text.into_bytes()))
 }
 
-/// The physics' values made firmer by `factor` (owner 2026-11-19: "even on the firmest the truck stayed very soft, the
-/// front lifting as I accelerate"): the game has no spring stiffness to change (it works each spring out from the
-/// axle's travel), and the wheels' dampers alone only slow the swaying; what is felt in the cab is mostly the cab's own
-/// suspension. So, times `factor`: the wheels' dampers, the front's anti-roll bar, the cab's damping and its anti-roll
-/// bar; divided by it: how far the cab may pitch and roll. Below 1 (soft) all go the other way.
-const TIMES: [&str; 4] = ["damping_scaling_", "sway_bar_stiffness_factor", "cabin_suspension_damping_factor", "cabin_sway_bar_factor"];
+/// The physics' values made firmer: `DAMP_KEYS` scale gently by `factor` (<= 2.0x to avoid PhysX bounce),
+/// `SWAY_KEYS` scale by `cab_limit`, and `DIVIDED` (kinematic cab pitch/roll angle stops) divide by `cab_limit`.
+/// `cabin_suspension_travel` is intentionally left at the game's calibrated 0.05 m to prevent cab jitter.
+const DAMP_KEYS: [&str; 2] = ["damping_scaling_", "cabin_suspension_damping_factor"];
+const SWAY_KEYS: [&str; 2] = ["sway_bar_stiffness_factor", "cabin_sway_bar_factor"];
 const DIVIDED: [&str; 3] = ["cabin_max_pitch_angle_front", "cabin_max_pitch_angle_rear", "cabin_max_roll_angle"];
 
-/// The physics' text with those values made firmer by `factor`, if it has any.
-fn with_damping(text: &str, factor: f32) -> Option<String> {
+/// The physics' text with damping scaled by `factor` and sway/cab angle limits scaled by `cab_limit`, if any.
+fn with_damping(text: &str, factor: f32, cab_limit: f32) -> Option<String> {
     let mut changed = false;
     let mut out = String::with_capacity(text.len() + 16);
     for line in text.split_inclusive('\n') {
         let content = line.trim_end_matches(['\r', '\n']);
         let ending = &line[content.len()..];
         let trimmed = content.trim_start();
-        let scale = if TIMES.iter().any(|key| trimmed.starts_with(key)) {
+        let scale = if DAMP_KEYS.iter().any(|key| trimmed.starts_with(key)) {
             Some(factor)
+        } else if SWAY_KEYS.iter().any(|key| trimmed.starts_with(key)) {
+            Some(cab_limit)
         } else if DIVIDED.iter().any(|key| trimmed.starts_with(key)) {
-            Some(1.0 / factor)
+            Some(1.0 / cab_limit)
         } else {
             None
         };
@@ -154,8 +181,8 @@ pub fn level() -> Level {
 
 /// What the archive beside the mod in `dir` should say it was made for.
 fn made_for(level: Level, game_version: &str) -> String {
-    // `v2`: the firmness also reaches the cab (made again over an archive from before).
-    format!("v2 {} {} {game_version}", level.word(), damping().word())
+    // `v5`: tighter cab pitch/roll stops (2.5x / 6.0x) and stiffer chassis springs (1.0 / 2.0) with safe damping.
+    format!("v5 {} {} {game_version}", level.word(), damping().word())
 }
 
 /// Whether the archive in `dir` is made for the level now and this game version.
@@ -170,7 +197,7 @@ pub fn make(files: &GameFiles, dir: &Path, game_version: &str) -> std::io::Resul
         None => Vec::new(),
     };
     // The dampers, if not the game's own.
-    if let Some(physics) = damping().factor().and_then(|factor| damped_physics(files, factor)) {
+    if let Some(physics) = damped_physics(files, damping()) {
         chassis.push(physics);
     }
     let count = chassis.iter().filter(|(path, _)| path.ends_with(".sii")).count();
@@ -262,15 +289,17 @@ mod tests {
 
     #[test]
     fn multiplies_the_damping_factors_only() {
-        let physics = "physics_data: .phdata\n{\n\tdamping_scaling_front_factor: \t\t1.0\n\tdamping_scaling_rear_factor: 0.8\n\tsway_bar_stiffness_factor:\t1.0\n\tcabin_max_pitch_angle_front:\t\t2.25\n\tcabin_mass: 700.0\n\tair_resistance:\t3.0\n}\n";
-        let firm = with_damping(physics, 1.5).unwrap();
-        assert!(firm.contains("\tdamping_scaling_front_factor: 1.500\n"), "{firm}");
-        assert!(firm.contains("\tdamping_scaling_rear_factor: 1.200\n"), "{firm}");
-        assert!(firm.contains("\tsway_bar_stiffness_factor: 1.500\n"), "{firm}");
-        assert!(firm.contains("\tcabin_max_pitch_angle_front: 1.500\n"), "{firm}");
+        let physics = "physics_data: .phdata\n{\n\tdamping_scaling_front_factor: \t\t1.0\n\tdamping_scaling_rear_factor: 0.8\n\tsway_bar_stiffness_factor:\t1.0\n\tcabin_max_pitch_angle_front:\t\t2.25\n\tcabin_suspension_travel:\t\t0.05\n\tcabin_mass: 700.0\n\tair_resistance:\t3.0\n}\n";
+        let firm = with_damping(physics, 2.0, 3.0).unwrap();
+        assert!(firm.contains("\tdamping_scaling_front_factor: 2.000\n"), "{firm}");
+        assert!(firm.contains("\tdamping_scaling_rear_factor: 1.600\n"), "{firm}");
+        assert!(firm.contains("\tsway_bar_stiffness_factor: 3.000\n"), "{firm}");
+        assert!(firm.contains("\tcabin_max_pitch_angle_front: 0.750\n"), "{firm}");
+        assert!(firm.contains("\tcabin_suspension_travel:\t\t0.05\n"), "{firm}");
         assert!(firm.contains("\tcabin_mass: 700.0\n"), "{firm}");
         assert!(firm.contains("\tair_resistance:\t3.0\n"), "{firm}");
-        assert_eq!(with_damping("name: x\n", 1.5), None);
+        assert_eq!(with_damping("name: x\n", 2.0, 3.0), None);
         assert_eq!(Damping::Normal.factor(), None);
+        assert_eq!(Damping::Normal.spring_stiffness(), None);
     }
 }

@@ -10,13 +10,16 @@ mod apple_music;
 pub mod browser;
 mod camera;
 mod capture;
+mod cargo_icons;
 mod cursor;
 pub mod customize;
 pub mod fitted;
+mod fleet;
 mod game_settings;
 mod gpu;
 pub mod graphics;
 mod handover;
+mod job_market;
 mod lyrics;
 pub mod maps;
 mod performance;
@@ -36,6 +39,7 @@ pub mod startup;
 mod tiktok;
 mod truck_commands;
 mod auto_suspension;
+mod brake_fade;
 mod typing;
 mod wallet;
 mod weather;
@@ -338,6 +342,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         layers.add(handset, true).ok()?;
         Some(layers)
     });
+    let mut phone_dims = (westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT);
+    host.phone_width.store(phone_dims.0, Ordering::Release);
+    host.phone_height.store(phone_dims.1, Ordering::Release);
     let mut handset_shown = false;
     // The phone's top showing for a notification while it's put away (owner 2026-11-11: as GTA RP's phones),
     // until then.
@@ -350,6 +357,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut handset_left = false;
     // Whether TikTok's page has the keyboard, as the plugin was last told.
     let mut tiktok_typing = false;
+    // Whether the in-game phone/iPad's own page (TextField) currently holds the physical keyboard selection.
+    let mut handset_typing = false;
+    // Where the in-game iPad/phone YouTube app currently has its video hole (`None`: closed/no video).
+    let mut handset_youtube_rect: Option<(f32, f32, u32, u32, bool)> = None;
+    // Whether the cab page was last told YouTube's picture is in the phone (`youtubeHandset`).
+    let mut youtube_on_handset_told: Option<bool> = None;
     // The cargo's paper the player asked for at the clerk (the plugin's `note_wanted`), shown in the phone's frame
     // to sign until it's collected or put down.
     let mut handset_paper: Option<u32> = None;
@@ -361,6 +374,13 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     // The truck's commands the phones hold, for the plugin's input device.
     let mut truck_commands = truck_commands::TruckCommands::default();
     let mut auto_suspension = auto_suspension::AutoSuspension::default();
+    // Brake fade (brake_fade.rs): only modelled and logged for now (docs/fadiga-freio/PLANO.md, phase B).
+    let mut brake_fade = brake_fade::BrakeFade::default();
+    let mut brake_fade_logged: Option<Instant> = None;
+    // How far the phone was told of the brake fading: 0 not, 1 weak, 2 gone.
+    let mut brake_told = 0u8;
+    let mut brakes_posted: Option<Instant> = None;
+    let mut last_weather: Option<weather::Weather> = None;
     // The player's account, for the phone's Nupay (wallet.rs).
     let mut wallet_game = westplay_setup::game::current();
     let mut wallet = wallet::Wallet::open(&config.data_dir, wallet_game.sdk_id());
@@ -411,6 +431,8 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut was_outside = false;
     // The players' tone (the cab's Settings › Equalizer), passed on with the cab ([`settings::SoundSettings`]).
     let mut equalizer = config.settings.get().sound.playing();
+    // Where media audio plays (`Cabin` = truck speakers + muffled outside, `Device` = phone/iPad clean stereo).
+    let mut audio_output = config.settings.get().audio_output;
     // The music's spectrum wanted by the cab (its Equalizer open): asked of the players with the cab.
     let mut spectrum = false;
     // The page's height (`westplay_shared::page_height`): the frame's until a screen asks for another.
@@ -454,6 +476,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut truckersmp_checked = Instant::now() - TRUCKERSMP_CHECK_EVERY;
     // The page's changes to the game's route, waiting for the plugin's answer.
     let mut route_changes = route_change::RouteChanges::default();
+    // Live in-memory Job Market (Bolsa de Fretes), Nupay Bank, and Minha Empresa (Fleet) RPCs to the plugin.
+    let mut job_market = job_market::JobMarket::default();
+    let mut bank_rpc = wallet::BankRpc::default();
+    let mut fleet = fleet::Fleet::default();
+    let cargo_icons = cargo_icons::CargoIcons::start();
     // WestPlay's own routes to a place, planned for the page before Go (planner.rs), and the one picked
     // being handed to the game's GPS (handover.rs).
     let mut planner = planner::Planner::start();
@@ -510,9 +537,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
     let mut youtube_music_playback: Option<String> = None;
     // The settings generation last applied (`None`: apply them once at startup).
     let mut applied_settings = None;
-    // Each keybind's presses the page was told of (`PluginBlock::keybind_presses`).
+    // Each keybind's presses the page was told of (`PluginBlock::keybind_press_slot`).
     let mut keybind_presses =
-        bridge.bridge().plugin.keybind_presses.each_ref().map(|count| count.load(Ordering::Acquire));
+        Keybind::ALL.map(|keybind| bridge.bridge().plugin.keybind_press_slot(keybind).load(Ordering::Acquire));
     let mut last_frames = 0;
     // The startup stages still to log (`startup`), checked every turn until all are reached. The game's
     // screen frame counter as found: a session before this one may have left it counting.
@@ -789,7 +816,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 pipeline = None;
                 generation_counter = generation_counter.wrapping_add(1);
                 let generation = ((std::process::id() & 0x00ff_ffff) << 8) | (generation_counter & 0xff);
-                match build_pipeline(&config, &stage, phone_layers.as_ref(), &bridge, wanted, generation) {
+                match build_pipeline(&config, &stage, phone_layers.as_ref(), phone_dims, &bridge, wanted, generation) {
                     Ok(built) => {
                         startup::mark(if wanted.is_some() {
                             "host: capturing for the game's GPU"
@@ -884,12 +911,17 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let interaction = config.settings.get().interaction;
             pointer.set_sensitivity(interaction.sensitivity.get());
             // Slower in the phone (owner 2026-11-02: "too sensitive"): it's smaller on the screen than the cab's page.
-            handset_pointer.set_sensitivity(interaction.sensitivity.get() * HANDSET_SENSITIVITY);
+            let phone_scale = if phone_dims.0 > westplay_shared::PHONE_WIDTH {
+                HANDSET_SENSITIVITY * 1.35
+            } else {
+                HANDSET_SENSITIVITY
+            };
+            handset_pointer.set_sensitivity(interaction.sensitivity.get() * phone_scale);
             host.interaction_key.store(interaction.key.virtual_key(), Ordering::Release);
             let toggle = interaction.mode == settings::InteractionMode::Toggle;
             host.interaction_toggle.store(u32::from(toggle), Ordering::Release);
-            for (slot, value) in host.keybinds.iter().zip(config.settings.get().keybinds.bridge_values()) {
-                slot.store(value, Ordering::Release);
+            for (keybind, value) in Keybind::ALL.into_iter().zip(config.settings.get().keybinds.bridge_values()) {
+                host.keybind_slot(keybind).store(value, Ordering::Release);
             }
             let character = config.settings.get().character;
             host.character_sensitivity.store(character.sensitivity.get(), Ordering::Release);
@@ -921,7 +953,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             // Never on (owner 2026-11-18: with it, the music played on with the ignition cut, and the screen didn't
             // power up again; the game draws no screen without the electrics anyway). The setting is left, unused.
             host.keep_screen_on.store(0, Ordering::Release);
-            let _ = webview.post_json(&settings_message(&config.settings.get()));
+            let latest = config.settings.get();
+            audio_output = latest.audio_output;
+            let _ = webview.post_json(&settings_message(&latest));
         }
         // The mouse in the phone while it's out (its own pointer and cursor, at its size), else in the cab's screen.
         if let Some(handset) = handset.as_deref().filter(|_| handset_shown || handset_paper.is_some() || handset_bill.is_some()) {
@@ -954,9 +988,94 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
         // The truck's commands the phones hold, as the plugin gives them to the game.
         // And the suspension by itself, if the player turned it on (auto_suspension.rs).
-        let auto_held =
-            auto_suspension.tick(config.settings.get().suspension_auto, last_telemetry.as_ref(), Instant::now());
+        let susp_settings = config.settings.get();
+        let auto_held = auto_suspension.tick_with_damping(
+            susp_settings.suspension_auto,
+            susp_settings.suspension_damping,
+            Duration::from_secs(u64::from(settings::suspension_auto_delay(&susp_settings))),
+            Duration::from_secs(u64::from(settings::suspension_auto_return(&susp_settings))),
+            Duration::from_secs(u64::from(settings::suspension_auto_brake(&susp_settings))),
+            last_telemetry.as_ref(),
+            Instant::now(),
+        );
         host.truck_commands.store(truck_commands.held(Instant::now()) | auto_held, Ordering::Release);
+        // Brake fade: the discs' temperatures and the brake left, logged every 2 s while the truck moves.
+        {
+            let job = bridge.bridge().plugin.job.read().filter(|job| job.active && job.cargo_loaded);
+            let cargo = job.map_or(0.0, |job| job.cargo_mass);
+            let fade_settings = config.settings.get();
+            let level = fade_settings.brake_fade_level;
+            let fade = brake_fade.tick(level, last_telemetry.as_ref(), cargo, last_weather.as_ref(), Instant::now());
+            let strength = if fade_settings.brake_fade.0 { fade.strength } else { 1.0 };
+            host.brake_strength.store(strength.to_bits(), Ordering::Release);
+            host.brake_temp_truck.store(fade.truck.to_bits(), Ordering::Release);
+            host.brake_temp_trailer.store(fade.trailer.unwrap_or(f32::NAN).to_bits(), Ordering::Release);
+            host.brake_sound.store(
+                0x1_0000
+                    | u32::from(brake_fade::grinds(&fade, level) && fade_settings.brake_fade.0) << 17
+                    | u32::from(fade_settings.brake_squeal_volume.0)
+                    | u32::from(fade_settings.brake_warning_volume.0) << 8,
+                Ordering::Release,
+            );
+            // The alarm's brake left, from its temperature (on the realistic level, the same point of the fade on all).
+            let alarm = brake_fade::strength_at(f32::from(settings::brake_alarm_c(&fade_settings)), brake_fade::Level::Realistic);
+            host.brake_alarm.store(alarm.to_bits(), Ordering::Release);
+            let corner = fade_settings.brake_hud_corner as u32;
+            let size = fade_settings.brake_hud_size as u32;
+            let level_bits = match level {
+                brake_fade::Level::Realistic => 0u32,
+                brake_fade::Level::Light => 1,
+                brake_fade::Level::Hard => 2,
+            };
+            host.brake_hud.store(
+                0x100
+                    | u32::from(fade_settings.brake_hud.0 && fade_settings.brake_fade.0)
+                    | corner << 1
+                    | size << 3
+                    | u32::from(fade_settings.brake_hud_on_foot) << 5
+                    | u32::from(fade_settings.brake_smoke.0 && fade_settings.brake_fade.0) << 6
+                    | level_bits << 9,
+                Ordering::Release,
+            );
+            // The phone told once as the brake weakens and once as it's gone (owner 2026-11-21), again only once
+            // it has all come back.
+            if strength >= 0.999 {
+                brake_told = 0;
+            } else if strength <= westplay_shared::BRAKE_HOT_STRENGTH && brake_told < 1
+                || strength <= alarm && brake_told < 2
+            {
+                let gone = strength <= alarm;
+                brake_told = if gone { 2 } else { 1 };
+                let alert = alerts::Alert::new(alerts::Group::Brake, "truck", if gone { "brakeGone" } else { "brakeHot" });
+                let allowed = alert_filter.allows(&alert);
+                log!("[brake fade] the phone told: {} ({})", alert.kind, if allowed { "sent" } else { "its group is off" });
+                if allowed {
+                    notify_phone!(&alert.message());
+                }
+            }
+            // The phone's Freios app: the discs live, once a second.
+            if brakes_posted.is_none_or(|at| at.elapsed() >= Duration::from_secs(1)) {
+                brakes_posted = Some(Instant::now());
+                let message = serde_json::json!({
+                    "type": "brakes",
+                    "truck": fade.truck.round(),
+                    "trailer": fade.trailer.map(f32::round),
+                    "strength": (strength * 100.0).round(),
+                });
+                let _ = webview.post_json(&message.to_string());
+            }
+            let moving = last_telemetry.as_ref().is_some_and(|t| t.speed.abs() > 0.5 || t.brake > 0.01);
+            if moving && brake_fade_logged.is_none_or(|at| at.elapsed() >= Duration::from_secs(2)) {
+                brake_fade_logged = Some(Instant::now());
+                log!(
+                    "[brake fade] model: truck {:.0} C, trailer {}, strength {:.2}, game {:.0} C",
+                    fade.truck,
+                    fade.trailer.map_or("-".to_owned(), |t| format!("{t:.0} C")),
+                    fade.strength,
+                    last_telemetry.as_ref().map_or(0.0, |t| t.brake_temperature)
+                );
+            }
+        }
         // The game played changed (`westplay_setup::game::current`): its own account.
         if westplay_setup::game::current() != wallet_game {
             wallet_game = westplay_setup::game::current();
@@ -967,6 +1086,14 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         if let Some(money) = bridge.bridge().plugin.money.read()
             && wallet.take(&money)
         {
+            let _ = webview.post_json(&wallet.message());
+        }
+        // Live in-memory Bank mirror (exact balance, active loans, game loan offers): keeps Nupay synced 1:1.
+        if status.game_connected {
+            if wallet.poll_live_bank(&bridge.bridge().bank) {
+                let _ = webview.post_json(&wallet.message());
+            }
+        } else if wallet.on_game_stopped() {
             let _ = webview.post_json(&wallet.message());
         }
         // The fuel filled by hand owed to the pump's attendant: told on the phone as it's owed.
@@ -987,7 +1114,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
         // The player's keybinds pressed in the game: the page acts on each.
         for keybind in Keybind::ALL {
-            let presses = bridge.bridge().plugin.keybind_presses[keybind as usize].load(Ordering::Acquire);
+            let presses = bridge.bridge().plugin.keybind_press_slot(keybind).load(Ordering::Acquire);
             let new = presses.wrapping_sub(keybind_presses[keybind as usize]);
             keybind_presses[keybind as usize] = presses;
             // More at once than a player presses in a moment: another plugin's count (the game restarted).
@@ -1012,6 +1139,20 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             if let Some(app) = &tiktok {
                                 let _ = app.out(handset_shown);
                             }
+                            if handset_shown
+                                && let (Some(player), Some((x, y, w, h, crop)), Some(layers)) =
+                                    (&youtube, handset_youtube_rect, &phone_layers)
+                            {
+                                let _ = player.attach_to_layers(&stage, layers);
+                                let _ = player.show_in(phone_dims, x, y, w, h, crop);
+                            } else if !handset_shown
+                                && let (Some(player), Some(layers)) = (&youtube, &phone_layers)
+                                && player.is_on_phone()
+                            {
+                                // Put away: the video goes back to the cab (its widget places it again), the map too.
+                                let _ = player.command(&youtube::Command::Hide);
+                                let _ = player.attach_to_stage(&stage, layers);
+                            }
                             log!("[handset] {}", if handset_shown { "out" } else { "put away" });
                         }
                     }
@@ -1031,6 +1172,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                             let _ = handset.post_json(r#"{"type":"openApp","app":"character"}"#);
                             log!("[handset] out on Personagem");
                         }
+                    }
+                    // Emergency rough-road suspension trigger (owner 2026-11-22): lifts into rough-road mode and
+                    // automatically lowers back down once on smooth pavement for the configured return delay.
+                    (Keybind::RoughRoad, None) => {
+                        auto_suspension.force_rough_road(last_telemetry.as_ref(), Instant::now());
                     }
                     // The key hints bar's: the plugin's own (it hides the bar itself).
                     _ => {}
@@ -1078,6 +1224,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         }
 
         while let Ok(weather) = weather_watch.updates.try_recv() {
+            last_weather = weather;
             let message = weather_message_for(weather);
             let _ = webview.post_json(&message);
             weather_message = Some(message);
@@ -1105,9 +1252,16 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
 
         while let Ok(player) = player_watch.updates.try_recv() {
             player_messages = player_messages_for(&player);
+            let mut wallet_changed = false;
             if let Some(money) = player.money
                 && wallet.saved(money)
             {
+                wallet_changed = true;
+            }
+            if wallet.update_save_loans(player.loans.clone(), player.save_path.clone()) {
+                wallet_changed = true;
+            }
+            if wallet_changed {
                 let _ = webview.post_json(&wallet.message());
             }
             for message in &player_messages {
@@ -1128,8 +1282,58 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     if tiktok.is_none() && idle {
                         // Nothing to hide: TikTok isn't running (the phone says it again when it is).
                     } else if let Some(app) = start_tiktok(&mut tiktok, &stage, phone_layers.as_ref(), &config) {
+                        app.set_bounds(phone_dims.0, phone_dims.1);
                         let _ = app.command(&command);
                         let _ = app.out(handset_shown);
+                    }
+                }
+                Ok(HandsetMessage::Typing { selection }) => {
+                    handset_typing = selection != 0;
+                    bridge.bridge().typing.selection.store(selection, Ordering::Release);
+                }
+                Ok(HandsetMessage::HandsetYoutube { command }) => {
+                    if command == youtube::Command::Close {
+                        handset_youtube_rect = None;
+                        if let Some(closing) = youtube.take() {
+                            closing.close(&stage, phone_layers.as_ref());
+                        }
+                        youtube_message = None;
+                        let _ = webview.post_json(&youtube::state_message(None));
+                    } else if youtube.is_none() && matches!(command, youtube::Command::Hide) {
+                        handset_youtube_rect = None;
+                    } else if let Some(player) = start_youtube(&mut youtube, &stage, &config) {
+                        match &command {
+                            youtube::Command::Show { x, y, width, height, crop } => {
+                                handset_youtube_rect = Some((*x, *y, *width, *height, *crop));
+                                if let Some(layers) = &phone_layers {
+                                    if let Err(e) = player.attach_to_layers(&stage, layers) {
+                                        log!("[youtube] attach_to_layers failed: {e}");
+                                    }
+                                }
+                                if let Err(e) = player.show_in(phone_dims, *x, *y, *width, *height, *crop) {
+                                    log!("[youtube] show_in failed: {e}");
+                                } else {
+                                    log!("[youtube] shown on handset ({width}x{height} at {x},{y})");
+                                }
+                            }
+                            youtube::Command::Hide => {
+                                handset_youtube_rect = None;
+                                if player.is_on_phone() {
+                                    let _ = player.command(&youtube::Command::Hide);
+                                    if let Some(layers) = &phone_layers {
+                                        let _ = player.attach_to_stage(&stage, layers);
+                                    }
+                                }
+                            }
+                            _ => {
+                                let _ = player.command(&command);
+                                if command == youtube::Command::SignOut
+                                    && let Some(music) = &youtube_music
+                                {
+                                    let _ = music.reload();
+                                }
+                            }
+                        }
                     }
                 }
                 // The notifications' groups turned off in the phone's Settings, and one of each to try them.
@@ -1188,10 +1392,21 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 Err(_) => {}
             }
         }
-        // The suspension's auto reset in the games' options as the player chose (with them closed), and whether it is
-        // there yet, told to the pages (`{"type":"suspensionOption","applied":…}`) when that changes.
-        if let Some(applied) = suspension_option.check(config.settings.get().suspension_auto_reset.0) {
+        // The suspension's auto reset and profile spring stiffness in the games' options as the player chose (with
+        // them closed), and whether auto reset is there yet, told to the pages (`{"type":"suspensionOption","applied":…}`).
+        let current_settings = config.settings.get();
+        if let Some(applied) =
+            suspension_option.check(current_settings.suspension_auto_reset.0, current_settings.suspension_damping.level())
+        {
             let message = serde_json::json!({ "type": "suspensionOption", "applied": applied }).to_string();
+            let _ = webview.post_json(&message);
+            if let Some(handset) = handset.as_deref() {
+                let _ = handset.post_json(&message);
+            }
+            remote.broadcast(&message);
+        }
+        if wallet.try_apply_pending_loan() {
+            let message = wallet.message();
             let _ = webview.post_json(&message);
             if let Some(handset) = handset.as_deref() {
                 let _ = handset.post_json(&message);
@@ -1277,6 +1492,63 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     log!("wallet: its history cleared (Nupay)");
                     let _ = webview.post_json(&wallet.message());
                 }
+                Some(PageMessage::WalletLoan { amount, days, rate }) => {
+                    wallet.queue_loan(amount, days, rate);
+                    let applied = wallet.try_apply_pending_loan();
+                    log!("wallet: loan requested ({amount}, {days}d, rate {rate}; applied now: {applied})");
+                    let message = wallet.message();
+                    let _ = webview.post_json(&message);
+                    if let Some(handset) = handset.as_deref() {
+                        let _ = handset.post_json(&message);
+                    }
+                    remote.broadcast(&message);
+                }
+                Some(PageMessage::WalletLoanCancel) => {
+                    wallet.cancel_pending_loan();
+                    let message = wallet.message();
+                    let _ = webview.post_json(&message);
+                    if let Some(handset) = handset.as_deref() {
+                        let _ = handset.post_json(&message);
+                    }
+                    remote.broadcast(&message);
+                }
+                Some(PageMessage::BankRefresh { id }) => {
+                    if let Some(overtaken) = bank_rpc.ask_refresh(&bridge.bridge().bank, id, Instant::now()) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
+                Some(PageMessage::BankTakeLoan { id, offer_index }) => {
+                    let (amount, detail) = wallet
+                        .offer_summary(offer_index as usize)
+                        .map(|(a, d, r)| (a, format!("{d}d · {}%", (r * 100.0).round() as i32)))
+                        .unwrap_or((0, String::new()));
+                    if let Some(overtaken) = bank_rpc.ask_take_loan(
+                        &bridge.bridge().bank,
+                        id,
+                        offer_index,
+                        amount,
+                        detail,
+                        Instant::now(),
+                    ) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
+                Some(PageMessage::BankRepayLoan { id, loan_index }) => {
+                    let (amount, detail) = wallet
+                        .loan_summary(loan_index as usize)
+                        .map(|(rem, orig)| (rem, format!("Original: {orig}")))
+                        .unwrap_or((0, String::new()));
+                    if let Some(overtaken) = bank_rpc.ask_repay_loan(
+                        &bridge.bridge().bank,
+                        id,
+                        loan_index,
+                        amount,
+                        detail,
+                        Instant::now(),
+                    ) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
                 Some(PageMessage::Westplay { open }) => {
                     bridge.bridge().host.screen_handed_over.store(u32::from(!open), Ordering::Release);
                     if status.westplay_open != Some(open) {
@@ -1356,7 +1628,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         log!("[handset] the front's lowest: {which:?}");
                     }
                 }
-                // How firm the dampers are, from the Suspensão app: the archive made again for the next start.
+                // How firm the dampers & springs are, from the Suspensão app: the archive made again and profiles synced.
                 Some(PageMessage::SuspensionDamping { which }) => {
                     let mut settings = config.settings.get();
                     if let Some(which) = settings::Damping::from_word(&which)
@@ -1367,6 +1639,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         (config.on_settings)(&settings);
                         log!("[handset] the dampers: {which:?}");
                     }
+                    suspension_option.checked = None;
                 }
                 // The suspension by itself, from the Suspensão app (owner 2026-11-19).
                 Some(PageMessage::SuspensionAuto { on }) => {
@@ -1376,6 +1649,104 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
                         log!("[handset] the suspension by itself: {}", if on { "on" } else { "off" });
+                    }
+                }
+                // Rough-road activation delay (1..=5 s), from the Suspensão app (owner 2026-11-22).
+                Some(PageMessage::SuspensionAutoDelay { secs }) => {
+                    let secs = secs.clamp(1, 5);
+                    let mut settings = config.settings.get();
+                    if settings::suspension_auto_delay(&settings) != secs {
+                        settings.suspension_auto_delay = secs;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension rough-road delay: {secs} s");
+                    }
+                }
+                // Smooth-road return delay (3..=15 s), from the Suspensão app (owner 2026-11-22).
+                Some(PageMessage::SuspensionAutoReturn { secs }) => {
+                    let secs = secs.clamp(3, 15);
+                    let mut settings = config.settings.get();
+                    if settings::suspension_auto_return(&settings) != secs {
+                        settings.suspension_auto_return = secs;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension smooth-road return delay: {secs} s");
+                    }
+                }
+                // Hard-braking raise delay (1..=5 s), from the Suspensão app (owner 2026-11-23).
+                Some(PageMessage::SuspensionAutoBrake { secs }) => {
+                    let secs = secs.clamp(1, 5);
+                    let mut settings = config.settings.get();
+                    if settings::suspension_auto_brake(&settings) != secs {
+                        settings.suspension_auto_brake = secs;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] the suspension braking raise delay: {secs} s");
+                    }
+                }
+                // Brake fade, on or off and how soon (owner 2026-11-21).
+                Some(PageMessage::BrakeFade { on }) => {
+                    let mut settings = config.settings.get();
+                    if settings.brake_fade.0 != on {
+                        settings.brake_fade = settings::Shown(on);
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] brake fade: {}", if on { "on" } else { "off" });
+                    }
+                }
+                Some(PageMessage::BrakeFadeLevel { which }) => {
+                    let level = match which.as_str() {
+                        "light" => Some(brake_fade::Level::Light),
+                        "realistic" => Some(brake_fade::Level::Realistic),
+                        "hard" => Some(brake_fade::Level::Hard),
+                        _ => None,
+                    };
+                    let mut settings = config.settings.get();
+                    if let Some(level) = level.filter(|&level| level != settings.brake_fade_level) {
+                        settings.brake_fade_level = level;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] brake fade: {level:?}");
+                    }
+                }
+                // The brake fade's sounds and HUD (owner 2026-11-21).
+                Some(
+                    message @ (PageMessage::BrakeSqueal { .. }
+                    | PageMessage::BrakeWarning { .. }
+                    | PageMessage::BrakeHud { .. }
+                    | PageMessage::BrakeHudCorner { .. }
+                    | PageMessage::BrakeHudSize { .. }
+                    | PageMessage::BrakeHudOnFoot { .. }
+                    | PageMessage::BrakeSmoke { .. }
+                    | PageMessage::BrakeAlarm { .. }),
+                ) => {
+                    let mut settings = config.settings.get();
+                    let volume = |v: f64| settings::Volume70(v.clamp(0.0, 100.0).round() as u8);
+                    match &message {
+                        PageMessage::BrakeSqueal { volume: v } => settings.brake_squeal_volume = volume(*v),
+                        PageMessage::BrakeWarning { volume: v } => settings.brake_warning_volume = volume(*v),
+                        PageMessage::BrakeHud { on } => settings.brake_hud = settings::Shown(*on),
+                        PageMessage::BrakeHudOnFoot { on } => settings.brake_hud_on_foot = *on,
+                        PageMessage::BrakeSmoke { on } => settings.brake_smoke = settings::Shown(*on),
+                        PageMessage::BrakeHudCorner { which } => {
+                            if let Ok(corner) = serde_json::from_value(serde_json::Value::String(which.clone())) {
+                                settings.brake_hud_corner = corner;
+                            }
+                        }
+                        PageMessage::BrakeHudSize { which } => {
+                            if let Ok(size) = serde_json::from_value(serde_json::Value::String(which.clone())) {
+                                settings.brake_hud_size = size;
+                            }
+                        }
+                        PageMessage::BrakeAlarm { celsius } => {
+                            settings.brake_alarm_c = celsius.clamp(260.0, 395.0).round() as u16;
+                        }
+                        _ => {}
+                    }
+                    if settings != config.settings.get() {
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] brakes: {message:?}");
                     }
                 }
                 // How big the mouse's dot is, from a phone's Settings (owner 2026-11-19).
@@ -1388,6 +1759,19 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         config.settings.set(settings.clone());
                         (config.on_settings)(&settings);
                         log!("[handset] the cursor's size: {which:?}");
+                    }
+                }
+                // Where media audio plays: truck cab speakers (`cabin`) or phone/iPad (`device`).
+                Some(PageMessage::AudioOutput { which }) => {
+                    let mut settings = config.settings.get();
+                    if let Some(which) = settings::AudioOutput::from_word(&which)
+                        && settings.audio_output != which
+                    {
+                        settings.audio_output = which;
+                        audio_output = which;
+                        config.settings.set(settings.clone());
+                        (config.on_settings)(&settings);
+                        log!("[handset] audio output: {which:?}");
                     }
                 }
                 // Which virtual mirrors show, from a phone's Settings (owner 2026-11-18).
@@ -1426,6 +1810,12 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         "turnRight" => westplay_shared::CAMERA_NUDGE_TURN_RIGHT,
                         "wider" => westplay_shared::CAMERA_NUDGE_WIDER,
                         "narrower" => westplay_shared::CAMERA_NUDGE_NARROWER,
+                        "left" => westplay_shared::CAMERA_NUDGE_LEFT,
+                        "right" => westplay_shared::CAMERA_NUDGE_RIGHT,
+                        "rollLeft" => westplay_shared::CAMERA_NUDGE_ROLL_LEFT,
+                        "rollRight" => westplay_shared::CAMERA_NUDGE_ROLL_RIGHT,
+                        "backFar" => westplay_shared::CAMERA_NUDGE_BACK_FAR,
+                        "forwardFar" => westplay_shared::CAMERA_NUDGE_FORWARD_FAR,
                         _ => 0,
                     };
                     if press != 0 {
@@ -1460,6 +1850,139 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                         host.float_screen.store((count.max(1) << 8) | press, Ordering::Release);
                     }
                 }
+                Some(PageMessage::JobMarketRefresh { id }) => {
+                    if let Some(overtaken) = job_market.ask_refresh(&bridge.bridge().job_market, id, Instant::now()) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
+                Some(PageMessage::JobMarketCancel { id }) => {
+                    if let Some(overtaken) = job_market.ask_cancel(&bridge.bridge().job_market, id, Instant::now()) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
+                Some(PageMessage::JobMarketAccept { id, mode, company_ptr, offer_ptr }) => {
+                    match job_market.ask_accept(
+                        &bridge.bridge().job_market,
+                        id,
+                        &mode,
+                        &company_ptr,
+                        &offer_ptr,
+                        Instant::now(),
+                    ) {
+                        Ok(Some(overtaken)) => {
+                            let _ = webview.post_json(&overtaken);
+                        }
+                        Ok(None) => {}
+                        Err(immediate) => {
+                            let _ = webview.post_json(&immediate);
+                        }
+                    }
+                }
+                Some(PageMessage::JobMarketIcon { id, icon, cargo_id }) => {
+                    cargo_icons.ask(id, icon, cargo_id, config.game.get());
+                }
+                Some(PageMessage::FleetRefresh { id }) => {
+                    if let Some(overtaken) = fleet.ask_refresh(&bridge.bridge().fleet, id, Instant::now()) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
+                Some(PageMessage::FleetDriveTruck { id, truck_ptr }) => {
+                    match fleet.ask_drive_truck(&bridge.bridge().fleet, id, &truck_ptr, Instant::now()) {
+                        Ok(Some(overtaken)) => {
+                            let _ = webview.post_json(&overtaken);
+                        }
+                        Ok(None) => {}
+                        Err(immediate) => {
+                            let _ = webview.post_json(&immediate);
+                        }
+                    }
+                }
+                Some(PageMessage::FleetUseTrailer { id, trailer_ptr }) => {
+                    match fleet.ask_use_trailer(&bridge.bridge().fleet, id, &trailer_ptr, Instant::now()) {
+                        Ok(Some(overtaken)) => {
+                            let _ = webview.post_json(&overtaken);
+                        }
+                        Ok(None) => {}
+                        Err(immediate) => {
+                            let _ = webview.post_json(&immediate);
+                        }
+                    }
+                }
+                Some(PageMessage::FleetStoreTrailer { id }) => {
+                    if let Some(overtaken) = fleet.ask_store_trailer(&bridge.bridge().fleet, id, Instant::now()) {
+                        let _ = webview.post_json(&overtaken);
+                    }
+                }
+                Some(PageMessage::FleetUpgradeGarage { id, garage_ptr }) => {
+                    match fleet.ask_upgrade_garage(&bridge.bridge().fleet, id, &garage_ptr, Instant::now()) {
+                        Ok(Some(overtaken)) => {
+                            let _ = webview.post_json(&overtaken);
+                        }
+                        Ok(None) => {}
+                        Err(immediate) => {
+                            let _ = webview.post_json(&immediate);
+                        }
+                    }
+                }
+                Some(PageMessage::PhoneDevice { device }) => {
+                    let wanted = if device == "ipad" {
+                        (westplay_shared::IPAD_WIDTH, westplay_shared::IPAD_HEIGHT)
+                    } else {
+                        (westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT)
+                    };
+                    if wanted != phone_dims {
+                        phone_dims = wanted;
+                        host.phone_width.store(wanted.0, Ordering::Release);
+                        host.phone_height.store(wanted.1, Ordering::Release);
+                        if let Some(handset) = &handset {
+                            let _ = handset.place(0.0, 0.0, wanted.0, wanted.1);
+                        }
+                        if let Some(layers) = &phone_layers {
+                            let _ = layers.resize(wanted.0, wanted.1);
+                        }
+                        if let Some(tt) = &tiktok {
+                            tt.set_bounds(wanted.0, wanted.1);
+                        }
+                        handset_pointer = Pointer::new(wanted.0, wanted.1);
+                        let interaction = config.settings.get().interaction;
+                        let phone_scale = if wanted.0 > westplay_shared::PHONE_WIDTH {
+                            HANDSET_SENSITIVITY * 1.35
+                        } else {
+                            HANDSET_SENSITIVITY
+                        };
+                        handset_pointer.set_sensitivity(interaction.sensitivity.get() * phone_scale);
+                        if let (Some(built), Some(layers)) = (pipeline.as_mut(), phone_layers.as_ref()) {
+                            host.phone_generation.store(0, Ordering::Release);
+                            built.phone = None;
+                            generation_counter = generation_counter.wrapping_add(1);
+                            let generation =
+                                ((std::process::id() & 0x00ff_ffff) << 8) | (generation_counter & 0xff);
+                            let name = westplay_shared::phone_texture_name(generation);
+                            let restarted = (|| -> Result<Capture, Error> {
+                                let shared = Arc::new(SharedFrame::new(&built.gpu, wanted.0, wanted.1, &name)?);
+                                Ok(Capture::start(
+                                    &built.gpu,
+                                    &layers.visual()?,
+                                    shared,
+                                    bridge.clone(),
+                                    Published::Phone,
+                                )?)
+                            })();
+                            match restarted {
+                                Ok(cap) => {
+                                    built.phone = Some(cap);
+                                    host.phone_generation.store(generation, Ordering::Release);
+                                    log!(
+                                        "[handset] device switched to {device} ({}x{}, gen {generation})",
+                                        wanted.0,
+                                        wanted.1
+                                    );
+                                }
+                                Err(e) => log!("[handset] failed to resize capture to {device}: {e}"),
+                            }
+                        }
+                    }
+                }
                 Some(PageMessage::MirrorCamera { x, y, width, height }) => {
                     let rect = mirror_rect(x, y, width, height);
                     for (slot, value) in host.mirror_rect.iter().zip(rect) {
@@ -1468,7 +1991,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     // The videos' pictures lie under the page, where the camera is seen through it: put away while
                     // it shows (owner 2026-11-18: with YouTube playing, only the guide lines), their sound plays on.
                     let covered = rect[2] > 0;
-                    if let Some(player) = &youtube {
+                    if let Some(player) = &youtube
+                        && !player.is_on_phone()
+                    {
                         let _ = player.cover(covered);
                     }
                     if let Some(music) = &youtube_music {
@@ -1508,19 +2033,36 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 Some(PageMessage::Youtube { command }) => {
                     if command == youtube::Command::Close {
                         if let Some(closing) = youtube.take() {
-                            closing.close(&stage);
+                            closing.close(&stage, phone_layers.as_ref());
                         }
                         youtube_message = None;
                         let _ = webview.post_json(&youtube::state_message(None));
                     } else if youtube.is_none() && matches!(command, youtube::Command::Hide) {
                         // Nothing to hide: YouTube isn't running (a page reloading says it anyway).
                     } else if let Some(player) = start_youtube(&mut youtube, &stage, &config) {
-                        let _ = player.command(&command);
-                        // YouTube Music shares the sign-in: its page again, signed out.
-                        if command == youtube::Command::SignOut
-                            && let Some(music) = &youtube_music
+                        if player.is_on_phone() && matches!(command, youtube::Command::Hide) {
+                            // The in-game iPad/phone currently owns YouTube's visual: never let the cab's initial
+                            // or background Hide turn the iPad video invisible!
+                        } else if player.is_on_phone()
+                            && handset_shown
+                            && matches!(command, youtube::Command::Show { .. })
                         {
-                            let _ = music.reload();
+                            // While the iPad/phone is actively out with YouTube open, keep the video there instead
+                            // of letting the cab Dashboard's VideoHole steal it away.
+                        } else {
+                            if matches!(command, youtube::Command::Show { .. })
+                                && player.is_on_phone()
+                                && let Some(layers) = &phone_layers
+                            {
+                                let _ = player.attach_to_stage(&stage, layers);
+                            }
+                            let _ = player.command(&command);
+                            // YouTube Music shares the sign-in: its page again, signed out.
+                            if command == youtube::Command::SignOut
+                                && let Some(music) = &youtube_music
+                            {
+                                let _ = music.reload();
+                            }
                         }
                     }
                 }
@@ -1552,6 +2094,9 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     }
                 }
                 Some(PageMessage::Typing { selection }) => {
+                    if selection != 0 {
+                        handset_typing = false;
+                    }
                     bridge.bridge().typing.selection.store(selection, Ordering::Release);
                 }
                 Some(PageMessage::Routes { id, node }) => {
@@ -1638,6 +2183,30 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     }
                 }
             }
+        }
+        if let Some(msg) = job_market.poll(
+            &bridge.bridge().job_market,
+            &maps_dir,
+            map_shown.0.as_deref(),
+            config.game.get().as_deref(),
+            None,
+            last_telemetry.map(|t| [t.x, t.z]),
+            Instant::now(),
+        ) {
+            let _ = webview.post_json(&msg);
+        }
+        if let Some(msg) = bank_rpc.poll(&bridge.bridge().bank, &mut wallet, Instant::now()) {
+            let _ = webview.post_json(&wallet.message());
+            let _ = webview.post_json(&msg);
+        }
+        if let Some(msg) = fleet.poll(&bridge.bridge().fleet, &maps_dir, map_shown.0.as_deref(), Instant::now()) {
+            if wallet.poll_live_bank(&bridge.bridge().bank) {
+                let _ = webview.post_json(&wallet.message());
+            }
+            let _ = webview.post_json(&msg);
+        }
+        for icon_msg in cargo_icons.poll_all() {
+            let _ = webview.post_json(&icon_msg);
         }
         // The game's route after handing one over: follows the one picked, or is held to it by another
         // waypoint, or the game won't (handover.rs).
@@ -1743,7 +2312,7 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                     log!("{line}");
                 }
                 if let Some(failed) = youtube.take() {
-                    failed.close(&stage);
+                    failed.close(&stage, phone_layers.as_ref());
                 }
                 youtube_message = None;
                 let _ = webview.post_json(&youtube::state_message(None));
@@ -2128,11 +2697,27 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         // What the player typed on their own keyboard, and whether it types (the plugin decides: the truck
         // standing still, a field selected then).
         let typing_block = &bridge.bridge().typing;
+        // The cab told whether YouTube's picture is in the phone: its Dashboard then cuts no hole for it (the game's
+        // map and the cab's own map stay whole).
+        let on_handset = youtube.as_ref().is_some_and(youtube::YouTube::is_on_phone);
+        if youtube_on_handset_told != Some(on_handset) {
+            youtube_on_handset_told = Some(on_handset);
+            let _ = webview.post_json(&serde_json::json!({ "type": "youtubeHandset", "on": on_handset }).to_string());
+        }
+        if handset_typing && !handset_shown {
+            handset_typing = false;
+            typing_block.selection.store(0, Ordering::Release);
+        }
         let typed: Vec<u32> = std::iter::from_fn(|| typing_block.keys.pop()).collect();
         if let Some(message) = typing::typed_message(&typed, typing::clipboard_text) {
-            // Into TikTok's field while it has the keyboard, else the cab's page's (and the phone's).
+            // Into TikTok's field while it has the keyboard, else the handset's if selected, else the cab's page's.
             match tiktok.as_ref().filter(|app| app.typing()) {
                 Some(app) => drop(app.typed(&message)),
+                None if handset_typing => {
+                    if let Some(handset) = &handset {
+                        let _ = handset.post_json(&message);
+                    }
+                }
                 None => drop(webview.post_json(&message)),
             }
         }
@@ -2145,7 +2730,11 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
         let state = westplay_shared::TypingState::from_code(typing_block.state.load(Ordering::Acquire));
         if typing_state != Some(state) {
             typing_state = Some(state);
-            let _ = webview.post_json(&typing::state_message(state));
+            let message = typing::state_message(state);
+            let _ = webview.post_json(&message);
+            if let Some(handset) = &handset {
+                let _ = handset.post_json(&message);
+            }
         }
 
         // YouTube's, Apple Music's, YouTube Music's and Spotify's sound from the truck's own speakers, heard from the
@@ -2161,9 +2750,13 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
             let game_frame = plugin.heartbeat.load(Ordering::Acquire);
             let (electrics, paused) = (telemetry.electric_enabled, telemetry.paused);
             let effective_electrics = electrics;
-            // On foot (the plugin's Modo Personagem) the camera is outside the cab, whatever was drawn.
+            // On foot (the plugin's Modo Personagem) or camera physically far from the driver's head (> 1.4 m):
+            // outside the cab, even if a floating screen or through-window draw stamped `cab_frame`/`screen_frame`.
             let on_foot = plugin.on_foot.load(Ordering::Acquire) == 1;
-            let outside = camera.outside(truck.id.as_str(), cab_drawn, game_frame, effective_electrics, paused) || on_foot;
+            let far_from_head = camera::Camera::is_far_from_head(telemetry);
+            let outside =
+                camera.outside_or_far(truck.id.as_str(), cab_drawn, game_frame, effective_electrics, paused, far_from_head)
+                    || on_foot;
             if outside != was_outside {
                 was_outside = outside;
                 log!("camera: {} the cab", if outside { "outside" } else { "in" });
@@ -2187,17 +2780,24 @@ pub fn run(mut config: Config, stop: Arc<AtomicBool>) -> Result<(), Error> {
                 _ if speakers::by_parts(truck.id.as_str()) => None,
                 _ => speakers::in_truck(truck.id.as_str()),
             };
+            // When audio output is routed to the phone/iPad (`Device`), play clean stereo directly without truck
+            // speaker spatialization or outside-cab muffling (so YouTube & music work cleanly in Modo Personagem).
+            let (eff_speakers, eff_outside, eff_distance) = if audio_output == settings::AudioOutput::Device {
+                (None, false, 0.0)
+            } else {
+                (truck_speakers, outside, distance)
+            };
             if let Some(player) = &youtube {
-                let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
+                let _ = player.cab(eff_speakers, head, eff_outside, eff_distance, equalizer, spectrum);
             }
             if let Some(player) = &apple_music {
-                let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
+                let _ = player.cab(eff_speakers, head, eff_outside, eff_distance, equalizer, spectrum);
             }
             if let Some(player) = &youtube_music {
-                let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
+                let _ = player.cab(eff_speakers, head, eff_outside, eff_distance, equalizer, spectrum);
             }
             if let Some(player) = &spotify {
-                let _ = player.cab(truck_speakers, head, outside, distance, equalizer, spectrum);
+                let _ = player.cab(eff_speakers, head, eff_outside, eff_distance, equalizer, spectrum);
             }
         }
 
@@ -2615,6 +3215,10 @@ enum HandsetMessage {
     Ready,
     /// A command for TikTok under the phone's page (`tiktok`).
     Tiktok { command: tiktok::Command },
+    /// A text field on the in-game phone/iPad selected for physical keyboard typing.
+    Typing { selection: u32 },
+    /// A command for YouTube running in the in-game iPad/phone (shares YouTube's ad-free engine).
+    HandsetYoutube { command: youtube::Command },
     /// Whether a notification is on the phone's screen: its top stays in view meanwhile.
     PhoneBanner { showing: bool },
     /// The notifications' groups turned off in the phone's Settings (alerts.rs `Group`'s names).
@@ -2691,7 +3295,7 @@ fn keybind_message(keybind: Keybind) -> Option<String> {
         Keybind::VolumeUp => "volumeUp",
         Keybind::VolumeDown => "volumeDown",
         Keybind::PlayPause => "playPause",
-        Keybind::Phone | Keybind::Character | Keybind::Hints => return None,
+        Keybind::Phone | Keybind::Character | Keybind::Hints | Keybind::RoughRoad => return None,
     };
     Some(serde_json::json!({ "type": "keybind", "action": action }).to_string())
 }
@@ -2842,6 +3446,7 @@ fn build_pipeline(
     config: &Config,
     stage: &Stage,
     phone: Option<&webview::Layers>,
+    phone_dims: (u32, u32),
     bridge: &Arc<BridgeMapping>,
     luid: Option<LUID>,
     generation: u32,
@@ -2853,7 +3458,7 @@ fn build_pipeline(
     // The phone's frame, the cab's without it if it can't be had.
     let phone = phone.and_then(|layers| {
         let started = (|| -> Result<Capture, Error> {
-            let (width, height) = (westplay_shared::PHONE_WIDTH, westplay_shared::PHONE_HEIGHT);
+            let (width, height) = phone_dims;
             let name = westplay_shared::phone_texture_name(generation);
             let shared = Arc::new(SharedFrame::new(&gpu, width, height, &name)?);
             Ok(Capture::start(&gpu, &layers.visual()?, shared, bridge.clone(), Published::Phone)?)
@@ -2907,6 +3512,20 @@ fn settings_message(settings: &settings::Settings) -> String {
         "suspensionDamping": settings.suspension_damping,
         "cursorSize": settings.cursor_size,
         "suspensionAuto": settings.suspension_auto,
+        "suspensionAutoDelay": settings::suspension_auto_delay(settings),
+        "suspensionAutoReturn": settings::suspension_auto_return(settings),
+        "suspensionAutoBrake": settings::suspension_auto_brake(settings),
+        "brakeFade": settings.brake_fade.0,
+        "brakeFadeLevel": settings.brake_fade_level,
+        "brakeSquealVolume": settings.brake_squeal_volume,
+        "brakeWarningVolume": settings.brake_warning_volume,
+        "brakeHud": settings.brake_hud.0,
+        "brakeHudCorner": settings.brake_hud_corner,
+        "brakeHudSize": settings.brake_hud_size,
+        "brakeHudOnFoot": settings.brake_hud_on_foot,
+        "brakeSmoke": settings.brake_smoke.0,
+        "brakeAlarm": settings::brake_alarm_c(&settings),
+        "audioOutput": settings.audio_output,
     })
     .to_string()
 }
@@ -2979,6 +3598,24 @@ enum PageMessage {
     Detours { id: u32, nodes: Vec<String> },
     /// Nupay's history let go, its balance kept (`wallet`): the account comes back without it.
     WalletClear,
+    /// Queue a new bank loan in Nupay (offline fallback when the game isn't running).
+    WalletLoan { amount: i64, days: i32, rate: f32 },
+    WalletLoanCancel,
+    /// Live in-memory Nupay Bank RPCs (zero restart).
+    BankRefresh { id: u32 },
+    #[serde(rename_all = "camelCase")]
+    BankTakeLoan { id: u32, offer_index: u32 },
+    #[serde(rename_all = "camelCase")]
+    BankRepayLoan { id: u32, loan_index: u32 },
+    /// Live in-memory Company / Fleet & Garage RPCs (zero restart).
+    FleetRefresh { id: u32 },
+    #[serde(rename_all = "camelCase")]
+    FleetDriveTruck { id: u32, truck_ptr: String },
+    #[serde(rename_all = "camelCase")]
+    FleetUseTrailer { id: u32, trailer_ptr: String },
+    FleetStoreTrailer { id: u32 },
+    #[serde(rename_all = "camelCase")]
+    FleetUpgradeGarage { id: u32, garage_ptr: String },
     /// Who walks in the Modo Personagem, chosen in the phone's Personagem app (a place in
     /// `westplay_shared::CHARACTER_PEOPLE`): kept with the settings, for the next time out of the truck.
     CharacterPerson { person: f64 },
@@ -2996,7 +3633,25 @@ enum PageMessage {
     /// How firm the dampers are (the Suspensão app): `soft`, `normal`, `firm` or `firmest`.
     SuspensionDamping { which: String },
     CursorSize { which: String },
+    /// Where media audio plays (`cabin` or `device`).
+    AudioOutput { which: String },
     SuspensionAuto { on: bool },
+    SuspensionAutoDelay { secs: u8 },
+    SuspensionAutoReturn { secs: u8 },
+    SuspensionAutoBrake { secs: u8 },
+    /// Brake fade (owner 2026-11-21): on or off, and how soon (`light`, `realistic`, `hard`).
+    BrakeFade { on: bool },
+    BrakeFadeLevel { which: String },
+    /// The brake fade's sounds' volumes (0..100; 0 off) and the brakes' HUD (shown, `bottomLeft`… and `small`…).
+    BrakeSqueal { volume: f64 },
+    BrakeWarning { volume: f64 },
+    BrakeHud { on: bool },
+    BrakeHudCorner { which: String },
+    BrakeHudSize { which: String },
+    BrakeHudOnFoot { on: bool },
+    BrakeSmoke { on: bool },
+    /// When the brake alarm comes (°C on the realistic level).
+    BrakeAlarm { celsius: f64 },
     /// Where the reversing camera shows the game's rear-view mirrors (the page see-through there), in the frame's
     /// pixels; a width of 0 while it doesn't (`HostBlock::mirror_rect`).
     MirrorCamera { x: f64, y: f64, width: f64, height: f64 },
@@ -3006,6 +3661,18 @@ enum PageMessage {
     /// `left`, `right`, `turnLeft`, `turnRight`, `tiltUp`, `tiltDown`, `rollLeft`, `rollRight`, `reset`):
     /// `HostBlock::float_screen`.
     FloatScreen { action: String },
+    /// Live in-memory Job Market (Bolsa de Fretes): snapshot offers from the game's live economy.
+    JobMarketRefresh { id: u32 },
+    /// Live in-memory Job Market: accept a chosen offer (`freight` | `cargo` | `quick`) directly on the main thread.
+    #[serde(rename_all = "camelCase")]
+    JobMarketAccept { id: u32, mode: String, company_ptr: String, offer_ptr: String },
+    /// Live in-memory Job Market: cancel the player's current job (the game's own cancel, with its penalty).
+    JobMarketCancel { id: u32 },
+    /// On-demand cargo icon image lookup from game/DLC/mod `.scs` archives.
+    #[serde(rename_all = "camelCase")]
+    JobMarketIcon { id: u32, icon: String, cargo_id: String },
+    /// Live handheld form-factor switch (`phone` = iPhone 340x720, `ipad` = vertical iPad 560x760).
+    PhoneDevice { device: String },
 }
 
 /// The page's rectangle for the mirrors as the bridge has it (whole pixels, within the frame): none (all 0) if it's
@@ -3081,9 +3748,10 @@ struct SuspensionOption {
 impl SuspensionOption {
     const EVERY: Duration = Duration::from_secs(5);
 
-    /// Looked at again (every few seconds, or at once after a change): set if it can be; whether it's there now, if
-    /// that changed.
-    fn check(&mut self, wanted: bool) -> Option<bool> {
+    /// Looked at again (every few seconds, or at once after a change): set if it can be; whether auto reset is there
+    /// now, if that changed. Also syncs profile spring stiffness (`g_suspension_stiffness` /
+    /// `g_cabin_suspension_stiffness`) when a non-Normal damping preset is active (owner 2026-11-22).
+    fn check(&mut self, wanted: bool, damping: westplay_setup::low_suspension::Damping) -> Option<bool> {
         if self.checked.is_some_and(|at| at.elapsed() < Self::EVERY) {
             return None;
         }
@@ -3092,6 +3760,11 @@ impl SuspensionOption {
         if !now && westplay_setup::suspension::set_auto_reset(wanted) {
             log!("[suspension] the game's auto reset set {} in its options", if wanted { "on" } else { "off" });
             now = westplay_setup::suspension::auto_reset().unwrap_or(true) == wanted;
+        }
+        if !westplay_setup::suspension::stiffness_applied(damping)
+            && westplay_setup::suspension::set_stiffness(damping)
+        {
+            log!("[suspension] the profiles' spring stiffness set for {damping:?}");
         }
         (self.applied != Some(now)).then(|| {
             self.applied = Some(now);
@@ -3492,6 +4165,20 @@ mod tests {
                 "suspensionDamping": "normal",
                 "cursorSize": "normal",
                 "suspensionAuto": false,
+                "suspensionAutoDelay": 3,
+                "suspensionAutoReturn": 7,
+                "suspensionAutoBrake": 2,
+                "brakeFade": true,
+                "brakeFadeLevel": "realistic",
+                "brakeSquealVolume": 70,
+                "brakeWarningVolume": 70,
+                "brakeHud": true,
+                "brakeHudCorner": "bottomLeft",
+                "brakeHudSize": "small",
+                "brakeHudOnFoot": false,
+                "brakeSmoke": true,
+                "brakeAlarm": 360,
+                "audioOutput": "cabin",
             })
         );
         settings.screen.truck_strip = crate::settings::TruckStrip::Off;
@@ -3550,6 +4237,8 @@ mod tests {
             language: Some("tr_tr".into()),
             time_zones: true,
             money: None,
+            loans: Vec::new(),
+            save_path: None,
         };
         assert_eq!(
             super::player_messages_for(&player),

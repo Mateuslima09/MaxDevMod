@@ -65,6 +65,16 @@ const PAGE_MESSAGES: &[&str] = &[
     "truckCommand",
     "screenFit",
     "walletClear",
+    "walletLoan",
+    "walletLoanCancel",
+    "bankRefresh",
+    "bankTakeLoan",
+    "bankRepayLoan",
+    "fleetRefresh",
+    "fleetDriveTruck",
+    "fleetUseTrailer",
+    "fleetStoreTrailer",
+    "fleetUpgradeGarage",
     "characterPerson",
     // The phones' Settings switches (owner 2026-11-18: the virtual mirrors' choice didn't change; the Modo
     // Personagem's switches weren't let through either).
@@ -77,10 +87,32 @@ const PAGE_MESSAGES: &[&str] = &[
     "suspensionDamping",
     "cursorSize",
     "suspensionAuto",
+    "suspensionAutoDelay",
+    "suspensionAutoReturn",
+    "suspensionAutoBrake",
+    "brakeFade",
+    "brakeFadeLevel",
+    "brakeSqueal",
+    "brakeWarning",
+    "brakeHud",
+    "brakeHudCorner",
+    "brakeHudSize",
+    "brakeHudOnFoot",
+    "brakeSmoke",
+    "brakeAlarm",
     // The reversing camera moved by hand, from the phones too (owner 2026-11-20).
     "cameraNudge",
     // MaxDevMod's floating screen in the cab, switched and moved from the phones (owner 2026-11-20).
     "floatScreen",
+    // Live in-memory Job Market (Bolsa de Fretes) from the in-game phone and remote phones.
+    "jobMarketRefresh",
+    "jobMarketAccept",
+    "jobMarketCancel",
+    "jobMarketIcon",
+    // Live iPhone <-> iPad vertical device switcher.
+    "phoneDevice",
+    // Live audio output selector (cabin speakers vs phone/iPad).
+    "audioOutput",
 ];
 /// Messages the host only passes on to the pages, the cab's and the phones' (mirrored): Adjust Screen's, a phone's
 /// change for the cab's page, and the cab's fit for the phones (owner 2026-11-02: the screen fitted from the phone

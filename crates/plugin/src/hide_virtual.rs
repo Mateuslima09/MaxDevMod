@@ -67,7 +67,7 @@ fn shown(side: i32) -> bool {
     match chosen {
         westplay_shared::VIRTUAL_MIRRORS_NONE => false,
         westplay_shared::VIRTUAL_MIRRORS_LEFT => side < 0,
-        westplay_shared::VIRTUAL_MIRRORS_BOTH => side != 0,
+        westplay_shared::VIRTUAL_MIRRORS_BOTH => true,
         _ => side > 0,
     }
 }

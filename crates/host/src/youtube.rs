@@ -18,12 +18,12 @@
 //! profile. WestPlay learns nothing of the account: only whether YouTube's page is signed in, and the picture
 //! to show for it ([`Account`]), neither kept.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 
 use crate::signin::{self, Confirming, Progress, SignInWindow};
 use crate::speakers::{self, Equalizer, Head, Speaker};
-use crate::webview::{self, OffscreenWebView, PageSize, Stage};
+use crate::webview::{self, Layers, OffscreenWebView, PageSize, Stage};
 
 /// What the cabin page asks of YouTube's player, or of YouTube (`youtube` in ui/src/shared/host.ts).
 #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -696,6 +696,8 @@ pub struct YouTube {
     pending: RefCell<Vec<Report>>,
     /// The speakers the page has, and the head and camera it was told last ([`YouTube::cab`]).
     cab: RefCell<Told>,
+    /// Whether the video visual is currently attached under the in-game phone/iPad (`Layers`) instead of `Stage`.
+    on_phone: Cell<bool>,
 }
 
 impl YouTube {
@@ -723,7 +725,52 @@ impl YouTube {
             confirming: Confirming::default(),
             pending: RefCell::new(Vec::new()),
             cab: RefCell::new((None, None, None, None, None)),
+            on_phone: Cell::new(false),
         })
+    }
+
+    /// Whether YouTube's visual is currently attached under the in-game phone/iPad layers.
+    pub fn is_on_phone(&self) -> bool {
+        self.on_phone.get()
+    }
+
+    /// Moves YouTube's video visual under the in-game phone/iPad layers so the iPad YouTube app can show it live.
+    pub fn attach_to_layers(&self, stage: &Stage, layers: &Layers) -> windows::core::Result<()> {
+        if !self.on_phone.get() {
+            let _ = stage.remove(&self.view);
+            layers.add(&self.view, false)?;
+            self.on_phone.set(true);
+            let _ = self.view.cover(false);
+            let _ = self.view.set_background(0, 0, 0);
+        }
+        Ok(())
+    }
+
+    /// Moves YouTube's video visual back under the cab stage.
+    pub fn attach_to_stage(&self, stage: &Stage, layers: &Layers) -> windows::core::Result<()> {
+        if self.on_phone.get() {
+            let _ = layers.remove(&self.view);
+            stage.add(&self.view, false)?;
+            self.on_phone.set(false);
+        }
+        Ok(())
+    }
+
+    /// Shows the video inside an alternate container of size `bounds` (the in-game iPad/phone), fitted from HD so
+    /// YouTube keeps full HD quality while scaling crisply into the player rectangle.
+    pub fn show_in(
+        &self,
+        bounds: (u32, u32),
+        x: f32,
+        y: f32,
+        width: u32,
+        height: u32,
+        crop: bool,
+    ) -> windows::core::Result<()> {
+        self.pass(&Command::Crop { on: crop })?;
+        let (x, y, width, height) = within(bounds, x, y, width, height);
+        self.view.fit((1280, 720), x, y, width, height)?;
+        self.view.show(true)
     }
 
     /// Its picture put away while the reversing camera shows (`OffscreenWebView::cover`).
@@ -866,9 +913,15 @@ impl YouTube {
         self.view.take_failure().is_some()
     }
 
-    /// Takes the WebView off the frame; it closes as it's dropped.
-    pub fn close(self, stage: &Stage) {
-        let _ = stage.remove(&self.view);
+    /// Takes the WebView off whichever container currently holds it; it closes as it's dropped.
+    pub fn close(self, stage: &Stage, layers: Option<&Layers>) {
+        if self.on_phone.get() {
+            if let Some(layers) = layers {
+                let _ = layers.remove(&self.view);
+            }
+        } else {
+            let _ = stage.remove(&self.view);
+        }
     }
 }
 
@@ -1329,7 +1382,7 @@ mod tests {
         pump(2, &mut reports);
         assert!(reports.contains(&Report::SignInWindow(false)), "{reports:?}");
         assert!(youtube.sign_in.borrow().is_none());
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);
@@ -1466,7 +1519,7 @@ mod tests {
         );
         // A new profile isn't signed in, and says so (with no picture).
         assert_eq!(account, Some(Account { signed_in: false, avatar: None }));
-        youtube.close(&stage);
+        youtube.close(&stage, None);
     }
 
     /// The real thing: captions in the language chosen before a video, then none, and the quality held to
@@ -1536,7 +1589,7 @@ mod tests {
         youtube.command(&Command::Load { video: AUTOMATIC.into(), start: Some(30.0) }).unwrap();
         let state = until(AUTOMATIC, "automatic Turkish captions", 30, &|s| s.state == 1 && s.caption.is_some());
         assert_eq!(state.caption.as_deref(), Some("a.tr"));
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);
@@ -1593,7 +1646,7 @@ mod tests {
         // The next video: still 1.5x.
         youtube.command(&Command::Load { video: NEXT.into(), start: None }).unwrap();
         until(NEXT, "the next video at 1.5x", 45, &|s| s.state == 1 && s.rate == 1.5);
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);
@@ -1729,7 +1782,7 @@ mod tests {
         youtube.cab(speakers::in_truck("vehicle.man.tgx_2020"), head, false, 0.0, Equalizer::default(), false).unwrap();
         listen(1);
         assert_eq!(listen(3), None);
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);
@@ -1806,7 +1859,7 @@ mod tests {
         assert!(state.diag.is_none(), "a diagnosis while playing");
         assert!(waited < std::time::Duration::from_secs(10), "held back for the ad: {waited:?}");
         assert_eq!(state.volume, 0.0);
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         // WebView2's processes let go of the profile shortly after.
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -1842,7 +1895,7 @@ mod tests {
             }
         }
         println!("{cookie}");
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);
@@ -1881,7 +1934,7 @@ mod tests {
             }
         }
         println!("after {:.1} s: playing {playing}; while loading: {diagnosed:?}", started.elapsed().as_secs_f32());
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);
@@ -2019,7 +2072,7 @@ mod tests {
         };
         println!("said small: {said}");
         assert!(said.contains("640x360"), "{said}");
-        youtube.close(&stage);
+        youtube.close(&stage, None);
         crate::pump_messages();
         std::thread::sleep(std::time::Duration::from_secs(2));
         let _ = std::fs::remove_dir_all(&user_data);

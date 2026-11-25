@@ -77,6 +77,10 @@ static LAST_PORTRAITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU
 /// the camera), so the frames alternate: one the game's own view (kept, `normal`), the next our camera's (copied
 /// for the screen), and the glass mirror given back the game's view before it's drawn (`on_ps_resources`).
 static CAMERA_FRAME: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Set when a `CAMERA_FRAME` landed on the other mirror's view (`!view_matches`): slipping one frame realigns
+/// `CAMERA_FRAME` with a game that alternates left/right mirror views every frame (owner 2026-11-22).
+static MISSED_CAMERA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SLIPPED_LAST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// Our mirror's texture while it holds our camera's view, to be given back the game's (0: none).
 static RESTORE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 /// Given back and not, since the last log.
@@ -88,7 +92,9 @@ static RESTORES: Mutex<[u64; 3]> = Mutex::new([0; 3]);
 static IN_GROUP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static GROUP_OURS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static GROUPS_NOW: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-const OUR_GROUP: u32 = 0;
+/// Which high-quality mirror group (0 or 1) is the driver's side mirror for our reversing camera; flipped when
+/// `rear_camera::ours_wrong_side()` reports it held the passenger-side view (owner 2026-11-22).
+static OUR_GROUP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 /// Whether the last frame drew its mirrors with the high quality; the widest main mirror of the last frame, and of
 /// this one so far.
 static HIGH_QUALITY_LAST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -114,9 +120,13 @@ pub fn ours_texture() -> usize {
     OURS.load(Ordering::Relaxed)
 }
 
-/// The main mirror being drawn now, ours or not (its texture's address; 0: none): each one's side is voted from its
+/// The main mirror being drawn now, ours or not (its texture's address, or a small group tag `1..` during a
+/// high-quality mirror's G-buffer pass before its final target is bound; 0: none): each one's side is voted from its
 /// own blocks (`rear_camera::side_of_texture`).
 static MAIN_PASS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Group tag (`index + 1`) of the high-quality mirror pass currently in flight (`IN_GROUP`), moved onto the final
+/// R11G11B10 texture's address when it binds.
+static GROUP_TAG: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 pub fn main_pass() -> usize {
     MAIN_PASS.load(Ordering::Relaxed)
@@ -239,21 +249,21 @@ pub unsafe fn on_set_render_targets(context: *mut c_void, count: u32, views: *co
         if let Some(texture) = state.bound.take()
             && wanted().is_some()
         {
-            if !alternating() {
-                copy_mirrors(context, state, &texture);
-            } else if CAMERA_FRAME.load(Ordering::Relaxed) {
+            if alternating() && CAMERA_FRAME.load(Ordering::Relaxed) {
                 // Shown only if it was the mirror our camera was moved for (the game hands its mirrors' views round
-                // its textures): else the screen keeps the last one.
+                // its textures): else the screen keeps the last one. Never copy an unmoved mirror before
+                // `rear_camera` turns on (owner 2026-11-22: showed the raw sideways side mirror frozen on screen).
                 if crate::rear_camera::view_matches() {
                     copy_mirrors(context, state, &texture);
                 } else {
+                    MISSED_CAMERA.store(true, Ordering::Relaxed);
                     RESTORES.lock().unwrap_or_else(|e| e.into_inner())[2] += 1;
                 }
                 if state.normal.is_some() {
                     RESTORE.store(texture.as_raw() as usize, Ordering::Relaxed);
                     state.restore = Some(texture);
                 }
-            } else {
+            } else if alternating() {
                 keep_normal(context, state, &texture);
             }
         }
@@ -293,10 +303,13 @@ pub unsafe fn on_set_render_targets(context: *mut c_void, count: u32, views: *co
         let camera_now = !alternating() || CAMERA_FRAME.load(Ordering::Relaxed);
         if step_portrait && count == 4 {
             let index = GROUPS_NOW.fetch_add(1, Ordering::Relaxed);
-            let ours = index == OUR_GROUP;
+            let tag = index as usize + 1;
+            let ours = index == OUR_GROUP.load(Ordering::Relaxed);
             IN_GROUP.store(true, Ordering::Relaxed);
+            GROUP_TAG.store(tag, Ordering::Relaxed);
             GROUP_OURS.store(ours, Ordering::Relaxed);
             DRAWING_OURS.store(ours && camera_now, Ordering::Relaxed);
+            MAIN_PASS.store(tag, Ordering::Relaxed);
             return;
         }
         if step_portrait && IN_GROUP.load(Ordering::Relaxed) {
@@ -323,6 +336,12 @@ pub unsafe fn on_set_render_targets(context: *mut c_void, count: u32, views: *co
         }
         state.portraits.1 += 1;
         let address = texture.as_raw() as usize;
+        if grouped {
+            let tag = GROUP_TAG.swap(0, Ordering::Relaxed);
+            if tag != 0 {
+                crate::rear_camera::alias_texture_votes(tag, address);
+            }
+        }
         MAIN_PASS.store(address, Ordering::Relaxed);
         if state.portraits_now.0 != frame {
             state.portraits_now = (frame, Vec::new());
@@ -526,8 +545,13 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         let mut state = state;
         let (counted, count) = state.0.portraits;
         let now = FRAME.load(Ordering::Relaxed);
-        // The next frame our camera's if this one wasn't (and our camera's on); one not given back counted.
-        let camera_next = alternating() && !CAMERA_FRAME.load(Ordering::Relaxed);
+        // The next frame our camera's if this one wasn't (and our camera's on); if this camera frame landed on the
+        // wrong mirror (out of phase with a game alternating left/right every frame), slip one frame to realign.
+        let missed = MISSED_CAMERA.swap(false, Ordering::Relaxed);
+        let was_camera = CAMERA_FRAME.load(Ordering::Relaxed);
+        let slip = missed && !SLIPPED_LAST.load(Ordering::Relaxed);
+        SLIPPED_LAST.store(slip, Ordering::Relaxed);
+        let camera_next = alternating() && (!was_camera || slip);
         HIGH_QUALITY_LAST.store(GROUPS_NOW.swap(0, Ordering::Relaxed) > 0, Ordering::Relaxed);
         IN_GROUP.store(false, Ordering::Relaxed);
         MAX_PORTRAIT.store(MAX_NOW.swap(0, Ordering::Relaxed), Ordering::Relaxed);
@@ -556,9 +580,22 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
             *state.0.scores.entry(*address).or_insert(0.0) += 1.0;
         }
         // Only the virtual mirrors, when there are (hidden: the glass ones in the cab stay as they are).
+        // Prefer the driver's side mirror when its side is known, so a higher score on the passenger mirror never
+        // yanks `ours` onto the wrong side (owner 2026-11-22: 142 camera frames dropped until `ours` switched back).
         let any_virtual = state.0.scores.keys().any(|address| crate::hide_virtual::is_virtual(*address));
+        let driver = crate::rear_camera::driver_side();
+        let any_driver = state.0.scores.keys().any(|address| {
+            (!any_virtual || crate::hide_virtual::is_virtual(*address))
+                && crate::rear_camera::side_of_texture(*address) == driver
+        });
+        let any_not_wrong = state.0.scores.keys().any(|address| {
+            (!any_virtual || crate::hide_virtual::is_virtual(*address))
+                && crate::rear_camera::side_of_texture(*address) != -driver
+        });
         let best = state.0.scores.iter()
             .filter(|(address, _)| !any_virtual || crate::hide_virtual::is_virtual(**address))
+            .filter(|(address, _)| !any_driver || crate::rear_camera::side_of_texture(**address) == driver)
+            .filter(|(address, _)| !any_not_wrong || crate::rear_camera::side_of_texture(**address) != -driver)
             .max_by(|a, b| a.1.total_cmp(b.1))
             .map(|(a, s)| (*a, *s));
         if let Some((best, best_score)) = best {
@@ -568,7 +605,8 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
             // second's wait made the camera flicker, owner 2026-11-14).
             let gone = now.saturating_sub(state.0.ours_seen) > 3;
             let ours_glass = any_virtual && !crate::hide_virtual::is_virtual(ours);
-            if best != ours && (ours == 0 || gone || ours_glass || best_score > ours_score * 1.5) {
+            let ours_wrong = any_driver && crate::rear_camera::side_of_texture(ours) == -driver;
+            if best != ours && (ours == 0 || gone || ours_glass || ours_wrong || best_score > ours_score * 1.5) {
                 log!("retrovisor: our mirror is now {best:#x} (drawn {best_score:.1}, the one before {ours_score:.1})");
                 state.0.ours = best;
                 OURS.store(best, Ordering::Relaxed);
@@ -577,6 +615,10 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
             } else if ours != 0 && crate::rear_camera::ours_wrong_side() {
                 // Ours holding the other side's view a while (the game hands the views round its textures): the
                 // other main mirror drawn is ours now, the driver's side one's (owner 2026-11-18).
+                if HIGH_QUALITY_LAST.load(Ordering::Relaxed) {
+                    let next = OUR_GROUP.fetch_xor(1, Ordering::Relaxed) ^ 1;
+                    log!("retrovisor: our high-quality mirror group is now {next} (the one before held the other side's view)");
+                }
                 let other = state.0.scores.iter()
                     .filter(|(address, _)| **address != ours && (!any_virtual || crate::hide_virtual::is_virtual(**address)))
                     .max_by(|a, b| a.1.total_cmp(b.1))

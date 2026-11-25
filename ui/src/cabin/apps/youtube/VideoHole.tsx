@@ -20,6 +20,7 @@ const GROW_MS = 900
  */
 export function VideoHole({ className, crop = false }: { className: string; crop?: boolean }) {
   const thumbnail = useYouTube((store) => store.current?.thumbnail ?? null)
+  const onHandset = useYouTube((store) => store.onHandset)
   // The screen handed to the truck (Alt+W): the CarPlay area shrinks away, and the picture goes at once.
   const handedOver = useCabin((state) => state.truckScreen)
   const frame = useRef<HTMLSpanElement>(null)
@@ -30,6 +31,12 @@ export function VideoHole({ className, crop = false }: { className: string; crop
     if (!element) return
     if (handedOver) {
       returning.current = true
+      return
+    }
+    // While the in-game iPad/phone currently shows YouTube's video layer, show the crisp thumbnail on the cab
+    // widget instead of cutting an empty black hole (and restore automatically when the iPad is put away).
+    if (onHandset) {
+      useYouTube.setState({ hole: null })
       return
     }
     // The screen it's on, while it comes or goes (CabinApp.tsx's `Screens`).
@@ -114,10 +121,10 @@ export function VideoHole({ className, crop = false }: { className: string; crop
       if (!following) return
       following()
       useYouTube.setState({ hole: null })
-      // Gone (whatever shows it next places it again).
-      command({ action: 'hide' })
+      // Gone (whatever shows it next places it again), unless the in-game iPad/phone now owns the video.
+      if (!useYouTube.getState().onHandset) command({ action: 'hide' })
     }
-  }, [crop, handedOver])
+  }, [crop, handedOver, onHandset])
   // The thumbnail, under the picture (cut out with the page while the picture shows).
   return (
     <span ref={frame} className={className}>

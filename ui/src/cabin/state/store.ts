@@ -24,8 +24,15 @@ import {
   type TruckInfo,
   type VirtualMirrors,
   type LowFront,
+  type BrakeFadeLevel,
+  type BrakeHudCorner,
+  type BrakeHudSize,
   type CursorSize,
+  type AudioOutput,
   type Damping,
+  type PendingLoan,
+  type WalletLoan,
+  type WalletLoanOffer,
 } from '../../shared/host'
 import type { Maneuver, TurnKind } from '../maps/guidance'
 import {
@@ -47,6 +54,16 @@ import {
 import { useKeyboard } from '../keyboard/store'
 import { receiveMapFolder } from '../maps/mapData'
 import { receiveDetours, receiveFollowed, receiveRouteAnswer, receiveRoutes } from '../maps/routeChange'
+import {
+  receiveJobMarketAnswer,
+  receiveJobMarketIcon,
+  receiveJobMarketSnapshot,
+} from '../../handset/jobMarketBridge'
+import {
+  receiveBankAnswer,
+  receiveFleetAnswer,
+  receiveFleetSnapshot,
+} from '../../handset/bankFleetBridge'
 import type { Point, RouteNode } from '../maps/route'
 import { DEFAULT_WALLPAPER_ID } from '../wallpapers'
 import { isReleasedApp } from './apps'
@@ -86,6 +103,12 @@ interface CabinState {
   albumArt: boolean
   /** The apps' text size, a step of `TEXT_SIZES` (Settings › Appearance › Text Size). */
   textSize: number
+  /** Screen brightness (`BRIGHTNESS_LIMITS.min..=1`, Settings › Appearance). */
+  brightness: number
+  /** Show the game's original GPS map inside the Dashboard map card instead of MaxDevMod's blue map (owner 2026-11-22). */
+  useGameMap: boolean
+  /** Transient cutout rect of the Dashboard map card while `useGameMap` is on (not persisted). */
+  mapHole: { x: number; y: number; width: number; height: number; radius: number } | null
   /** The truck's own strip: kept (`auto`) or not, as set in the companion window (the host sends it). */
   oemMode: OemMode
   /** The player's own tone curve (Settings › Equalizer), and whether it plays (Custom) or the speakers as tuned
@@ -110,6 +133,9 @@ interface CabinState {
   setDashboardWidget(widget: DashboardWidget, shown: boolean): void
   setAlbumArt(shown: boolean): void
   setTextSize(step: number): void
+  setBrightness(value: number): void
+  setUseGameMap(on: boolean): void
+  setMapHole(hole: { x: number; y: number; width: number; height: number; radius: number } | null): void
   /** One band of the curve, set in Settings › Equalizer (choosing Custom): played by every player, and kept with
    * WestPlay's settings. */
   setEqualizerBand(band: keyof Equalizer, db: number): void
@@ -132,10 +158,20 @@ interface CabinState {
   setTruckScreen(shown: boolean): void
 }
 
+/** Screen brightness range (Settings › Appearance, owner 2026-11-22): 25%..100% in 5% steps so the screen never
+ * goes completely black by accident. */
+export const BRIGHTNESS_LIMITS = { min: 0.25, max: 1, step: 0.05 } as const
+
+export function toBrightness(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return BRIGHTNESS_LIMITS.max
+  const clamped = Math.min(BRIGHTNESS_LIMITS.max, Math.max(BRIGHTNESS_LIMITS.min, value))
+  return Number(clamped.toFixed(2))
+}
+
 /** What survives a restart of the app: where you were and your choices, never the power state. */
 type Persisted = Pick<
   CabinState,
-  'navigation' | 'appearanceMode' | 'wallpaperId' | 'dashboardWidgets' | 'albumArt' | 'textSize'
+  'navigation' | 'appearanceMode' | 'wallpaperId' | 'dashboardWidgets' | 'albumArt' | 'textSize' | 'brightness' | 'useGameMap'
 >
 
 const ALL_WIDGETS: Record<DashboardWidget, boolean> = { nowPlaying: true, destination: true, weather: true }
@@ -149,6 +185,9 @@ export const useCabin = create<CabinState>()(
       dashboardWidgets: ALL_WIDGETS,
       albumArt: true,
       textSize: DEFAULT_TEXT_SIZE,
+      brightness: BRIGHTNESS_LIMITS.max,
+      useGameMap: false,
+      mapHole: null,
       oemMode: 'auto',
       equalizer: FLAT,
       equalizerCustom: false,
@@ -164,6 +203,9 @@ export const useCabin = create<CabinState>()(
         set((state) => ({ dashboardWidgets: { ...state.dashboardWidgets, [widget]: shown } })),
       setAlbumArt: (albumArt) => set({ albumArt }),
       setTextSize: (step) => set({ textSize: toTextSize(step) }),
+      setBrightness: (value) => set({ brightness: toBrightness(value) }),
+      setUseGameMap: (useGameMap) => set({ useGameMap }),
+      setMapHole: (mapHole) => set({ mapHole }),
       setEqualizerBand: (band, db) => {
         const equalizer = toEqualizer({ ...useCabin.getState().equalizer, [band]: db })
         set({ equalizer, equalizerCustom: true })
@@ -251,12 +293,30 @@ export const useCabin = create<CabinState>()(
         dashboardWidgets: state.dashboardWidgets,
         albumArt: state.albumArt,
         textSize: state.textSize,
+        brightness: state.brightness,
+        useGameMap: state.useGameMap,
       }),
       // Stored data comes from an earlier version of WestPlay (or was edited): keep only what is valid.
       merge: (stored, current) => ({ ...current, ...sanitize(stored as Partial<Persisted> | undefined) }),
     },
   ),
 )
+
+// Keep `useGameMap` live-synced between the handset FloatScreenApp and the cabin Dashboard.
+if (typeof window !== 'undefined') {
+  const cabinKey = IS_DEMO ? 'westplay.cabin.demo' : 'westplay.cabin'
+  window.addEventListener('storage', (event) => {
+    if (event.key !== cabinKey || !event.newValue) return
+    try {
+      const parsed = JSON.parse(event.newValue) as { state?: Partial<Persisted> }
+      if (typeof parsed.state?.useGameMap === 'boolean') {
+        useCabin.setState({ useGameMap: parsed.state.useGameMap })
+      }
+    } catch {
+      // Ignore malformed storage updates.
+    }
+  })
+}
 
 function sanitize(stored: Partial<Persisted> | undefined): Partial<Persisted> {
   if (!stored) return {}
@@ -283,6 +343,8 @@ function sanitize(stored: Partial<Persisted> | undefined): Partial<Persisted> {
   }
   if (typeof stored.albumArt === 'boolean') result.albumArt = stored.albumArt
   if (stored.textSize !== undefined) result.textSize = toTextSize(stored.textSize)
+  if (stored.brightness !== undefined) result.brightness = toBrightness(stored.brightness)
+  if (typeof stored.useGameMap === 'boolean') result.useGameMap = stored.useGameMap
   return result
 }
 
@@ -299,7 +361,19 @@ export interface LiveState {
   /** The player's job (`null`: none). */
   job: JobInfo | null
   /** The player's account, for the phone's Nupay (`null`: not told yet). */
-  wallet: { balance: number | null; currency: GameCurrency; entries: WalletEntry[] } | null
+  wallet: {
+    balance: number | null
+    currency: GameCurrency
+    liveBank: boolean
+    bankUnlocked: boolean
+    loanLimit: number
+    availableCredit: number
+    minAfterRepay: number
+    entries: WalletEntry[]
+    loans: WalletLoan[]
+    offers: WalletLoanOffer[]
+    pendingLoan: PendingLoan | null
+  } | null
   /** The kind of screen the game draws WestPlay on; `null` until it has drawn one. */
   screenLayout: ScreenLayoutId | null
   /** The cities whose garages the player owns, and their headquarters' (none until the host has read their
@@ -378,9 +452,23 @@ export const useCharacterSwitches = create<{
   virtualMirrors: VirtualMirrors
   suspensionAutoReset: boolean
   suspensionAuto: boolean
+  suspensionAutoDelay: number
+  suspensionAutoReturn: number
+  suspensionAutoBrake: number
   suspensionLowFront: LowFront
   suspensionDamping: Damping
   cursorSize: CursorSize
+  audioOutput: AudioOutput
+  brakeFade: boolean
+  brakeFadeLevel: BrakeFadeLevel
+  brakeSquealVolume: number
+  brakeWarningVolume: number
+  brakeHud: boolean
+  brakeHudCorner: BrakeHudCorner
+  brakeHudSize: BrakeHudSize
+  brakeHudOnFoot: boolean
+  brakeSmoke: boolean
+  brakeAlarm: number
   /** Whether the auto reset is in the games' options as chosen (`null`: not said yet). */
   suspensionApplied: boolean | null
   keepScreenOn: boolean
@@ -391,9 +479,23 @@ export const useCharacterSwitches = create<{
   virtualMirrors: 'right',
   suspensionAutoReset: true,
   suspensionAuto: false,
+  suspensionAutoDelay: 3,
+  suspensionAutoReturn: 7,
+  suspensionAutoBrake: 2,
   suspensionLowFront: 'normal',
   suspensionDamping: 'normal',
   cursorSize: 'normal',
+  audioOutput: 'cabin',
+  brakeFade: true,
+  brakeFadeLevel: 'realistic',
+  brakeSquealVolume: 70,
+  brakeWarningVolume: 70,
+  brakeHud: true,
+  brakeHudCorner: 'bottomLeft',
+  brakeHudSize: 'small',
+  brakeHudOnFoot: false,
+  brakeSmoke: true,
+  brakeAlarm: 360,
   suspensionApplied: null,
   keepScreenOn: false,
 }))
@@ -529,8 +631,29 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'wallet':
         useLive.setState({
-          wallet: { balance: message.balance, currency: message.currency ?? 'USD', entries: message.entries },
+          wallet: {
+            balance: message.balance,
+            currency: message.currency ?? 'USD',
+            liveBank: message.liveBank ?? false,
+            bankUnlocked: message.bankUnlocked ?? true,
+            loanLimit: message.loanLimit ?? 0,
+            availableCredit: message.availableCredit ?? 0,
+            minAfterRepay: message.minAfterRepay ?? 0,
+            entries: message.entries,
+            loans: message.loans ?? [],
+            offers: message.offers ?? [],
+            pendingLoan: message.pendingLoan ?? null,
+          },
         })
+        break
+      case 'bankAnswer':
+        receiveBankAnswer(message.id, message.answer)
+        break
+      case 'fleetSnapshot':
+        receiveFleetSnapshot(message.id, message.answer, message.data)
+        break
+      case 'fleetAnswer':
+        receiveFleetAnswer(message.id, message.answer, message.data)
         break
       case 'job':
         useLive.setState({ job: message.data.active ? message.data : null })
@@ -540,6 +663,15 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'routeAnswer':
         receiveRouteAnswer(message.id, message.answer)
+        break
+      case 'jobMarketSnapshot':
+        receiveJobMarketSnapshot(message.id, message.answer, message.data)
+        break
+      case 'jobMarketAnswer':
+        receiveJobMarketAnswer(message.id, message.answer)
+        break
+      case 'jobMarketIcon':
+        receiveJobMarketIcon(message.id, message.dataUrl)
         break
       case 'routes':
         receiveRoutes(message.id, message.routes)
@@ -604,6 +736,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       case 'weather':
         useLive.setState({ weather: message.weather })
         break
+      case 'brakes':
+        useBrakes.setState({ truck: message.truck, trailer: message.trailer, strength: message.strength })
+        break
       case 'screen':
         // A layout this UI doesn't know yet (newer plugin) is treated like a screen without a profile.
         useLive.setState({ screenLayout: isScreenLayoutId(message.layout) ? message.layout : null })
@@ -649,9 +784,32 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           virtualMirrors: message.virtualMirrors ?? was.virtualMirrors,
           suspensionAutoReset: message.suspensionAutoReset ?? was.suspensionAutoReset,
           suspensionAuto: message.suspensionAuto ?? was.suspensionAuto,
+          suspensionAutoDelay:
+            typeof message.suspensionAutoDelay === 'number'
+              ? Math.min(5, Math.max(1, Math.round(message.suspensionAutoDelay)))
+              : was.suspensionAutoDelay,
+          suspensionAutoReturn:
+            typeof message.suspensionAutoReturn === 'number'
+              ? Math.min(15, Math.max(3, Math.round(message.suspensionAutoReturn)))
+              : was.suspensionAutoReturn,
+          suspensionAutoBrake:
+            typeof message.suspensionAutoBrake === 'number'
+              ? Math.min(5, Math.max(1, Math.round(message.suspensionAutoBrake)))
+              : was.suspensionAutoBrake,
           suspensionLowFront: message.suspensionLowFront ?? was.suspensionLowFront,
           suspensionDamping: message.suspensionDamping ?? was.suspensionDamping,
           cursorSize: message.cursorSize ?? was.cursorSize,
+          audioOutput: message.audioOutput ?? was.audioOutput,
+          brakeFade: message.brakeFade ?? was.brakeFade,
+          brakeFadeLevel: message.brakeFadeLevel ?? was.brakeFadeLevel,
+          brakeSquealVolume: message.brakeSquealVolume ?? was.brakeSquealVolume,
+          brakeWarningVolume: message.brakeWarningVolume ?? was.brakeWarningVolume,
+          brakeHud: message.brakeHud ?? was.brakeHud,
+          brakeHudCorner: message.brakeHudCorner ?? was.brakeHudCorner,
+          brakeHudSize: message.brakeHudSize ?? was.brakeHudSize,
+          brakeHudOnFoot: message.brakeHudOnFoot ?? was.brakeHudOnFoot,
+          brakeSmoke: message.brakeSmoke ?? was.brakeSmoke,
+          brakeAlarm: message.brakeAlarm ?? was.brakeAlarm,
           keepScreenOn: message.keepScreenOn ?? was.keepScreenOn,
         }))
         break
@@ -756,6 +914,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
       case 'youtubeSignIn':
         useYouTube.setState({ signingIn: message.open })
         break
+      case 'youtubeHandset':
+        useYouTube.setState({ onHandset: message.on })
+        break
       case 'map':
         receiveMapFolder(message.folder, message.built)
         break
@@ -826,3 +987,11 @@ export function go(action: NavigationAction, origin: LaunchOrigin | null = null)
     animateNavigation(launchFor(before, after, origin), () => useCabin.getState().navigate(action))
   })
 }
+
+/** The brakes now (host brake_fade.rs, the `brakes` message): the discs' °C (the trailer's `null` without one)
+ * and the brake left (percent); `null` until the host says. */
+export const useBrakes = create<{ truck: number | null; trailer: number | null; strength: number | null }>()(() => ({
+  truck: null,
+  trailer: null,
+  strength: null,
+}))

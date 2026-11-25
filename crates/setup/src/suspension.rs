@@ -3,12 +3,17 @@
 //! option for it in its menus: it's a line of its `config.cfg` (in Documents, beside its profiles), which the game
 //! writes back as it closes. So it's changed there with the games closed, as the developer mode is (`developer`).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::game::Kind;
+use crate::low_suspension::Damping;
 
 /// The option's name, as the game writes it.
 const NAME: &str = "g_suspension_auto_reset";
+/// The profile spring stiffness and stability cvars (owner 2026-11-22).
+const CHASSIS_STIFFNESS: &str = "g_suspension_stiffness";
+const CABIN_STIFFNESS: &str = "g_cabin_suspension_stiffness";
+const TRUCK_STABILITY: &str = "g_truck_stability";
 
 /// Whether the game sets the suspension back by itself, as the first game's options found say (`None`: no options
 /// file, or no such line: the game's default, on).
@@ -59,9 +64,96 @@ fn read(text: &str) -> Option<bool> {
     })
 }
 
-/// The options with it set, if that changes them: its line changed, or added at the end.
-fn with(text: &str, on: bool) -> Option<String> {
-    let wanted = format!("uset {NAME} \"{}\"", u8::from(on));
+/// Whether every profile's `config.cfg` already matches the spring stiffness & stability for `damping`
+/// (`Normal` leaves the player's own profile sliders untouched, so it is always applied).
+pub fn stiffness_applied(damping: Damping) -> bool {
+    let Some((chassis_target, cabin_target, stability_target)) = damping.spring_stiffness() else { return true };
+    profile_configs().into_iter().all(|file| {
+        let Ok(text) = std::fs::read_to_string(&file) else { return true };
+        let chassis = read_f32(&text, CHASSIS_STIFFNESS).is_some_and(|v| (v - chassis_target).abs() < 1e-3);
+        let cabin = read_f32(&text, CABIN_STIFFNESS).is_some_and(|v| (v - cabin_target).abs() < 1e-3);
+        let stability = read_f32(&text, TRUCK_STABILITY).is_some_and(|v| (v - stability_target).abs() < 1e-3);
+        chassis && cabin && stability
+    })
+}
+
+/// Sets `g_suspension_stiffness`, `g_cabin_suspension_stiffness`, and `g_truck_stability` in every ETS2/ATS profile's
+/// `config.cfg` (local and Steam Cloud), the games closed; `Normal` leaves profiles untouched.
+pub fn set_stiffness(damping: Damping) -> bool {
+    let Some((chassis_target, cabin_target, stability_target)) = damping.spring_stiffness() else { return true };
+    if crate::game::running() {
+        return false;
+    }
+    let chassis = format!("{chassis_target}");
+    let cabin = format!("{cabin_target}");
+    let stability = format!("{stability_target}");
+    for file in profile_configs() {
+        let _ = set_stiffness_in(&file, &chassis, &cabin, &stability);
+    }
+    true
+}
+
+fn set_stiffness_in(file: &Path, chassis: &str, cabin: &str, stability: &str) -> std::io::Result<()> {
+    let text = match std::fs::read_to_string(file) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let mut current = text;
+    let mut changed = false;
+    for (name, value) in [(CHASSIS_STIFFNESS, chassis), (CABIN_STIFFNESS, cabin), (TRUCK_STABILITY, stability)] {
+        if let Some(updated) = with_cvar(&current, name, value) {
+            current = updated;
+            changed = true;
+        }
+    }
+    if changed {
+        std::fs::write(file, current)?;
+    }
+    Ok(())
+}
+
+/// Every profile's `config.cfg` found across ETS2 and ATS (local `profiles`, `steam_profiles`, and Steam Cloud).
+fn profile_configs() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for documents in crate::places::documents_folders() {
+        for game in Kind::ALL {
+            let game_dir = documents.join(game.name());
+            roots.push(game_dir.join("profiles"));
+            roots.push(game_dir.join("steam_profiles"));
+        }
+    }
+    if let Some(userdata) = crate::places::steam().map(|steam| steam.join("userdata")) {
+        for user in std::fs::read_dir(userdata).into_iter().flatten().flatten() {
+            for game in Kind::ALL {
+                roots.push(user.path().join(game.steam_app()).join("remote").join("profiles"));
+            }
+        }
+    }
+    let mut configs = Vec::new();
+    for root in roots {
+        for entry in std::fs::read_dir(root).into_iter().flatten().flatten() {
+            let cfg = entry.path().join("config.cfg");
+            if cfg.is_file() {
+                configs.push(cfg);
+            }
+        }
+    }
+    configs
+}
+
+fn read_f32(text: &str, name: &str) -> Option<f32> {
+    text.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        (words.next() == Some("uset") && words.next() == Some(name))
+            .then(|| words.next().and_then(|v| v.trim_matches('"').parse::<f32>().ok()))
+            .flatten()
+    })
+}
+
+/// The options with `uset <name> "<value>"` set, if that changes them: its line changed, or added at the end.
+fn with_cvar(text: &str, name: &str, value: &str) -> Option<String> {
+    let wanted = format!("uset {name} \"{value}\"");
     let mut found = false;
     let mut changed = false;
     let mut out: String = text
@@ -70,7 +162,7 @@ fn with(text: &str, on: bool) -> Option<String> {
             let content = line.trim_end_matches(['\r', '\n']);
             let ending = &line[content.len()..];
             let mut words = content.split_whitespace();
-            if words.next() == Some("uset") && words.next() == Some(NAME) {
+            if words.next() == Some("uset") && words.next() == Some(name) {
                 found = true;
                 if content.trim() != wanted {
                     changed = true;
@@ -92,6 +184,11 @@ fn with(text: &str, on: bool) -> Option<String> {
     changed.then_some(out)
 }
 
+/// The options with it set, if that changes them: its line changed, or added at the end.
+fn with(text: &str, on: bool) -> Option<String> {
+    with_cvar(text, NAME, if on { "1" } else { "0" })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +205,16 @@ mod tests {
         assert_eq!(with("uset g_lang \"en\"\n", false).unwrap(), "uset g_lang \"en\"\nuset g_suspension_auto_reset \"0\"\n");
         // A setting whose name only starts the same is another one.
         assert_eq!(read("uset g_suspension_auto_reset_x \"0\"\n"), None);
+    }
+
+    #[test]
+    fn reads_and_sets_spring_stiffness_cvars() {
+        let cfg = "uset g_suspension_stiffness \"0.23\"\r\nuset g_cabin_suspension_stiffness \"0.21\"\r\n";
+        assert!((read_f32(cfg, CHASSIS_STIFFNESS).unwrap() - 0.23).abs() < 1e-4);
+        let stiff = with_cvar(cfg, CHASSIS_STIFFNESS, "2").unwrap();
+        let stiff = with_cvar(&stiff, CABIN_STIFFNESS, "2").unwrap();
+        assert_eq!(stiff, "uset g_suspension_stiffness \"2\"\r\nuset g_cabin_suspension_stiffness \"2\"\r\n");
+        assert!((read_f32(&stiff, CHASSIS_STIFFNESS).unwrap() - 2.0).abs() < 1e-4);
+        assert_eq!(with_cvar(&stiff, CHASSIS_STIFFNESS, "2"), None);
     }
 }

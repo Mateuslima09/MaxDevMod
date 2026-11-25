@@ -138,7 +138,7 @@ function usePowerClock() {
 }
 
 /** Must match --switch-duration in shell/transitions.css. */
-const SWITCH_MS = 420
+const SWITCH_MS = 140
 
 /**
  * The screen for the route. Home and the Dashboard trade places live: the old one stays a moment, moving
@@ -162,7 +162,7 @@ export function Screens({ route }: { route: Route }) {
   // its end. The timer is there only for an animation that never runs.
   useEffect(() => {
     if (!leaving) return
-    const timer = setTimeout(() => setLeaving(null), SWITCH_MS * 3)
+    const timer = setTimeout(() => setLeaving(null), SWITCH_MS + 60)
     return () => clearTimeout(timer)
   }, [leaving])
 

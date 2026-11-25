@@ -12,19 +12,20 @@ body,
   overflow: hidden;
 }
 
-/* iOS's colours, dark and light. */
+/* MAXDEV MOD Light Glassmorphism tokens, dark and light (owner 2026-11-22). */
 .handset {
-  --ios-bg: #000;
-  --ios-group: #1c1c1e;
-  --ios-fill: rgb(120 120 128 / 0.32);
-  --ios-sep: rgb(84 84 88 / 0.6);
-  --ios-label: #fff;
-  --ios-secondary: rgb(235 235 245 / 0.6);
-  --ios-tint: #0a84ff;
-  --ios-red: #ff453a;
+  --ios-bg: #0d0f13;
+  --ios-group: rgb(24 27 33 / 0.84);
+  --ios-card-border: rgb(255 255 255 / 0.11);
+  --ios-fill: rgb(255 255 255 / 0.13);
+  --ios-sep: rgb(255 255 255 / 0.09);
+  --ios-label: #f5f7fa;
+  --ios-secondary: rgb(218 222 232 / 0.66);
+  --ios-tint: #e53935;
+  --ios-red: #e53935;
   --ios-green: #30d158;
-  --ios-material: rgb(30 30 36 / 0.8);
-  --ios-material-edge: rgb(255 255 255 / 0.1);
+  --ios-material: rgb(22 25 31 / 0.8);
+  --ios-material-edge: rgb(255 255 255 / 0.12);
   --edge: 12px;
   --tile-gap: 10px;
   --panel-radius: 22px;
@@ -45,22 +46,34 @@ body,
 
 .handset.appearance-light {
   --ios-bg: #f2f2f7;
-  --ios-group: #fff;
-  --ios-fill: rgb(118 118 128 / 0.12);
-  --ios-sep: rgb(60 60 67 / 0.29);
-  --ios-label: #000;
-  --ios-secondary: rgb(60 60 67 / 0.6);
-  --ios-tint: #007aff;
-  --ios-red: #ff3b30;
+  --ios-group: rgb(255 255 255 / 0.88);
+  --ios-card-border: rgb(20 22 26 / 0.1);
+  --ios-fill: rgb(118 118 128 / 0.14);
+  --ios-sep: rgb(60 60 67 / 0.22);
+  --ios-label: #14161a;
+  --ios-secondary: rgb(60 60 67 / 0.64);
+  --ios-tint: #d32f2f;
+  --ios-red: #d32f2f;
   --ios-green: #34c759;
-  --ios-material: rgb(255 255 255 / 0.85);
-  --ios-material-edge: rgb(255 255 255 / 0.5);
+  --ios-material: rgb(255 255 255 / 0.86);
+  --ios-material-edge: rgb(255 255 255 / 0.55);
 }
 
 .handset button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 120ms ease,
+    opacity 140ms ease;
+}
+
+.handset button:disabled {
+  opacity: 0.42;
+  cursor: default;
 }
 
 .handset-screen {
@@ -97,6 +110,15 @@ body,
 /* The pickers in Settings show their wallpaper. */
 .ios-wallpaper {
   background: var(--wallpaper) !important;
+}
+
+.wallpaper-maxdevmod {
+  --wallpaper:
+    url('/maxdevmod-logo.png') center 46% / 84% auto no-repeat,
+    radial-gradient(85% 45% at 50% 46%, rgba(220, 28, 38, 0.34) 0%, rgba(120, 12, 20, 0.14) 45%, transparent 72%),
+    radial-gradient(75% 45% at 15% 10%, rgba(255, 50, 50, 0.22) 0%, transparent 65%),
+    radial-gradient(80% 50% at 88% 92%, rgba(185, 20, 32, 0.26) 0%, transparent 70%),
+    linear-gradient(160deg, #0b0c10 0%, #151118 48%, #09090d 100%);
 }
 
 .wallpaper-aurora {
@@ -663,8 +685,12 @@ body,
 }
 
 .ios-list {
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--ios-group);
+  border: 1px solid var(--ios-card-border);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 4px 14px rgb(0 0 0 / 0.22);
   overflow: hidden;
 }
 
@@ -781,28 +807,35 @@ body,
 .ios-segmented {
   flex: none;
   display: flex;
-  padding: 2px;
-  border-radius: 9px;
+  padding: 3px;
+  border-radius: 999px;
   background: var(--ios-fill);
+  border: 1px solid var(--ios-card-border);
 }
 
 .ios-segmented button {
   padding: 5px 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 999px;
   background: none;
   font-size: 13px !important;
   font-weight: 500;
 }
 
+.ios-segmented button:active {
+  transform: scale(0.96);
+}
+
 .ios-segmented button.on {
-  background: #636366 !important;
+  background: var(--ios-tint) !important;
+  color: #fff !important;
   font-weight: 650;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.2);
+  box-shadow: 0 2px 8px rgb(229 57 53 / 0.32);
 }
 
 .appearance-light .ios-segmented button.on {
-  background: #fff !important;
+  background: var(--ios-tint) !important;
+  color: #fff !important;
 }
 
 .handset .phone-volume {
@@ -966,10 +999,19 @@ body,
 /* A choice as wide as its row. */
 .ios-row-label .ios-segmented {
   display: flex;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ios-row-label .ios-segmented button {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 4px;
+  font-size: 12px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The real icons (the cab's): the image is the whole icon, its own colours and gloss. */
@@ -990,9 +1032,13 @@ body,
 /* Settings: the wallpapers to choose from, each a little phone of it. */
 .ios-wallpapers {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   padding: 12px;
+}
+
+.handset.is-ipad .ios-wallpapers {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .handset .ios-wallpaper {
@@ -1022,6 +1068,26 @@ body,
   font-weight: 600;
 }
 
+.handset .ios-tone-row {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.handset .ios-tone-row.on {
+  font-weight: 600;
+}
+
+.ios-tone-check {
+  color: var(--ios-tint);
+  font-weight: 700;
+  font-size: 16px;
+}
+
 /* ===== Nupay (NupayApp.tsx): the bank's purple head, its totals, the history by day. ===== */
 
 .ios-icon-nupay {
@@ -1035,18 +1101,47 @@ body,
 .nupay {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .nupay-head {
   margin: 0 -16px;
-  padding: 10px 22px 26px;
-  background: linear-gradient(180deg, #8a19d6, #6a0dad);
+  padding: 14px 20px 20px;
+  background: linear-gradient(160deg, #8a19d6, #5c0a99);
   color: #fff;
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.nupay-tabs {
+  display: flex;
+}
+
+.nupay-tabs .ios-segmented {
+  width: 100%;
+  box-sizing: border-box;
+  gap: 4px;
+}
+
+.nupay-tabs .ios-segmented button {
+  flex: 1 1 0;
+  padding: 7px 10px;
+  font-size: 13.5px !important;
+}
+
+.nupay-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.nupay-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .nupay-hello {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   opacity: 0.85;
 }
@@ -1063,7 +1158,7 @@ body,
 }
 
 .nupay-balance-value {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 750;
   letter-spacing: -0.02em;
 }
@@ -1085,7 +1180,7 @@ body,
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-top: -30px;
+  margin-top: 0;
 }
 
 .nupay-total {
@@ -1095,16 +1190,18 @@ body,
   padding: 12px 14px;
   border-radius: 16px;
   background: var(--ios-group);
+  border: 1px solid var(--ios-card-border);
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
 }
 
 .nupay-total span {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ios-secondary);
 }
 
 .nupay-total strong {
-  font-size: 17px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 .nupay-total.in strong {
@@ -1115,10 +1212,111 @@ body,
   color: var(--ios-red);
 }
 
+.nupay-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgb(48 209 88 / 0.14);
+  border: 1px solid rgb(48 209 88 / 0.35);
+}
+
+.nupay-pending-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.nupay-pending-info strong {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ios-green);
+}
+
+.nupay-pending-info span {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ios-label);
+  opacity: 0.86;
+}
+
+.handset .nupay-pending-cancel {
+  flex: none;
+  padding: 6px 11px;
+  border: 1px solid rgb(229 57 53 / 0.45);
+  border-radius: 999px;
+  background: rgb(229 57 53 / 0.16);
+  color: var(--ios-red);
+  font-size: 12.5px !important;
+  font-weight: 650;
+}
+
+.nupay-loan-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  padding: 12px 14px;
+}
+
+.nupay-loan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nupay-loan-rate {
+  font-size: 12.5px;
+  color: var(--ios-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.nupay-loan-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ios-fill);
+  overflow: hidden;
+}
+
+.nupay-loan-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #9a33e6, var(--ios-tint));
+}
+
+.nupay-offer {
+  min-height: 58px;
+  padding: 10px 14px;
+}
+
+.nupay-offer.selected {
+  background: rgb(48 209 88 / 0.12) !important;
+}
+
+.nupay-offer-pill {
+  flex: none;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgb(229 57 53 / 0.16);
+  border: 1px solid rgb(229 57 53 / 0.35);
+  color: var(--ios-tint);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.nupay-offer-pill.selected {
+  background: var(--ios-green);
+  border-color: var(--ios-green);
+  color: #09130c;
+}
+
 .nupay-title {
-  margin: 4px 0 -6px 2px;
-  font-size: 22px;
-  font-weight: 750;
+  margin: 0 0 0 2px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 /* The history's title, and beside it its "Clear" (NupayApp.tsx), asked once more before it goes. */
@@ -3205,9 +3403,12 @@ body,
 }
 
 /* The volume keys on the phone's left side, as an iPhone's (SideKeys.tsx): the phone a little narrower, so they
-   stand out of its edge in the strip it leaves; each wider than it looks, to be easy to hit. */
+   stand out of its edge in the strip it leaves; each wider than it looks, to be easy to hit.
+   `width: auto` overrides `.shell`'s `width: 100%` so `left: 5px; right: 0` doesn't push the right bezel 5 px past
+   the viewport (owner 2026-11-22). */
 .handset.with-keys {
   left: 5px;
+  width: auto;
   overflow: visible;
 }
 
@@ -3258,7 +3459,7 @@ body,
   border-radius: 15px;
   overflow: hidden;
   background: rgb(60 60 66 / 0.75);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(5px);
   color: #fff;
   z-index: 40;
   display: flex;
@@ -3288,4 +3489,2671 @@ body,
     opacity: 0;
     transform: translateX(-6px);
   }
+}
+
+/* The Freios app's discs (BrakesApp.tsx). */
+.ios-brake-discs {
+  display: flex;
+  justify-content: space-around;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.ios-brake-disc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.ios-brake-disc b {
+  font-size: 17px;
+}
+
+/* ===== Bolsa de Fretes / Job Market (JobMarketApp.tsx) ===== */
+.ios-icon-jobMarket {
+  background: linear-gradient(180deg, #10b981, #047857);
+}
+
+.jm-root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.jm-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jm-controls .ios-segmented {
+  width: 100%;
+  display: flex;
+}
+
+.jm-controls .ios-segmented button {
+  flex: 1;
+}
+
+.jm-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jm-search {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 10px;
+  border: 0;
+  font-size: 13px;
+  background: rgb(118 118 128 / 0.16);
+  color: inherit;
+  outline: none;
+}
+
+.jm-search::placeholder {
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-refresh {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(16 185 129 / 0.16);
+  color: #10b981;
+  cursor: pointer;
+}
+
+.jm-refresh.spinning svg {
+  animation: jm-spin 0.8s linear infinite;
+}
+
+@keyframes jm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.jm-sort-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.jm-pill {
+  height: 28px;
+  border-radius: 8px;
+  border: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgb(118 118 128 / 0.14);
+  color: inherit;
+  cursor: pointer;
+}
+
+.jm-pill.on {
+  background: #10b981;
+  color: #fff;
+}
+
+.jm-city-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.jm-city-row::-webkit-scrollbar {
+  display: none;
+}
+
+.jm-chip {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  border: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: rgb(118 118 128 / 0.14);
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jm-chip.on {
+  background: #0a84ff;
+  color: #fff;
+}
+
+.jm-toast {
+  padding: 9px 12px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.jm-toast.ok {
+  background: rgb(48 209 88 / 0.18);
+  color: #16a34a;
+}
+
+.appearance-dark .jm-toast.ok {
+  color: #4ade80;
+}
+
+.jm-toast.err {
+  background: rgb(255 69 58 / 0.18);
+  color: #dc2626;
+}
+
+.appearance-dark .jm-toast.err {
+  color: #ff6961;
+}
+
+.jm-banner {
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.jm-banner.warn {
+  background: rgb(255 159 10 / 0.16);
+  color: #b45309;
+}
+
+.appearance-dark .jm-banner.warn {
+  color: #fbbf24;
+}
+
+.jm-banner.info {
+  background: rgb(10 132 255 / 0.15);
+  color: #1d4ed8;
+}
+
+.appearance-dark .jm-banner.info {
+  color: #60a5fa;
+}
+
+.jm-banner.note {
+  background: rgb(118 118 128 / 0.14);
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--ios-muted, #8e8e93);
+  padding: 0 2px;
+}
+
+.jm-est {
+  font-size: 10.5px;
+  opacity: 0.85;
+}
+
+.jm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.jm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: var(--ios-card, #fff);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.appearance-dark .jm-card {
+  background: #1c1c1e;
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
+}
+
+.jm-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jm-cargo {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jm-pay {
+  flex: none;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+.appearance-dark .jm-pay {
+  color: #30d158;
+}
+
+.jm-route {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.jm-stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.jm-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.jm-dot.origin {
+  background: #30d158;
+}
+
+.jm-dot.dest {
+  background: #ff453a;
+}
+
+.jm-city {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.jm-co {
+  font-size: 11px;
+  color: var(--ios-muted, #8e8e93);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-near {
+  color: #0a84ff;
+  font-weight: 600;
+}
+
+.jm-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.jm-tag {
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.jm-tag.red {
+  background: rgb(255 69 58 / 0.16);
+  color: #ef4444;
+}
+
+.jm-tag.amber {
+  background: rgb(255 159 10 / 0.18);
+  color: #d97706;
+}
+
+.jm-tag.blue {
+  background: rgb(10 132 255 / 0.16);
+  color: #2563eb;
+}
+
+.jm-tag.purple {
+  background: rgb(168 85 247 / 0.16);
+  color: #9333ea;
+}
+
+.jm-tag.orange {
+  background: rgb(249 115 22 / 0.16);
+  color: #ea580c;
+}
+
+.jm-tag.teal {
+  background: rgb(20 184 166 / 0.16);
+  color: #0d9488;
+}
+
+.jm-tag.slate {
+  background: rgb(118 118 128 / 0.16);
+  color: #64748b;
+}
+
+.appearance-dark .jm-tag.amber {
+  color: #fbbf24;
+}
+
+.appearance-dark .jm-tag.blue {
+  color: #60a5fa;
+}
+
+.appearance-dark .jm-tag.purple {
+  color: #c084fc;
+}
+
+.appearance-dark .jm-tag.orange {
+  color: #fb923c;
+}
+
+.appearance-dark .jm-tag.teal {
+  color: #2dd4bf;
+}
+
+.appearance-dark .jm-tag.slate {
+  color: #cbd5e1;
+}
+
+.jm-exp {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.handset .jm-details-btn {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgb(10 132 255 / 0.16) !important;
+  color: #0a84ff !important;
+  cursor: pointer;
+}
+
+.appearance-dark .handset .jm-details-btn,
+.handset.appearance-dark .jm-details-btn {
+  background: rgb(10 132 255 / 0.22) !important;
+  color: #60a5fa !important;
+}
+
+.handset .jm-accept {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: #10b981 !important;
+  color: #fff !important;
+  cursor: pointer;
+}
+
+.handset .jm-accept.jm-accept-lg {
+  height: 38px;
+  font-size: 13.5px;
+  border-radius: 11px;
+}
+
+.handset .jm-accept:disabled {
+  opacity: 0.36;
+  cursor: default;
+}
+
+.jm-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 18px;
+}
+
+.handset .jm-back-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: rgb(118 118 128 / 0.16) !important;
+  color: #0a84ff !important;
+  cursor: pointer;
+}
+
+.jm-detail-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--ios-card, #fff);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.appearance-dark .jm-detail-hero,
+.appearance-dark .jm-detail-card,
+.appearance-dark .jm-detail-cell {
+  background: #1c1c1e;
+  box-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.08);
+}
+
+.jm-detail-img-wrap {
+  width: 100%;
+  height: 128px;
+  border-radius: 11px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 45%, rgb(16 185 129 / 0.14), rgb(118 118 128 / 0.12));
+}
+
+.jm-detail-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.jm-detail-img.is-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.jm-detail-img-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jm-detail-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.jm-detail-pay {
+  flex: none;
+  font-size: 16px;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+.appearance-dark .jm-detail-pay {
+  color: #30d158;
+}
+
+.jm-detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: var(--ios-card, #fff);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.jm-detail-stop {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.jm-detail-stop .jm-dot {
+  margin-top: 5px;
+}
+
+.jm-detail-stop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.jm-detail-stop-text strong {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.jm-detail-kicker {
+  font-size: 10.5px;
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-detail-divider {
+  height: 1px;
+  background: rgb(118 118 128 / 0.16);
+  margin-left: 16px;
+}
+
+.jm-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.jm-detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: var(--ios-card, #fff);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+}
+
+.jm-detail-cell.wide {
+  grid-column: 1 / -1;
+}
+
+.jm-detail-cell span {
+  font-size: 10.5px;
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-detail-cell strong {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.jm-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  background: rgb(255 159 10 / 0.14);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.jm-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.handset .jm-btn {
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.handset .jm-btn.cancel {
+  background: rgb(118 118 128 / 0.24) !important;
+  color: inherit;
+}
+
+.handset .jm-btn.primary {
+  background: #10b981 !important;
+  color: #fff !important;
+}
+
+.jm-more,
+.jm-retry {
+  height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: #10b981 !important;
+  color: #fff !important;
+  cursor: pointer;
+}
+
+.jm-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 14px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ios-muted, #8e8e93);
+}
+
+.jm-empty p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ===== Vertical iPad (iPadOS) Mode (HandsetApp.tsx + Home.tsx) ===== */
+.handset.is-ipad {
+  padding: 11px;
+  border-radius: 30px;
+  background: linear-gradient(145deg, #45474f, #17181d 40%, #2c2e35);
+  box-shadow:
+    inset 0 0 0 1.5px rgb(255 255 255 / 0.22),
+    inset 0 0 0 3px rgb(0 0 0 / 0.55);
+}
+
+.handset.is-ipad .handset-screen {
+  border-radius: 20px;
+}
+
+.handset.is-ipad .ios-status.is-ipad {
+  height: auto;
+  padding: 9px 20px 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ipad-status-day {
+  margin-left: 4px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.handset.is-ipad .ios-home-indicator {
+  width: 175px;
+}
+
+.ipad-home {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.ipad-page {
+  padding: 8px 22px 0;
+  gap: 16px;
+}
+
+.ipad-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: none;
+}
+
+.ipad-widgets-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ipad-widgets-top .ios-widget {
+  aspect-ratio: auto;
+  min-width: 0;
+  height: 92px;
+  min-height: 92px;
+  max-height: 92px;
+  padding: 12px 16px;
+  justify-content: space-between;
+}
+
+.ipad-widgets-bottom {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.ipad-widget-music {
+  flex: 1.35 1 0;
+  min-width: 0;
+  min-height: 118px;
+}
+
+.ipad-widget-music .widget {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ipad-widgets-bottom .ios-widget-arrival {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.ipad-widget-map {
+  height: 215px;
+  min-height: 215px;
+  max-height: 215px;
+  flex: none;
+}
+
+.ipad-home .ios-grid {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px 6px;
+}
+
+.ipad-home .ios-app-label {
+  font-size: 11.5px;
+}
+
+.ipad-home .ios-clock-time {
+  font-size: 32px;
+  line-height: 1.05;
+}
+
+.ipad-dock {
+  margin: 0 auto 18px;
+  padding: 10px 18px;
+  gap: 14px;
+  border-radius: 28px;
+  justify-content: center;
+}
+
+.handset.is-ipad .ios-content {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.handset.is-ipad .ios-content-tiktok,
+.handset.is-ipad .ios-content-youtube,
+.handset.is-ipad .compact .ios-content {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.handset.is-ipad .ios-large-title {
+  font-size: 30px;
+}
+
+/* Job Market (Cargas) in iPad mode: crisp 2-column grid with strict minmax(0, 1fr) so nothing clips! */
+.handset.is-ipad .ios-content-jobMarket {
+  overflow-x: hidden;
+}
+
+.handset.is-ipad .jm-root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.handset.is-ipad .jm-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.handset.is-ipad .jm-card {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.handset.is-ipad .jm-card-top,
+.handset.is-ipad .jm-stop,
+.handset.is-ipad .jm-card-foot {
+  min-width: 0;
+}
+
+.handset.is-ipad .jm-cargo {
+  font-size: 12.5px;
+}
+
+.handset.is-ipad .jm-pay {
+  font-size: 13px;
+}
+
+.handset.is-ipad .jm-card-actions {
+  gap: 6px;
+}
+
+.handset.is-ipad .jm-details-btn,
+.handset.is-ipad .jm-accept {
+  font-size: 11.5px;
+  padding: 0 6px;
+}
+
+.handset.is-ipad .jm-detail-img-wrap {
+  height: 184px;
+}
+
+.handset.is-ipad .jm-detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* ===== In-game Phone / iPad Search TextField & On-Screen Keyboard ===== */
+.jm-search-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.jm-search-field .text-field {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgb(118 118 128 / 0.18);
+  font-size: 13px;
+  gap: 7px;
+  display: flex;
+  align-items: center;
+  cursor: text;
+}
+
+.jm-search-field .text-field.typing {
+  box-shadow: 0 0 0 1.5px #0a84ff;
+}
+
+.jm-search-field .text-field-text {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.jm-search-field .text-field-clear {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+}
+
+.jm-search-icon {
+  flex: none;
+  opacity: 0.6;
+}
+
+.handset-keyboard {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.handset-keyboard .keyboard {
+  pointer-events: auto;
+  left: 6px;
+  right: 6px;
+  bottom: 18px;
+  height: 192px;
+  padding: 8px 5px;
+  gap: 5px;
+  --gap: 3px;
+  border-radius: 16px;
+  z-index: 30;
+}
+
+.handset-keyboard .keyboard .key {
+  border-radius: 7px;
+  font-size: 14px;
+}
+
+.handset-keyboard .keyboard .key-return {
+  font-size: 12px;
+}
+
+.handset-keyboard .keyboard-chip {
+  font-size: 11px;
+  padding: 3px 10px;
+  top: -28px;
+}
+
+.handset.is-ipad .handset-keyboard .keyboard {
+  left: 12px;
+  right: 12px;
+  bottom: 20px;
+  height: 228px;
+  padding: 10px 8px;
+  gap: 7px;
+  --gap: 5px;
+  border-radius: 18px;
+}
+
+.handset.is-ipad .handset-keyboard .keyboard .key {
+  border-radius: 9px;
+  font-size: 17px;
+}
+
+.handset.is-ipad .handset-keyboard .keyboard .key-return {
+  font-size: 13.5px;
+}
+
+/* ===== iPad Bezel Ring when TikTok or YouTube cuts a transparent video hole ===== */
+.handset.is-ipad.on-tiktok,
+.handset.is-ipad.on-youtube {
+  background: none;
+  box-shadow:
+    inset 0 0 0 1.5px rgb(255 255 255 / 0.22),
+    inset 0 0 0 14px #16171b;
+}
+
+.handset.on-youtube:not(.is-ipad) {
+  background: none;
+  box-shadow:
+    inset 0 0 0 1.5px rgb(255 255 255 / 0.18),
+    inset 0 0 0 7px #1b1c20;
+}
+
+.handset-screen.on-youtube {
+  background: transparent;
+  color: #fff;
+}
+
+.handset-screen.on-youtube .ios-status {
+  background: #0f0f0f;
+}
+
+/* ===== YouTube App Icon & Native iPadOS YouTube Layout (IpadYouTubeApp.tsx) ===== */
+.ios-icon-youtube {
+  background: #ffffff;
+  color: #ff0000;
+}
+
+.ios-app-screen.is-youtube {
+  animation: none;
+  background: transparent;
+}
+
+.ios-content-youtube {
+  gap: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  background: transparent;
+}
+
+.yt-ipad-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: #f1f1f1;
+  background: transparent;
+}
+
+.yt-ipad-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 8px;
+  background: #0f0f0f;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.yt-ipad-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px 5px 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #ff453a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.yt-ipad-back svg {
+  width: 9px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.yt-ipad-search-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.yt-ipad-search-wrap .text-field {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 16px;
+  background: #222222;
+  color: #f1f1f1;
+  font-size: 12.5px;
+  gap: 6px;
+  display: flex;
+  align-items: center;
+  cursor: text;
+}
+
+.yt-ipad-search-wrap .text-field.typing {
+  box-shadow: 0 0 0 1.5px #3ea6ff;
+}
+
+.yt-ipad-search-wrap .text-field-text {
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+
+.yt-ipad-search-wrap .text-field-clear {
+  width: 20px;
+  height: 20px;
+}
+
+.yt-ipad-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: #222222;
+  color: #f1f1f1;
+  font-size: 13px;
+  outline: none;
+}
+
+.yt-ipad-account-wrap {
+  position: relative;
+  flex: none;
+}
+
+.yt-ipad-avatar-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ff0000;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.yt-ipad-avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.yt-ipad-signin-btn {
+  flex: none;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 15px;
+  border: 1px solid rgb(62 166 255 / 0.45);
+  background: rgb(62 166 255 / 0.14);
+  color: #3ea6ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.yt-ipad-account-menu {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 20;
+  padding: 4px;
+  border-radius: 10px;
+  background: #282828;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.6);
+}
+
+.yt-ipad-account-menu button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #ff6961;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Video Stage: transparent hole over the live YouTube WebView */
+.yt-ipad-stage-wrap {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.yt-ipad-video-hole {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 298px;
+  background: transparent;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.yt-ipad-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.yt-ipad-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.68) 0%, rgb(0 0 0 / 0.25) 50%, rgb(0 0 0 / 0.78) 100%);
+  color: #fff;
+}
+
+.yt-ipad-overlay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.yt-ipad-overlay-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-ipad-icon-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.yt-ipad-overlay-mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.yt-ipad-ctrl-btn {
+  min-width: 40px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 18px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.yt-ipad-ctrl-btn.is-main {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgb(255 0 0 / 0.9);
+  font-size: 17px;
+}
+
+.yt-ipad-overlay-bot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.yt-ipad-scrub {
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.yt-ipad-scrub-track {
+  height: 4px;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 0.3);
+  overflow: hidden;
+}
+
+.yt-ipad-scrub-fill {
+  height: 100%;
+  background: #ff0000;
+}
+
+.yt-ipad-bot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.yt-ipad-time {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.yt-ipad-live-dot {
+  color: #ff453a;
+  font-weight: 700;
+}
+
+.yt-ipad-bot-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yt-ipad-pill-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.58);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.yt-ipad-qual-wrap {
+  position: relative;
+}
+
+.yt-ipad-qual-menu {
+  position: absolute;
+  bottom: 28px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgb(24 24 24 / 0.96);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.6);
+  z-index: 25;
+}
+
+.yt-ipad-qual-menu button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f1f1f1;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.yt-ipad-qual-menu button.active {
+  background: #ff0000;
+  font-weight: 700;
+}
+
+.yt-ipad-nowbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #181818;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.yt-ipad-nowbar-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yt-ipad-nowbar-copy strong {
+  font-size: 13px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-ipad-nowbar-copy span {
+  font-size: 11.5px;
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-ipad-nowbar-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #2a2a2a;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Scrollable dark body below the video */
+.yt-ipad-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 12px 34px;
+  background: #0f0f0f;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.yt-ipad-nav-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.yt-ipad-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.yt-ipad-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.yt-ipad-catbar {
+  display: flex;
+  gap: 7px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: none;
+}
+
+.yt-ipad-catbar::-webkit-scrollbar {
+  display: none;
+}
+
+.yt-ipad-cat {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f1f1;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.yt-ipad-cat:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.yt-ipad-cat.active {
+  background: #f1f1f1;
+  color: #0f0f0f;
+  font-weight: 600;
+}
+
+.yt-ipad-tabs button {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #272727;
+  color: #f1f1f1;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.yt-ipad-tabs button.active {
+  background: #f1f1f1;
+  color: #0f0f0f;
+}
+
+.yt-ipad-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.yt-ipad-subhead-title {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-ipad-subhead-clear {
+  flex: none;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #272727;
+  color: #f1f1f1;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.yt-ipad-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.yt-ipad-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.yt-ipad-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: #1a1a1a;
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.yt-ipad-welcome-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.yt-ipad-welcome-copy strong {
+  font-size: 14px;
+}
+
+.yt-ipad-welcome-copy span {
+  font-size: 12px;
+  color: #aaa;
+  line-height: 1.3;
+}
+
+.yt-ipad-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.yt-ipad-topic {
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 16px;
+  background: #242424;
+  color: #f1f1f1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.yt-ipad-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.handset.is-ipad .yt-ipad-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.yt-ipad-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #181818;
+  color: #f1f1f1;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.yt-ipad-card.is-playing {
+  box-shadow: inset 0 0 0 1.5px #ff0000;
+}
+
+.yt-ipad-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+}
+
+.yt-ipad-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.yt-ipad-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.82);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.yt-ipad-badge.is-live {
+  background: #cc0000;
+}
+
+.yt-ipad-card-info {
+  padding: 2px 9px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.yt-ipad-card-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.yt-ipad-card-meta {
+  font-size: 11px;
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-ipad-channels {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.yt-ipad-channel-pill {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: #1f1f1f;
+  color: #f1f1f1;
+  text-align: left;
+  cursor: pointer;
+  max-width: 220px;
+}
+
+.yt-ipad-channel-pill img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+
+.yt-ipad-channel-pill img.is-pl {
+  border-radius: 6px;
+}
+
+.yt-ipad-channel-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.yt-ipad-channel-meta strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yt-ipad-channel-meta span {
+  font-size: 10.5px;
+  color: #aaa;
+}
+
+.yt-ipad-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.yt-ipad-sug-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #1a1a1a;
+  color: #f1f1f1;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.yt-ipad-sug-ico,
+.yt-ipad-sug-row svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.yt-ipad-live-results {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.yt-ipad-sug-row.primary {
+  background: #262626;
+  font-weight: 600;
+}
+
+.yt-ipad-sug-hist {
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+.yt-ipad-empty {
+  margin: 18px 0;
+  text-align: center;
+  font-size: 13px;
+  color: #aaa;
+}
+
+.yt-ipad-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.yt-ipad-retry,
+.yt-ipad-more {
+  align-self: center;
+  height: 34px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 17px;
+  background: #272727;
+  color: #f1f1f1;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ===== Active Job Card & Cancel Button (JobMarketApp.tsx + FreightApp) ===== */
+.jm-active-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: rgb(255 159 10 / 0.12);
+  border: 1px solid rgb(255 159 10 / 0.35);
+}
+
+.appearance-dark .jm-active-card {
+  background: linear-gradient(180deg, rgb(255 159 10 / 0.14), rgb(28 28 30 / 0.92));
+  border-color: rgb(255 159 10 / 0.38);
+}
+
+.jm-active-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jm-active-head-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+}
+
+.jm-active-badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #ff9f0a;
+  color: #111;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.jm-active-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handset .jm-active-toggle {
+  flex: none;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(118 118 128 / 0.22);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.jm-active-body {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.jm-active-thumb {
+  flex: none;
+  width: 96px;
+  height: 62px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #111;
+}
+
+.handset.is-ipad .jm-active-thumb {
+  width: 136px;
+  height: 78px;
+}
+
+.jm-active-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.jm-active-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.jm-active-pay {
+  font-size: 14px;
+  font-weight: 800;
+  color: #30d158;
+}
+
+.handset .jm-cancel-btn {
+  width: 100%;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: rgb(255 69 58 / 0.18) !important;
+  color: #ff453a !important;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.handset .jm-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.jm-confirm.jm-confirm-danger {
+  background: rgb(255 69 58 / 0.14);
+  border: 1px solid rgb(255 69 58 / 0.35);
+}
+
+.handset .jm-btn.danger {
+  background: #ff453a !important;
+  color: #fff !important;
+}
+
+.freight-cancel-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+
+/* ===== Upgraded Live Nupay Bank & Loans (NupayApp.tsx) ===== */
+.nupay-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nupay-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.nupay-live-pill.on {
+  background: rgba(48, 209, 88, 0.22);
+  color: #a7f3d0;
+}
+
+.nupay-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.nupay-toast {
+  margin: 0 14px 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nupay-toast.ok {
+  background: rgba(48, 209, 88, 0.18);
+  border: 1px solid rgba(48, 209, 88, 0.38);
+  color: #15803d;
+}
+
+.appearance-dark .nupay-toast.ok {
+  color: #86efac;
+}
+
+.nupay-toast.err {
+  background: rgba(255, 69, 58, 0.16);
+  border: 1px solid rgba(255, 69, 58, 0.36);
+  color: #b91c1c;
+}
+
+.appearance-dark .nupay-toast.err {
+  color: #fca5a5;
+}
+
+.nupay-credit-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--ios-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.nupay-credit-head,
+.nupay-credit-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.nupay-credit-head span {
+  color: var(--ios-muted);
+  font-weight: 600;
+}
+
+.nupay-credit-head strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: #820ad1;
+}
+
+.appearance-dark .nupay-credit-head strong {
+  color: #c084fc;
+}
+
+.nupay-credit-sub {
+  font-size: 11px;
+  color: var(--ios-muted);
+}
+
+.nupay-loan-bar-fill.credit {
+  background: linear-gradient(90deg, #820ad1, #a855f7);
+}
+
+.nupay-loan-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nupay-loan-sub-label {
+  font-size: 11px;
+  color: var(--ios-muted);
+}
+
+.nupay-loan-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+  font-size: 11.5px;
+  color: var(--ios-muted);
+  margin-top: 2px;
+}
+
+.nupay-loan-metrics strong {
+  color: var(--ios-text);
+}
+
+.nupay-loan-actions {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.nupay-repay-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(130, 10, 209, 0.14);
+  color: #820ad1;
+  cursor: pointer;
+}
+
+.appearance-dark .nupay-repay-btn {
+  background: rgba(168, 85, 247, 0.22);
+  color: #e9d5ff;
+}
+
+.nupay-repay-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nupay-repay-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(130, 10, 209, 0.12);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.nupay-repay-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.nupay-repay-btns button {
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--ios-surface-2);
+  color: var(--ios-text);
+  cursor: pointer;
+}
+
+.nupay-repay-btns button.primary {
+  background: #820ad1;
+  color: #ffffff;
+}
+
+.nupay-offer.locked {
+  opacity: 0.55;
+}
+
+.nupay-offer-total {
+  opacity: 0.78;
+}
+
+.nupay-offer-pill.disabled {
+  background: rgba(142, 142, 147, 0.22);
+  color: var(--ios-muted);
+}
+
+.nupay-kind-loan {
+  background: rgba(130, 10, 209, 0.16);
+  color: #820ad1;
+}
+
+.appearance-dark .nupay-kind-loan {
+  background: rgba(168, 85, 247, 0.24);
+  color: #d8b4fe;
+}
+
+.nupay-kind-loanRepay {
+  background: rgba(48, 209, 88, 0.18);
+  color: #16a34a;
+}
+
+.appearance-dark .nupay-kind-loanRepay {
+  color: #86efac;
+}
+
+/* ===== Minha Empresa / Garagem (GarageApp.tsx) ===== */
+.ios-icon-garage {
+  background: linear-gradient(155deg, #1d4ed8 0%, #0f172a 100%);
+}
+
+.ios-content-garage {
+  padding-top: 0 !important;
+}
+
+.garage-app {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+.garage-hero {
+  background: linear-gradient(150deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+  color: #ffffff;
+  border-radius: 18px;
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.24);
+}
+
+.garage-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.garage-kicker {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  color: #93c5fd;
+  margin-bottom: 2px;
+}
+
+.garage-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.garage-refresh-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.garage-refresh-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.garage-refresh-btn.spinning svg {
+  animation: garage-spin 0.8s linear infinite;
+}
+
+@keyframes garage-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.garage-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.garage-stat {
+  background: rgba(255, 255, 255, 0.11);
+  border-radius: 11px;
+  padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.garage-stat span {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.garage-stat strong {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.garage-stat.money strong {
+  color: #86efac;
+  font-size: 11.5px;
+}
+
+.garage-tabs {
+  margin-top: -2px;
+}
+
+.garage-banner {
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.garage-banner.warn {
+  background: rgba(255, 159, 10, 0.15);
+  border: 1px solid rgba(255, 159, 10, 0.35);
+  color: #b45309;
+}
+
+.appearance-dark .garage-banner.warn {
+  color: #fcd34d;
+}
+
+.garage-banner.ok {
+  background: rgba(48, 209, 88, 0.16);
+  border: 1px solid rgba(48, 209, 88, 0.36);
+  color: #15803d;
+}
+
+.appearance-dark .garage-banner.ok {
+  color: #86efac;
+}
+
+.garage-banner.err {
+  background: rgba(255, 69, 58, 0.15);
+  border: 1px solid rgba(255, 69, 58, 0.36);
+  color: #b91c1c;
+}
+
+.appearance-dark .garage-banner.err {
+  color: #fca5a5;
+}
+
+.garage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.garage-card {
+  background: var(--ios-surface);
+  border-radius: 16px;
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border: 1px solid rgba(128, 128, 128, 0.14);
+}
+
+.garage-card.active {
+  border-color: rgba(37, 99, 235, 0.52);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+}
+
+.garage-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.garage-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.garage-vehicle-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 99, 235, 0.14);
+  color: #2563eb;
+}
+
+.appearance-dark .garage-vehicle-icon {
+  background: rgba(96, 165, 250, 0.18);
+  color: #93c5fd;
+}
+
+.garage-vehicle-icon.trailer {
+  background: rgba(245, 158, 11, 0.16);
+  color: #d97706;
+}
+
+.appearance-dark .garage-vehicle-icon.trailer {
+  color: #fbbf24;
+}
+
+.garage-vehicle-icon.bay {
+  background: rgba(16, 185, 129, 0.16);
+  color: #059669;
+}
+
+.appearance-dark .garage-vehicle-icon.bay {
+  color: #6ee7b7;
+}
+
+.garage-vehicle-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.garage-card-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.garage-card-sub {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ios-muted);
+  line-height: 1.25;
+}
+
+.garage-pill {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.garage-pill.active {
+  background: rgba(48, 209, 88, 0.18);
+  color: #15803d;
+}
+
+.appearance-dark .garage-pill.active {
+  color: #86efac;
+}
+
+.garage-pill.ai {
+  background: rgba(59, 130, 246, 0.16);
+  color: #2563eb;
+}
+
+.appearance-dark .garage-pill.ai {
+  color: #93c5fd;
+}
+
+.garage-pill.idle {
+  background: rgba(142, 142, 147, 0.16);
+  color: var(--ios-muted);
+}
+
+.garage-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.garage-plate {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1.5px solid #334155;
+}
+
+.garage-meta-chip {
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--ios-surface-2);
+  color: var(--ios-muted);
+}
+
+.garage-meta-chip.warn {
+  background: rgba(255, 69, 58, 0.14);
+  color: #dc2626;
+}
+
+.appearance-dark .garage-meta-chip.warn {
+  color: #fca5a5;
+}
+
+.garage-bays {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+  gap: 6px;
+}
+
+.garage-bay {
+  border-radius: 10px;
+  padding: 6px 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px dashed rgba(142, 142, 147, 0.35);
+  background: var(--ios-surface-2);
+}
+
+.garage-bay.player {
+  border-style: solid;
+  border-color: rgba(37, 99, 235, 0.6);
+  background: rgba(37, 99, 235, 0.15);
+  color: #1d4ed8;
+}
+
+.appearance-dark .garage-bay.player {
+  color: #93c5fd;
+}
+
+.garage-bay.occupied {
+  border-style: solid;
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.appearance-dark .garage-bay.occupied {
+  color: #6ee7b7;
+}
+
+.garage-bay-num {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.72;
+}
+
+.garage-bay-state {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.garage-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.garage-active-note {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ios-muted);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.garage-action-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 11px;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+
+.garage-action-btn:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+.garage-action-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.garage-action-btn.primary {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+}
+
+.garage-action-btn.secondary {
+  background: rgba(255, 69, 58, 0.14);
+  color: #dc2626;
+}
+
+.appearance-dark .garage-action-btn.secondary {
+  color: #fca5a5;
+}
+
+.garage-action-btn.upgrade {
+  background: linear-gradient(135deg, #059669, #047857);
+  color: #ffffff;
+}
+
+.garage-upgrade-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: rgba(5, 150, 105, 0.13);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.garage-upgrade-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.garage-upgrade-btns button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--ios-surface-2);
+  color: var(--ios-text);
+  cursor: pointer;
+}
+
+.garage-upgrade-btns button.primary {
+  background: #059669;
+  color: #ffffff;
+}
+
+.garage-empty-card {
+  background: var(--ios-surface);
+  border-radius: 16px;
+  padding: 20px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ios-muted);
+}
+
+.handset.is-ipad .garage-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+
+/* ═══ YouTube Audio Output Pill (Cabine ⇄ Celular / iPad) ═══ */
+.yt-ipad-audio-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms ease;
+}
+
+.yt-ipad-audio-btn:active {
+  transform: scale(0.95);
+}
+
+.yt-ipad-audio-btn.is-device {
+  background: rgba(10, 132, 255, 0.24);
+  border-color: rgba(56, 165, 255, 0.65);
+  color: #7cc4ff;
+}
+
+.yt-ipad-audio-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.yt-ipad-pill-audio.is-device {
+  background: rgba(10, 132, 255, 0.78);
+  color: #fff;
+}
+
+
+/* ═══ Responsive Garage Hero KPI Grid on iPhone width ═══ */
+.handset:not(.is-ipad) .garage-stats-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.handset:not(.is-ipad) .garage-stat strong {
+  font-size: 13px;
 }

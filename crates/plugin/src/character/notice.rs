@@ -177,6 +177,18 @@ static PUMP_PANEL_SHOWN: AtomicBool = AtomicBool::new(false);
 
 /// The pump's price as the game's panel last said it (its bits; 0: not heard), for WestPlay's meter.
 static PUMP_PRICE: AtomicU32 = AtomicU32::new(0);
+/// Whether `PUMP_PRICE` was heard live at the current pump (reset when leaving the pump).
+static PUMP_PRICE_FRESH: AtomicBool = AtomicBool::new(false);
+
+/// Whether the game has already reported a live fuel price at the current pump.
+pub fn pump_price_fresh() -> bool {
+    PUMP_PRICE_FRESH.load(Ordering::Acquire) && f32::from_bits(PUMP_PRICE.load(Ordering::Acquire)) > 0.0
+}
+
+/// Marks the cached pump price as stale when leaving a gas station so the next station probes its live price.
+pub fn clear_fresh_pump_price() {
+    PUMP_PRICE_FRESH.store(false, Ordering::Release);
+}
 
 /// The pump's price for a litre (a gallon in the American game) as the game's panel last said it; not said this
 /// time, the last one it said (kept in the game's WestPlay folder): getting out before the game showed its panel,
@@ -201,6 +213,7 @@ fn price_file() -> std::path::PathBuf {
 
 /// A price heard: kept for next time (written only when it changes).
 fn keep_price(price: f32) {
+    PUMP_PRICE_FRESH.store(true, Ordering::Release);
     if PUMP_PRICE.swap(price.to_bits(), Ordering::AcqRel) != price.to_bits() {
         let _ = std::fs::write(price_file(), format!("{price}\n"));
     }
@@ -278,11 +291,6 @@ unsafe extern "system" fn notify_detour(
         .filter(|&at| is_pointer(at))
         // SAFETY: read guarded.
         .and_then(|at| unsafe { raw_text_at(at) });
-    // The price from any of its notices that says it: the "tank full" one too, the only one seen getting out before
-    // the panel (owner 2026-11-15: it said R$6,42, the meter showed none, no bill).
-    if let Some(price) = all.as_deref().and_then(price_in) {
-        keep_price(price);
-    }
     // (Its second line too: the panel may come as one, owner 2026-11-20 "the notice up there to press Enter still
     // shows".)
     // SAFETY: reads guarded (the game's argument, its text).
@@ -290,6 +298,11 @@ unsafe extern "system" fn notify_detour(
         .filter(|&at| is_pointer(at))
         // SAFETY: read guarded.
         .and_then(|at| unsafe { raw_text_at(at) });
+    // The price from any of its notices that says it (either line): the "tank full" one too, the only one seen
+    // getting out before the panel (owner 2026-11-15: it said R$6,42, the meter showed none, no bill).
+    if let Some(price) = all.as_deref().and_then(price_in).or_else(|| second_words.as_deref().and_then(price_in)) {
+        keep_price(price);
+    }
     let words = all.filter(|words| super::refuel::pump_panel(words)).or_else(|| {
         second_words.filter(|words| super::refuel::pump_panel(words))
     });

@@ -44,7 +44,7 @@ html[data-transition='appearance'] :not(.cursor) {
 ::view-transition-group(sidebar) {
   z-index: 1;
   border-radius: var(--sidebar-radius);
-  backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(var(--glass-blur, 5px)) saturate(120%);
 }
 
 /* Layers are stacked as the page painted them before the change, so a window growing out of a sidebar icon
@@ -266,7 +266,7 @@ html[data-transition='close']::view-transition-new(root) {
 
 :root {
   /* Must match SWITCH_MS in CabinApp.tsx. */
-  --switch-duration: 420ms;
+  --switch-duration: 140ms;
 }
 
 @keyframes slot-to-large {

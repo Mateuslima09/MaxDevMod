@@ -1004,7 +1004,7 @@ fn icon_sdf(u: f32, v: f32, w: f32, action: Action) -> f32 {
                 .min(line(0.35, 0.54, 0.65, 0.54))
                 .min(line(0.35, 0.70, 0.53, 0.70))
         }
-        Action::Refuel | Action::StopRefuel => {
+        Action::Refuel | Action::StopRefuel | Action::PumpFuel => {
             // Fuel pump + nozzle hose
             let pump = box_outline(0.20, 0.22, 0.60, 0.84, 0.06).min(line(0.28, 0.42, 0.52, 0.42));
             let hose = line(0.60, 0.38, 0.78, 0.38)
