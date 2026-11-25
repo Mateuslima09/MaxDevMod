@@ -8,14 +8,20 @@ import {
   upgradeOwnedGarage,
   useOwnedTrailer,
 } from './bankFleetBridge'
+import { fleetGarageVisual, fleetTrailerVisual, fleetTruckVisual } from './fleetPhotos'
 import { Segmented } from './ios'
 import { distance, formatMoney, type Prefs } from './prefs'
 
 type Tab = 'trucks' | 'trailers' | 'garages'
+type DetailTarget =
+  | { kind: 'truck'; ptr: string }
+  | { kind: 'trailer'; ptr: string }
+  | { kind: 'garage'; ptr: string }
 
 /**
  * Minha Empresa / My Company (live in-memory Fleet & Garage manager):
- * - Browse all owned trucks, owned trailers, and owned garages directly from live game memory.
+ * - Browse all owned trucks, owned trailers, and owned garages directly from live game memory,
+ *   with themed photos (matching Job Market's visual system) and a full Details view.
  * - Switch to drive any owned truck immediately without restarting.
  * - Attach/use any owned trailer directly behind the truck, or store the current trailer back to garage.
  * - Upgrade owned garages (1 -> 3 slots, 3 -> 5 slots) live in memory with exact in-game pricing.
@@ -36,6 +42,7 @@ export function GarageApp({
   const [error, setError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [confirmUpgrade, setConfirmUpgrade] = useState<string | null>(null)
+  const [detail, setDetail] = useState<DetailTarget | null>(null)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
 
   const pt = language === 'pt'
@@ -140,6 +147,407 @@ export function GarageApp({
     }
   }
 
+  // Full Details View for a selected Truck, Trailer, or Garage
+  if (detail && snap) {
+    if (detail.kind === 'truck') {
+      const truck = trucks.find((t) => t.truckPtr === detail.ptr)
+      if (truck) {
+        const vis = fleetTruckVisual(truck)
+        const healthPct = Math.max(0, 100 - truck.wearPct)
+        const odo = distance(truck.odometerKm * 1000, units)
+        const isBusy = busyKey === `truck-${truck.truckPtr}`
+        return (
+          <div className="garage-app garage-detail-view">
+            <button type="button" className="garage-detail-back" onClick={() => setDetail(null)}>
+              <span aria-hidden>‹</span> {pt ? 'Voltar para Caminhões' : 'Back to Trucks'}
+            </button>
+
+            <div className="garage-detail-hero">
+              <img src={vis.photo} alt={`${truck.brand} ${truck.model}`} />
+              <div className="garage-photo-scrim" />
+              <span className="garage-photo-badge" style={{ borderColor: vis.accent }}>
+                {vis.badge}
+              </span>
+              {truck.isPlayer ? (
+                <span className="garage-pill active garage-photo-pill">{pt ? 'Dirigindo' : 'Driving'}</span>
+              ) : truck.hasAiDriver ? (
+                <span className="garage-pill ai garage-photo-pill">{pt ? 'Motorista IA' : 'AI Driver'}</span>
+              ) : (
+                <span className="garage-pill idle garage-photo-pill">{pt ? 'Na garagem' : 'Parked'}</span>
+              )}
+              <div className="garage-detail-hero-title">
+                <h2>
+                  {truck.brand} {truck.model}
+                </h2>
+                <p>
+                  {truck.garageCity} · {pt ? `Vaga #${truck.slotIndex + 1}` : `Bay #${truck.slotIndex + 1}`}
+                </p>
+              </div>
+            </div>
+
+            {toast && (
+              <div className={`garage-banner ${toast.kind}`} role="status">
+                {toast.text}
+              </div>
+            )}
+
+            <div className="garage-detail-meter">
+              <div className="garage-detail-meter-head">
+                <span>{pt ? 'Estado de conservação' : 'Condition'}</span>
+                <strong>{healthPct}%</strong>
+              </div>
+              <div className="garage-detail-bar">
+                <div
+                  className={`garage-detail-bar-fill${healthPct < 55 ? ' danger' : healthPct < 80 ? ' warn' : ''}`}
+                  style={{ width: `${healthPct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="garage-detail-grid">
+              <SpecCard label={pt ? 'Marca' : 'Brand'} value={truck.brand || '—'} />
+              <SpecCard label={pt ? 'Modelo' : 'Model'} value={truck.model || '—'} />
+              <SpecCard label={pt ? 'Motor' : 'Engine'} value={truck.engine || '—'} />
+              <SpecCard label={pt ? 'Chassi' : 'Chassis'} value={truck.chassis || '—'} />
+              <SpecCard label={pt ? 'Quilometragem' : 'Odometer'} value={odo} />
+              <SpecCard
+                label={pt ? 'Placa' : 'License plate'}
+                value={
+                  truck.plate
+                    ? `${truck.plate}${truck.plateCountry ? ` (${truck.plateCountry.toUpperCase()})` : ''}`
+                    : '—'
+                }
+              />
+              <SpecCard label={pt ? 'Garagem base' : 'Home garage'} value={truck.garageCity || '—'} />
+              <SpecCard
+                label={pt ? 'Situação' : 'Status'}
+                value={
+                  truck.isPlayer
+                    ? pt
+                      ? 'Em uso por você'
+                      : 'Driven by you'
+                    : truck.hasAiDriver
+                      ? pt
+                        ? 'Alocado a motorista IA'
+                        : 'Assigned to AI driver'
+                      : pt
+                        ? 'Disponível na garagem'
+                        : 'Available in garage'
+                }
+              />
+            </div>
+
+            <div className="garage-detail-actions">
+              {truck.isPlayer ? (
+                <span className="garage-active-note">
+                  {pt ? 'Este é o caminhão que você está dirigindo agora.' : 'You are currently driving this truck.'}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="garage-action-btn primary"
+                  disabled={Boolean(snap.onJob) || busyKey !== null}
+                  onClick={() => void handleDriveTruck(truck)}
+                >
+                  {isBusy
+                    ? pt
+                      ? 'Trocando caminhão...'
+                      : 'Switching truck...'
+                    : pt
+                      ? 'Dirigir este caminhão'
+                      : 'Drive this truck'}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      }
+    }
+
+    if (detail.kind === 'trailer') {
+      const trailer = trailers.find((t) => t.trailerPtr === detail.ptr)
+      if (trailer) {
+        const vis = fleetTrailerVisual(trailer, language)
+        const healthPct = Math.max(0, 100 - trailer.wearPct)
+        const title = [trailer.brand, trailer.model].filter(Boolean).join(' ')
+        const isBusy =
+          busyKey === `trailer-${trailer.trailerPtr}` || (trailer.isAttached && busyKey === 'store-trailer')
+        return (
+          <div className="garage-app garage-detail-view">
+            <button type="button" className="garage-detail-back" onClick={() => setDetail(null)}>
+              <span aria-hidden>‹</span> {pt ? 'Voltar para Carretas' : 'Back to Trailers'}
+            </button>
+
+            <div className="garage-detail-hero">
+              <img src={vis.photo} alt={title} />
+              <div className="garage-photo-scrim" />
+              <span className="garage-photo-badge" style={{ borderColor: vis.accent }}>
+                {vis.badge}
+              </span>
+              {trailer.isAttached ? (
+                <span className="garage-pill active garage-photo-pill">{pt ? 'Em uso' : 'Attached'}</span>
+              ) : (
+                <span className="garage-pill idle garage-photo-pill">{pt ? 'Guardada' : 'Stored'}</span>
+              )}
+              <div className="garage-detail-hero-title">
+                <h2>{title || (pt ? 'Carreta própria' : 'Owned trailer')}</h2>
+                <p>
+                  {trailer.garageCity}
+                  {trailer.chainType ? ` · ${trailer.chainType}` : ''}
+                </p>
+              </div>
+            </div>
+
+            {toast && (
+              <div className={`garage-banner ${toast.kind}`} role="status">
+                {toast.text}
+              </div>
+            )}
+
+            <div className="garage-detail-meter">
+              <div className="garage-detail-meter-head">
+                <span>{pt ? 'Estado de conservação' : 'Condition'}</span>
+                <strong>{healthPct}%</strong>
+              </div>
+              <div className="garage-detail-bar">
+                <div
+                  className={`garage-detail-bar-fill${healthPct < 55 ? ' danger' : healthPct < 80 ? ' warn' : ''}`}
+                  style={{ width: `${healthPct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="garage-detail-grid">
+              <SpecCard label={pt ? 'Carroceria' : 'Body'} value={trailer.bodyType || trailer.body || '—'} />
+              <SpecCard label={pt ? 'Conjunto' : 'Configuration'} value={trailer.chainType || '—'} />
+              <SpecCard
+                label={pt ? 'Eixos' : 'Axles'}
+                value={trailer.axles > 0 ? `${trailer.axles} ${pt ? 'eixos' : 'axles'}` : '—'}
+              />
+              <SpecCard
+                label={pt ? 'Volume' : 'Volume'}
+                value={trailer.volume > 0 ? `${Math.round(trailer.volume)} m³` : '—'}
+              />
+              <SpecCard
+                label={pt ? 'Peso bruto' : 'Gross weight'}
+                value={trailer.grossWeight > 0 ? `${(trailer.grossWeight / 1000).toFixed(1)} t` : '—'}
+              />
+              <SpecCard
+                label={pt ? 'Placa' : 'License plate'}
+                value={
+                  trailer.plate
+                    ? `${trailer.plate}${trailer.plateCountry ? ` (${trailer.plateCountry.toUpperCase()})` : ''}`
+                    : '—'
+                }
+              />
+              <SpecCard label={pt ? 'Garagem base' : 'Home garage'} value={trailer.garageCity || '—'} />
+              <SpecCard
+                label={pt ? 'Situação' : 'Status'}
+                value={
+                  trailer.isAttached
+                    ? pt
+                      ? 'Engatada no caminhão'
+                      : 'Attached to truck'
+                    : pt
+                      ? 'Guardada na garagem'
+                      : 'Stored in garage'
+                }
+              />
+            </div>
+
+            <div className="garage-detail-actions">
+              {trailer.isAttached ? (
+                <button
+                  type="button"
+                  className="garage-action-btn secondary"
+                  disabled={Boolean(snap.onJob) || busyKey !== null}
+                  onClick={() => void handleStoreTrailer()}
+                >
+                  {isBusy
+                    ? pt
+                      ? 'Guardando...'
+                      : 'Storing...'
+                    : pt
+                      ? 'Guardar carreta na garagem'
+                      : 'Store trailer in garage'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="garage-action-btn primary"
+                  disabled={Boolean(snap.onJob) || !snap.hasTruck || busyKey !== null}
+                  onClick={() => void handleUseTrailer(trailer)}
+                >
+                  {isBusy
+                    ? pt
+                      ? 'Engatando carreta...'
+                      : 'Attaching trailer...'
+                    : pt
+                      ? 'Selecionar e usar carreta'
+                      : 'Select & attach trailer'}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      }
+    }
+
+    if (detail.kind === 'garage') {
+      const garage = garages.find((g) => g.garagePtr === detail.ptr)
+      if (garage) {
+        const vis = fleetGarageVisual(garage, language)
+        const prodPct = Math.round(Math.max(0, Math.min(100, garage.productivity * 100)))
+        const affordable = garage.upgradeCost != null && (liveBalance ?? 0) >= garage.upgradeCost
+        const isBusy = busyKey === `garage-${garage.garagePtr}`
+        const asking = confirmUpgrade === garage.garagePtr
+        const garageTrucks = trucks.filter((t) => t.garageCityId === garage.cityId || t.garageCity === garage.city)
+        return (
+          <div className="garage-app garage-detail-view">
+            <button type="button" className="garage-detail-back" onClick={() => setDetail(null)}>
+              <span aria-hidden>‹</span> {pt ? 'Voltar para Garagens' : 'Back to Garages'}
+            </button>
+
+            <div className="garage-detail-hero">
+              <img src={vis.photo} alt={garage.city} />
+              <div className="garage-photo-scrim" />
+              <span className="garage-photo-badge" style={{ borderColor: vis.accent }}>
+                {vis.badge}
+              </span>
+              <span className={`garage-pill ${garage.tier === 'large' ? 'active' : 'idle'} garage-photo-pill`}>
+                {prodPct}% prod.
+              </span>
+              <div className="garage-detail-hero-title">
+                <h2>{garage.city}</h2>
+                <p>
+                  {garage.usedTrucks}/{garage.slots} {pt ? 'vagas ocupadas' : 'slots used'} · {garage.trailersCount}{' '}
+                  {pt ? 'carreta(s)' : 'trailer(s)'}
+                </p>
+              </div>
+            </div>
+
+            {toast && (
+              <div className={`garage-banner ${toast.kind}`} role="status">
+                {toast.text}
+              </div>
+            )}
+
+            <div className="garage-detail-meter">
+              <div className="garage-detail-meter-head">
+                <span>{pt ? 'Produtividade da garagem' : 'Garage productivity'}</span>
+                <strong>{prodPct}%</strong>
+              </div>
+              <div className="garage-detail-bar">
+                <div className="garage-detail-bar-fill" style={{ width: `${prodPct}%` }} />
+              </div>
+            </div>
+
+            <div className="garage-detail-grid">
+              <SpecCard label={pt ? 'Cidade' : 'City'} value={garage.city} />
+              <SpecCard label={pt ? 'Capacidade' : 'Capacity'} value={`${garage.slots} ${pt ? 'vagas' : 'slots'}`} />
+              <SpecCard label={pt ? 'Caminhões' : 'Trucks'} value={`${garage.usedTrucks}/${garage.slots}`} />
+              <SpecCard label={pt ? 'Motoristas' : 'Drivers'} value={`${garage.usedDrivers}/${garage.slots}`} />
+              <SpecCard label={pt ? 'Carretas' : 'Trailers'} value={`${garage.trailersCount}`} />
+              <SpecCard
+                label={pt ? 'Próxima expansão' : 'Next upgrade'}
+                value={
+                  garage.tier === 'large'
+                    ? pt
+                      ? 'Máximo (5 vagas)'
+                      : 'Maxed (5 slots)'
+                    : garage.upgradeCost != null
+                      ? `${garage.nextSlots} ${pt ? 'vagas' : 'slots'} · ${money(garage.upgradeCost)}`
+                      : '—'
+                }
+              />
+            </div>
+
+            {garageTrucks.length > 0 && (
+              <div className="garage-detail-roster">
+                <span className="garage-detail-roster-title">
+                  {pt ? 'Caminhões nesta garagem' : 'Trucks in this garage'}
+                </span>
+                {garageTrucks.map((t) => (
+                  <button
+                    key={t.truckPtr}
+                    type="button"
+                    className="garage-detail-roster-item"
+                    onClick={() => setDetail({ kind: 'truck', ptr: t.truckPtr })}
+                  >
+                    <div>
+                      <strong>
+                        {t.brand} {t.model}
+                      </strong>
+                      <span>
+                        {pt ? `Vaga #${t.slotIndex + 1}` : `Bay #${t.slotIndex + 1}`}
+                        {t.plate ? ` · ${t.plate}` : ''}
+                      </span>
+                    </div>
+                    <span className="garage-detail-chevron" aria-hidden>
+                      ›
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="garage-detail-actions">
+              {garage.tier === 'large' ? (
+                <span className="garage-active-note">
+                  {pt ? 'Capacidade máxima atingida (5 vagas)' : 'Maximum capacity reached (5 slots)'}
+                </span>
+              ) : asking && garage.upgradeCost != null ? (
+                <div className="garage-upgrade-confirm">
+                  <span>
+                    {pt
+                      ? `Expandir para ${garage.nextSlots} vagas por ${money(garage.upgradeCost)}?`
+                      : `Upgrade to ${garage.nextSlots} slots for ${money(garage.upgradeCost)}?`}
+                  </span>
+                  <div className="garage-upgrade-btns">
+                    <button type="button" onClick={() => setConfirmUpgrade(null)}>
+                      {pt ? 'Cancelar' : 'Cancel'}
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={isBusy}
+                      onClick={() => void handleUpgradeGarage(garage)}
+                    >
+                      {isBusy ? '...' : pt ? 'Confirmar' : 'Confirm'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="garage-action-btn upgrade"
+                  disabled={!affordable || busyKey !== null}
+                  onClick={() => setConfirmUpgrade(garage.garagePtr)}
+                >
+                  {isBusy
+                    ? pt
+                      ? 'Expandindo garagem...'
+                      : 'Upgrading garage...'
+                    : garage.upgradeCost != null
+                      ? affordable
+                        ? pt
+                          ? `Expandir p/ ${garage.nextSlots} vagas · ${money(garage.upgradeCost)}`
+                          : `Upgrade to ${garage.nextSlots} slots · ${money(garage.upgradeCost)}`
+                        : pt
+                          ? `Saldo insuficiente (${money(garage.upgradeCost)})`
+                          : `Insufficient funds (${money(garage.upgradeCost)})`
+                      : pt
+                        ? 'Expandir garagem'
+                        : 'Upgrade garage'}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      }
+    }
+  }
+
   return (
     <div className="garage-app">
       <header className="garage-hero">
@@ -236,23 +644,35 @@ export function GarageApp({
             trucks.map((truck) => {
               const isBusy = busyKey === `truck-${truck.truckPtr}`
               const healthPct = Math.max(0, 100 - truck.wearPct)
-              const odo = distance(truck.odometerKm, units)
+              const odo = distance(truck.odometerKm * 1000, units)
+              const vis = fleetTruckVisual(truck)
               return (
                 <article key={truck.truckPtr} className={`garage-card${truck.isPlayer ? ' active' : ''}`}>
+                  <div
+                    className="garage-photo-banner"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetail({ kind: 'truck', ptr: truck.truckPtr })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setDetail({ kind: 'truck', ptr: truck.truckPtr })
+                    }}
+                  >
+                    <img src={vis.photo} alt={`${truck.brand} ${truck.model}`} loading="lazy" />
+                    <div className="garage-photo-scrim" />
+                    <span className="garage-photo-badge" style={{ borderColor: vis.accent }}>
+                      {vis.badge}
+                    </span>
+                    {truck.isPlayer ? (
+                      <span className="garage-pill active garage-photo-pill">{pt ? 'Dirigindo' : 'Driving'}</span>
+                    ) : truck.hasAiDriver ? (
+                      <span className="garage-pill ai garage-photo-pill">{pt ? 'Motorista IA' : 'AI Driver'}</span>
+                    ) : (
+                      <span className="garage-pill idle garage-photo-pill">{pt ? 'Na garagem' : 'Parked'}</span>
+                    )}
+                  </div>
+
                   <div className="garage-card-head">
                     <div className="garage-card-title-wrap">
-                      <span className="garage-vehicle-icon" aria-hidden>
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            d="M3 7h11v8H3Zm11 2h4l3 3v3h-7ZM7.5 17.5a2 2 0 1 0 0 .01M17.5 17.5a2 2 0 1 0 0 .01"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
                       <div>
                         <h3 className="garage-card-title">
                           {truck.brand} {truck.model}
@@ -264,13 +684,6 @@ export function GarageApp({
                         </p>
                       </div>
                     </div>
-                    {truck.isPlayer ? (
-                      <span className="garage-pill active">{pt ? 'Dirigindo' : 'Driving'}</span>
-                    ) : truck.hasAiDriver ? (
-                      <span className="garage-pill ai">{pt ? 'Motorista IA' : 'AI Driver'}</span>
-                    ) : (
-                      <span className="garage-pill idle">{pt ? 'Na garagem' : 'Parked'}</span>
-                    )}
                   </div>
 
                   <div className="garage-meta-row">
@@ -281,10 +694,17 @@ export function GarageApp({
                     </span>
                   </div>
 
-                  <div className="garage-card-footer">
+                  <div className="garage-card-footer garage-card-footer-split">
+                    <button
+                      type="button"
+                      className="garage-action-btn details"
+                      onClick={() => setDetail({ kind: 'truck', ptr: truck.truckPtr })}
+                    >
+                      {pt ? 'Detalhes' : 'Details'}
+                    </button>
                     {truck.isPlayer ? (
                       <span className="garage-active-note">
-                        {pt ? 'Seu caminhão atual em uso' : 'Currently selected truck'}
+                        {pt ? 'Caminhão atual' : 'Current truck'}
                       </span>
                     ) : (
                       <button
@@ -295,11 +715,11 @@ export function GarageApp({
                       >
                         {isBusy
                           ? pt
-                            ? 'Trocando caminhão...'
-                            : 'Switching truck...'
+                            ? 'Trocando...'
+                            : 'Switching...'
                           : pt
-                            ? 'Dirigir este caminhão'
-                            : 'Drive this truck'}
+                            ? 'Dirigir'
+                            : 'Drive'}
                       </button>
                     )}
                   </div>
@@ -320,7 +740,8 @@ export function GarageApp({
             </div>
           ) : (
             trailers.map((trailer) => {
-              const isBusy = busyKey === `trailer-${trailer.trailerPtr}` || (trailer.isAttached && busyKey === 'store-trailer')
+              const isBusy =
+                busyKey === `trailer-${trailer.trailerPtr}` || (trailer.isAttached && busyKey === 'store-trailer')
               const healthPct = Math.max(0, 100 - trailer.wearPct)
               const title = [trailer.brand, trailer.model].filter(Boolean).join(' ')
               const subtitle = [
@@ -331,32 +752,37 @@ export function GarageApp({
               ]
                 .filter(Boolean)
                 .join(' · ')
+              const vis = fleetTrailerVisual(trailer, language)
               return (
                 <article key={trailer.trailerPtr} className={`garage-card${trailer.isAttached ? ' active' : ''}`}>
+                  <div
+                    className="garage-photo-banner"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetail({ kind: 'trailer', ptr: trailer.trailerPtr })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setDetail({ kind: 'trailer', ptr: trailer.trailerPtr })
+                    }}
+                  >
+                    <img src={vis.photo} alt={title} loading="lazy" />
+                    <div className="garage-photo-scrim" />
+                    <span className="garage-photo-badge" style={{ borderColor: vis.accent }}>
+                      {vis.badge}
+                    </span>
+                    {trailer.isAttached ? (
+                      <span className="garage-pill active garage-photo-pill">{pt ? 'Em uso' : 'Attached'}</span>
+                    ) : (
+                      <span className="garage-pill idle garage-photo-pill">{pt ? 'Guardada' : 'Stored'}</span>
+                    )}
+                  </div>
+
                   <div className="garage-card-head">
                     <div className="garage-card-title-wrap">
-                      <span className="garage-vehicle-icon trailer" aria-hidden>
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            d="M2.5 7h15v8h-15Zm15 6H21v2h-3.5M6.5 17.5a1.8 1.8 0 1 0 0 .01M10.5 17.5a1.8 1.8 0 1 0 0 .01M14.5 17.5a1.8 1.8 0 1 0 0 .01"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
                       <div>
                         <h3 className="garage-card-title">{title}</h3>
                         <p className="garage-card-sub">{subtitle}</p>
                       </div>
                     </div>
-                    {trailer.isAttached ? (
-                      <span className="garage-pill active">{pt ? 'Em uso' : 'Attached'}</span>
-                    ) : (
-                      <span className="garage-pill idle">{pt ? 'Guardada' : 'Stored'}</span>
-                    )}
                   </div>
 
                   <div className="garage-meta-row">
@@ -370,7 +796,14 @@ export function GarageApp({
                     </span>
                   </div>
 
-                  <div className="garage-card-footer">
+                  <div className="garage-card-footer garage-card-footer-split">
+                    <button
+                      type="button"
+                      className="garage-action-btn details"
+                      onClick={() => setDetail({ kind: 'trailer', ptr: trailer.trailerPtr })}
+                    >
+                      {pt ? 'Detalhes' : 'Details'}
+                    </button>
                     {trailer.isAttached ? (
                       <button
                         type="button"
@@ -383,8 +816,8 @@ export function GarageApp({
                             ? 'Guardando...'
                             : 'Storing...'
                           : pt
-                            ? 'Guardar carreta na garagem'
-                            : 'Store trailer in garage'}
+                            ? 'Guardar'
+                            : 'Store'}
                       </button>
                     ) : (
                       <button
@@ -395,11 +828,11 @@ export function GarageApp({
                       >
                         {isBusy
                           ? pt
-                            ? 'Engatando carreta...'
-                            : 'Attaching trailer...'
+                            ? 'Engatando...'
+                            : 'Attaching...'
                           : pt
-                            ? 'Selecionar e usar carreta'
-                            : 'Select & attach trailer'}
+                            ? 'Usar carreta'
+                            : 'Attach'}
                       </button>
                     )}
                   </div>
@@ -432,23 +865,31 @@ export function GarageApp({
                       : 'Tiny · 1 slot'
               const prodPct = Math.round(Math.max(0, Math.min(100, garage.productivity * 100)))
               const affordable = garage.upgradeCost != null && (liveBalance ?? 0) >= garage.upgradeCost
+              const vis = fleetGarageVisual(garage, language)
 
               return (
                 <article key={garage.garagePtr} className={`garage-card${garage.tier === 'large' ? ' maxed' : ''}`}>
+                  <div
+                    className="garage-photo-banner"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetail({ kind: 'garage', ptr: garage.garagePtr })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setDetail({ kind: 'garage', ptr: garage.garagePtr })
+                    }}
+                  >
+                    <img src={vis.photo} alt={garage.city} loading="lazy" />
+                    <div className="garage-photo-scrim" />
+                    <span className="garage-photo-badge" style={{ borderColor: vis.accent }}>
+                      {vis.badge}
+                    </span>
+                    <span className={`garage-pill ${garage.tier === 'large' ? 'active' : 'idle'} garage-photo-pill`}>
+                      {prodPct}% prod.
+                    </span>
+                  </div>
+
                   <div className="garage-card-head">
                     <div className="garage-card-title-wrap">
-                      <span className="garage-vehicle-icon bay" aria-hidden>
-                        <svg viewBox="0 0 24 24">
-                          <path
-                            d="M3 10 12 4l9 6v10H3Zm4 10v-7h10v7M7 16h10"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </span>
                       <div>
                         <h3 className="garage-card-title">{garage.city}</h3>
                         <p className="garage-card-sub">
@@ -456,9 +897,6 @@ export function GarageApp({
                         </p>
                       </div>
                     </div>
-                    <span className={`garage-pill ${garage.tier === 'large' ? 'active' : 'idle'}`}>
-                      {prodPct}% {pt ? 'prod.' : 'prod.'}
-                    </span>
                   </div>
 
                   {/* Visual Bay Slots Grid */}
@@ -487,17 +925,24 @@ export function GarageApp({
                     })}
                   </div>
 
-                  <div className="garage-card-footer">
+                  <div className="garage-card-footer garage-card-footer-split">
+                    <button
+                      type="button"
+                      className="garage-action-btn details"
+                      onClick={() => setDetail({ kind: 'garage', ptr: garage.garagePtr })}
+                    >
+                      {pt ? 'Detalhes' : 'Details'}
+                    </button>
                     {garage.tier === 'large' ? (
                       <span className="garage-active-note">
-                        {pt ? 'Capacidade máxima atingida (5 vagas)' : 'Maximum capacity reached (5 slots)'}
+                        {pt ? 'Máximo (5 vagas)' : 'Max (5 slots)'}
                       </span>
                     ) : asking && garage.upgradeCost != null ? (
                       <div className="garage-upgrade-confirm">
                         <span>
                           {pt
-                            ? `Expandir para ${garage.nextSlots} vagas por ${money(garage.upgradeCost)}?`
-                            : `Upgrade to ${garage.nextSlots} slots for ${money(garage.upgradeCost)}?`}
+                            ? `Expandir p/ ${garage.nextSlots} vagas (${money(garage.upgradeCost)})?`
+                            : `Upgrade to ${garage.nextSlots} slots (${money(garage.upgradeCost)})?`}
                         </span>
                         <div className="garage-upgrade-btns">
                           <button type="button" onClick={() => setConfirmUpgrade(null)}>
@@ -522,19 +967,19 @@ export function GarageApp({
                       >
                         {isBusy
                           ? pt
-                            ? 'Expandindo garagem...'
-                            : 'Upgrading garage...'
+                            ? 'Expandindo...'
+                            : 'Upgrading...'
                           : garage.upgradeCost != null
                             ? affordable
                               ? pt
-                                ? `Expandir p/ ${garage.nextSlots} vagas · ${money(garage.upgradeCost)}`
-                                : `Upgrade to ${garage.nextSlots} slots · ${money(garage.upgradeCost)}`
+                                ? `Expandir · ${money(garage.upgradeCost)}`
+                                : `Upgrade · ${money(garage.upgradeCost)}`
                               : pt
-                                ? `Saldo insuficiente (${money(garage.upgradeCost)})`
-                                : `Insufficient funds (${money(garage.upgradeCost)})`
+                                ? `Sem saldo (${money(garage.upgradeCost)})`
+                                : `Low funds (${money(garage.upgradeCost)})`
                             : pt
-                              ? 'Expandir garagem'
-                              : 'Upgrade garage'}
+                              ? 'Expandir'
+                              : 'Upgrade'}
                       </button>
                     )}
                   </div>
@@ -544,6 +989,15 @@ export function GarageApp({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function SpecCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="garage-detail-spec">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }

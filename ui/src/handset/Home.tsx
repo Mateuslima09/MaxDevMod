@@ -109,7 +109,7 @@ export function Home({
                 </div>
                 <div className="ipad-widgets-bottom">
                   <div className="ios-widget ios-widget-music ipad-widget-music">
-                    <NowPlayingWidget />
+                    <NowPlayingWidget onOpenApp={open} />
                   </div>
                   <ArrivalWidget />
                 </div>
@@ -197,7 +197,7 @@ export function Home({
               <WeatherOrTruckWidget units={units} noGame={words.noGame} />
             </div>
             <div className="ios-widget ios-widget-music">
-              <NowPlayingWidget />
+              <NowPlayingWidget onOpenApp={open} />
             </div>
             <ArrivalWidget />
             <Icons apps={PAGE_ONE} words={words} open={open} />
@@ -304,6 +304,7 @@ function useSwipe(page: number, setPage: (page: number) => void, pages: number) 
     offset,
     handlers: {
       onPointerDown: (event: PointerEvent) => {
+        if ((event.target as HTMLElement | null)?.closest('.ios-widget-music button')) return
         start.current = { x: event.clientX, y: event.clientY }
         dragged.current = false
       },

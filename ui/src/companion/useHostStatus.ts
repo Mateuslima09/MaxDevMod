@@ -176,6 +176,17 @@ export function appLogPlace(): Promise<string | null> {
   return call('app_log_place')
 }
 
+export interface DiagnosticReportResult {
+  path: string
+  summary: string
+  issues: string[]
+}
+
+/** Generates a full diagnostic .txt report with automated checks & logs and opens Explorer on it. */
+export function generateDiagnosticReport(liveSummary: string): Promise<DiagnosticReportResult> {
+  return call('generate_diagnostic_report', { liveSummary })
+}
+
 /** Runs Apple Music's web player (hidden), so the status says whether it's signed in. */
 export function appleMusicCheck(): Promise<void> {
   return call('apple_music_check')

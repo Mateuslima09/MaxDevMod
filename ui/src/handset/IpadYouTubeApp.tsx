@@ -17,6 +17,7 @@ import {
   seekBy,
   setLanguage,
   setQuality,
+  setVolume,
   signIn,
   signOut,
   stopVideo,
@@ -925,16 +926,33 @@ function VideoStage({
                   >
                     {audioOutput === 'device' ? '📱' : '🚛'} {audioLabel}
                   </button>
-                  <button
-                    type="button"
-                    className="yt-ipad-pill-btn"
-                    onClick={() => {
-                      toggleMute()
-                      bumpControls()
-                    }}
-                  >
-                    {muted || volume === 0 ? '🔇' : '🔊'}
-                  </button>
+                  <div className="yt-ipad-vol-pill">
+                    <button
+                      type="button"
+                      className="yt-ipad-pill-btn yt-ipad-vol-mute"
+                      onClick={() => {
+                        toggleMute()
+                        bumpControls()
+                      }}
+                      aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+                    >
+                      {muted || volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊'}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={muted ? 0 : volume}
+                      className="yt-ipad-vol-slider"
+                      aria-label="Volume"
+                      onChange={(e) => {
+                        setVolume(Number(e.target.value))
+                        bumpControls()
+                      }}
+                    />
+                    <span className="yt-ipad-vol-pct">{muted ? 0 : volume}%</span>
+                  </div>
                   {qualities.length > 0 && (
                     <div className="yt-ipad-qual-wrap">
                       <button
@@ -998,6 +1016,45 @@ function VideoStage({
         >
           {playing ? '❚❚' : '▶'}
         </button>
+      </div>
+
+      {/* Always-accessible volume bar under the video */}
+      <div className="yt-ipad-volbar">
+        <button
+          type="button"
+          className="yt-ipad-volbar-btn"
+          onClick={toggleMute}
+          aria-label={muted || volume === 0 ? 'Unmute' : 'Mute'}
+        >
+          {muted || volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊'}
+        </button>
+        <button
+          type="button"
+          className="yt-ipad-volbar-step"
+          onClick={() => setVolume((muted ? 0 : volume) - 10)}
+          aria-label="Volume -"
+        >
+          −
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={muted ? 0 : volume}
+          className="yt-ipad-vol-slider yt-ipad-volbar-slider"
+          aria-label="Volume"
+          onChange={(e) => setVolume(Number(e.target.value))}
+        />
+        <button
+          type="button"
+          className="yt-ipad-volbar-step"
+          onClick={() => setVolume((muted ? 0 : volume) + 10)}
+          aria-label="Volume +"
+        >
+          +
+        </button>
+        <span className="yt-ipad-volbar-pct">{muted ? 0 : volume}%</span>
       </div>
     </div>
   )

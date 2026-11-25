@@ -484,6 +484,7 @@ unsafe fn on_present(swapchain: *mut c_void) {
         crate::mirror_probe::on_present(swapchain, frame);
         crate::mirror::on_present(swapchain);
         crate::job_transition::on_present(swapchain);
+        crate::screens::on_present(swapchain, frame);
         crate::hires::on_present(swapchain);
         // Last, over everything: the screen faded to black and back (run over on foot: `character`).
         crate::fade::on_present(swapchain);

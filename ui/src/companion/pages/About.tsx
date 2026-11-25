@@ -4,7 +4,7 @@ import { Button, Group, Panel, Row } from '../room/parts'
 import { banner } from '../room/room'
 import { GLOW, useScreenAt } from '../room/screen'
 import { lookForUpdate } from '../update'
-import { appLogPlace, type HostStatus } from '../useHostStatus'
+import { appLogPlace, type DiagnosticReportResult, generateDiagnosticReport, type HostStatus } from '../useHostStatus'
 import { type PageProps, screenState } from './page'
 
 /** How long the screen says the report was copied. */
@@ -21,6 +21,9 @@ export function About({ status, setup, cw, update, showUpdate }: PageProps) {
   const w = cw.about
   const [version, setVersion] = useState('')
   const [copied, setCopied] = useState(false)
+  const [busyReport, setBusyReport] = useState(false)
+  const [diag, setDiag] = useState<DiagnosticReportResult | null>(null)
+  const [diagError, setDiagError] = useState<string | null>(null)
   // Whether there's an update: the one found, or none after looking again.
   const [looked, setLooked] = useState(false)
   // Where this run's app.log is; null if it couldn't be made anywhere.
@@ -48,6 +51,25 @@ export function About({ status, setup, cw, update, showUpdate }: PageProps) {
     )
   }
 
+  const runDiagnostics = async () => {
+    if (busyReport) return
+    setBusyReport(true)
+    setDiagError(null)
+    try {
+      const liveText = report(version, status, setup.game?.version ?? null, setup.game?.dir ?? null, appLog)
+      const res = await generateDiagnosticReport(liveText)
+      setDiag(res)
+      navigator.clipboard.writeText(res.summary).then(
+        () => setCopied(true),
+        () => {},
+      )
+    } catch (error) {
+      setDiagError(String(error))
+    } finally {
+      setBusyReport(false)
+    }
+  }
+
   return (
     <Panel
       place="page"
@@ -73,6 +95,24 @@ export function About({ status, setup, cw, update, showUpdate }: PageProps) {
         )}
       </Group>
       <Group title={w.diagnostics} place={5}>
+        <Row
+          title={busyReport ? 'Gerando relatório...' : 'Gerar relatório completo (.txt)'}
+          detail={
+            diag
+              ? `Salvo em: ${diag.path}`
+              : 'Verifica DLL, mod, crashes do jogo, DirectX 11 e junta os logs para suporte'
+          }
+          link
+          onClick={() => void runDiagnostics()}
+        />
+        {diagError && <Row title="Erro ao gerar relatório" detail={diagError} />}
+        {diag && diag.issues.length === 0 && (
+          <Row title="Verificação automática" value="Tudo OK" detail="Nenhum problema crítico encontrado nos arquivos." />
+        )}
+        {diag &&
+          diag.issues.map((issue, idx) => (
+            <Row key={idx} title={`Atenção #${idx + 1}`} detail={issue} />
+          ))}
         <Row
           title={w.frames}
           value={status?.screenDrawing ? w.perSecond.replace('{n}', String(status.framesPerSecond)) : '—'}
