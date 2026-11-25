@@ -86,9 +86,48 @@ pub struct Trailer {
 static TRAILER: Mutex<Trailer> =
     Mutex::new(Trailer { connected: false, placed: false, position: [0.0; 3], heading: 0.0, pitch: 0.0, roll: 0.0, hook: None });
 
+/// Additional coupled trailers (`trailer.1`..=`trailer.3`) for multi-trailer combinations (bitrem / rodotrem / triples),
+/// tracked with their own world placements and SDK wheel hub coordinates so brake smoke emits from every trailer's wheels.
+pub const EXTRA_TRAILERS_COUNT: usize = 3;
+
+#[derive(Clone, Copy, Debug)]
+pub struct ExtraTrailer {
+    pub connected: bool,
+    pub placed: bool,
+    pub position: [f64; 3],
+    pub heading: f32,
+    pub pitch: f32,
+    pub roll: f32,
+    pub wheel_count: usize,
+    pub wheel_at: [[f32; 3]; crate::reversing::MOST_WHEELS],
+}
+
+impl ExtraTrailer {
+    const fn empty() -> Self {
+        Self {
+            connected: false,
+            placed: false,
+            position: [0.0; 3],
+            heading: 0.0,
+            pitch: 0.0,
+            roll: 0.0,
+            wheel_count: 0,
+            wheel_at: [[0.0; 3]; crate::reversing::MOST_WHEELS],
+        }
+    }
+}
+
+static EXTRA_TRAILERS: Mutex<[ExtraTrailer; EXTRA_TRAILERS_COUNT]> =
+    Mutex::new([ExtraTrailer::empty(); EXTRA_TRAILERS_COUNT]);
+
 /// The trailer as the SDK last said (any thread).
 pub fn trailer() -> Trailer {
     *TRAILER.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Additional trailers (`trailer.1`..=`trailer.3`) as the SDK last said (any thread).
+pub fn extra_trailers() -> [ExtraTrailer; EXTRA_TRAILERS_COUNT] {
+    *EXTRA_TRAILERS.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Where the truck's fifth wheel is in it (the "truck" configuration's `hook.position`), if the SDK said.
@@ -204,6 +243,8 @@ static SNAPSHOT: Mutex<Telemetry> = Mutex::new(Telemetry {
     float_on: false,
     float_seen: false,
     float_pose: [0.0; 6],
+    camera_side: 0.0,
+    camera_roll: 0.0,
 });
 
 /// Where the driver's head is by default in the truck's cab (the "truck" configuration's `head.position`).
@@ -259,6 +300,9 @@ const WHEEL_CONTEXT: usize = 0x1000;
 /// for their wheel 0 (the phone's Suspensão app).
 const SUSPENSION_CONTEXT: usize = 0x2000;
 const TRAILER_SUSPENSION_CONTEXT: usize = 0x3000;
+/// Contexts for additional trailers (`trailer.1`..=`trailer.3`) connected and world placement channels.
+const EXTRA_TRAILER_CONNECTED_CONTEXT: usize = 0x4000;
+const EXTRA_TRAILER_PLACEMENT_CONTEXT: usize = 0x4100;
 
 const CHANNELS: &[(&str, u32, Field)] = &[
     ("truck.world.placement", SCS_VALUE_TYPE_DPLACEMENT, Field::Placement),
@@ -363,6 +407,35 @@ pub unsafe fn register(params: &TelemetryInitParamsV100) {
                 .count();
             log!("telemetry: {channel} of {wheels} wheels registered");
         }
+        // Additional coupled trailers (`trailer.1`..=`trailer.3`) for multi-trailer brake smoke.
+        let mut extra_registered = 0usize;
+        for i in 0..EXTRA_TRAILERS_COUNT {
+            let num = i + 1;
+            let Ok(conn_name) = CString::new(format!("trailer.{num}.connected")) else { continue };
+            let Ok(place_name) = CString::new(format!("trailer.{num}.world.placement")) else { continue };
+            let c_ok = register_channel(
+                conn_name.as_ptr(),
+                SCS_U32_NIL,
+                SCS_VALUE_TYPE_BOOL,
+                0,
+                on_channel,
+                (EXTRA_TRAILER_CONNECTED_CONTEXT + i) as *mut c_void,
+            ) == SCS_RESULT_OK;
+            let p_ok = register_channel(
+                place_name.as_ptr(),
+                SCS_U32_NIL,
+                SCS_VALUE_TYPE_DPLACEMENT,
+                0,
+                on_channel,
+                (EXTRA_TRAILER_PLACEMENT_CONTEXT + i) as *mut c_void,
+            ) == SCS_RESULT_OK;
+            if c_ok && p_ok {
+                extra_registered += 1;
+            }
+        }
+        if extra_registered > 0 {
+            log!("telemetry: {extra_registered} extra trailers registered");
+        }
     }
 }
 
@@ -465,8 +538,15 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                     crate::ray::frame(&mut published);
                     published.mirror = crate::mirror::seen();
                     published.camera_ready = crate::rear_camera::ready();
-                    [published.camera_back, published.camera_up, published.camera_tilt, published.camera_turn, published.camera_wide] =
-                        crate::rear_camera::nudged(&published);
+                    [
+                        published.camera_back,
+                        published.camera_up,
+                        published.camera_tilt,
+                        published.camera_turn,
+                        published.camera_wide,
+                        published.camera_side,
+                        published.camera_roll,
+                    ] = crate::rear_camera::nudged(&published);
                     (published.float_on, published.float_seen, published.float_pose) = crate::float_screen::published(&published);
                     bridge.plugin.telemetry.write(&published);
                 }
@@ -476,6 +556,12 @@ unsafe fn on_game_event(event: u32, info: *const c_void) {
                 crate::typing::update(speed, paused);
                 // The end of a frame is on the game's main thread, where its navigator may be changed.
                 crate::navigation::serve();
+                // In-memory Job Market (Bolsa de Fretes): snapshot or accept offers on the game's main thread.
+                crate::job_market::serve();
+                // In-memory Nupay Bank & Loans: live balance mirror and instant take/repay loan on the main thread.
+                crate::bank::serve();
+                // In-memory Company / Fleet & Garage Manager: trucks, trailers, and garage upgrades on the main thread.
+                crate::fleet::serve();
                 // The walking test: on the game's main thread too (it calls the game's camera).
                 crate::character::on_frame_end();
             }
@@ -513,6 +599,9 @@ unsafe fn on_configuration(configuration: &ConfigurationEvent) {
                 // Its wheels and length, for the reversing camera.
                 on_trailer(configuration);
             }
+            b"trailer.1" => on_extra_trailer(0, configuration),
+            b"trailer.2" => on_extra_trailer(1, configuration),
+            b"trailer.3" => on_extra_trailer(2, configuration),
             _ => {}
         }
     }
@@ -598,6 +687,27 @@ unsafe fn on_trailer(configuration: &ConfigurationEvent) {
     }
 }
 
+/// Additional coupled trailer's wheel hub positions (`trailer.1`..=`trailer.3`), for multi-trailer brake smoke.
+///
+/// # Safety
+/// As [`on_configuration`].
+unsafe fn on_extra_trailer(slot: usize, configuration: &ConfigurationEvent) {
+    // SAFETY: the attributes are the SDK's, alive through the call (this function's contract).
+    unsafe {
+        let mut configured = crate::reversing::Configured::default();
+        for attribute in configuration.attributes() {
+            configured.take(attribute);
+        }
+        let mut extras = EXTRA_TRAILERS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(t) = extras.get_mut(slot) {
+            t.wheel_count = configured.count;
+            for at in 0..crate::reversing::MOST_WHEELS {
+                t.wheel_at[at] = if at < configured.count { configured.wheels[at].at } else { [0.0; 3] };
+            }
+        }
+    }
+}
+
 /// # Safety
 /// As [`on_configuration`].
 unsafe fn on_job(configuration: &ConfigurationEvent) {
@@ -657,6 +767,30 @@ unsafe fn on_channel_value(value: *const ScsValue, context: *mut c_void) {
     unsafe {
         // A wheel's suspension, the truck's or the trailer's (`register`): metres pressed in.
         let at = context as usize;
+        if (EXTRA_TRAILER_CONNECTED_CONTEXT..EXTRA_TRAILER_CONNECTED_CONTEXT + EXTRA_TRAILERS_COUNT).contains(&at) {
+            let slot = at - EXTRA_TRAILER_CONNECTED_CONTEXT;
+            let mut extras = EXTRA_TRAILERS.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(t) = extras.get_mut(slot) {
+                t.connected = value.as_ref().is_some_and(|v| v.bool());
+            }
+            return;
+        }
+        if (EXTRA_TRAILER_PLACEMENT_CONTEXT..EXTRA_TRAILER_PLACEMENT_CONTEXT + EXTRA_TRAILERS_COUNT).contains(&at) {
+            let slot = at - EXTRA_TRAILER_PLACEMENT_CONTEXT;
+            let mut extras = EXTRA_TRAILERS.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(t) = extras.get_mut(slot) {
+                if let Some(v) = value.as_ref() {
+                    let p = v.dplacement();
+                    t.position = [p.x, p.y, p.z];
+                    t.heading = p.heading;
+                    (t.pitch, t.roll) = (p.pitch, p.roll);
+                    t.placed = p.x != 0.0 || p.z != 0.0;
+                } else {
+                    t.placed = false;
+                }
+            }
+            return;
+        }
         if (SUSPENSION_CONTEXT..TRAILER_SUSPENSION_CONTEXT + crate::reversing::MOST_WHEELS).contains(&at) {
             let deflection = value.as_ref().map_or(0.0, ScsValue::float);
             let mut vehicles = crate::reversing::VEHICLES.lock().unwrap_or_else(|e| e.into_inner());

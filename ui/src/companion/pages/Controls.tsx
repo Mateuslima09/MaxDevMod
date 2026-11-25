@@ -84,6 +84,7 @@ function Keybinds({
     phone: w.phone,
     character: w.character ?? 'Character (on the phone)',
     hints: w.hideBar ?? 'Hide the key hints bar',
+    roughRoad: w.roughRoad ?? 'Subir suspensão (terreno ruim)',
   }
   const listen = useCallback(
     (which: KeybindId | 'screen') => (on: boolean) => {

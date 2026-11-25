@@ -1,6 +1,6 @@
 import type { GameNotification, PhoneNotification } from '../shared/host'
 import { offenceName } from './offences'
-import { type Prefs, formatMoney } from './prefs'
+import { type NotificationSound, type Prefs, formatMoney } from './prefs'
 
 /** The most notifications waiting their turn: a busy LIVE's oldest are let go. */
 const WAITING_MOST = 8
@@ -177,36 +177,100 @@ export function waitingWith<T>(waiting: T[], next: T): T[] {
 
 let audio: AudioContext | null = null
 
+function getAudio(): AudioContext | null {
+  try {
+    audio ??= new AudioContext()
+    if (audio.state === 'suspended') void audio.resume()
+    return audio
+  } catch {
+    return null
+  }
+}
+
+function playTone(
+  context: AudioContext,
+  frequency: number,
+  at: number,
+  duration: number,
+  peak: number,
+  type: OscillatorType = 'sine',
+  overtone = 0,
+): void {
+  const osc = context.createOscillator()
+  const gain = context.createGain()
+  osc.type = type
+  osc.frequency.setValueAtTime(frequency, at)
+  gain.gain.setValueAtTime(0.0001, at)
+  gain.gain.exponentialRampToValueAtTime(peak, at + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+  osc.connect(gain).connect(context.destination)
+  osc.start(at)
+  osc.stop(at + duration + 0.03)
+
+  if (overtone > 0) {
+    const harm = context.createOscillator()
+    const hGain = context.createGain()
+    harm.type = 'sine'
+    harm.frequency.setValueAtTime(frequency * 2, at)
+    hGain.gain.setValueAtTime(0.0001, at)
+    hGain.gain.exponentialRampToValueAtTime(peak * overtone, at + 0.008)
+    hGain.gain.exponentialRampToValueAtTime(0.0001, at + duration * 0.55)
+    harm.connect(hGain).connect(context.destination)
+    harm.start(at)
+    harm.stop(at + duration * 0.6 + 0.02)
+  }
+}
+
 /**
- * A notification's sound, made here (no file to load): two bright notes for a follow, a share or a subscription;
- * a rising run of four for a gift or money coming in; two falling low ones for a warning.
+ * Plays a preview (or live alert) of the chosen iPhone-inspired notification tone using Web Audio API.
  */
-export function chime(notification: PhoneNotification): void {
+export function playNotificationSound(sound: NotificationSound, variant: 'normal' | 'rising' | 'warning' = 'normal'): void {
+  if (sound === 'silent') return
+  const context = getAudio()
+  if (!context) return
+  const start = context.currentTime + 0.02
+
+  if (sound === 'tritone') {
+    // Classic iPhone Tri-tone: crisp 3-note glass marimba (G5 -> B5 -> D6), or falling on warnings.
+    const notes = variant === 'warning' ? [987.77, 783.99, 587.33] : [783.99, 987.77, 1174.66]
+    notes.forEach((freq, i) => playTone(context, freq, start + i * 0.105, 0.36, 0.21, 'triangle', 0.28))
+    return
+  }
+
+  if (sound === 'rebound') {
+    // Modern iOS 17/18 Rebound: warm resonant drop + crisp upward rebound.
+    const notes = variant === 'warning' ? [783.99, 523.25] : [698.46, 1046.5]
+    playTone(context, notes[0], start, 0.24, 0.22, 'sine', 0.35)
+    playTone(context, notes[1], start + 0.115, 0.44, 0.24, 'triangle', 0.22)
+    return
+  }
+
+  if (sound === 'note') {
+    // iOS Note: bright glass bell double-tap.
+    const notes = variant === 'warning' ? [880, 659.25] : [880, 1318.51]
+    notes.forEach((freq, i) => playTone(context, freq, start + i * 0.095, 0.48, 0.2, 'sine', 0.32))
+    return
+  }
+
+  if (sound === 'aurora') {
+    // iOS Aurora: shimmering airy chord.
+    const chord = variant === 'warning' ? [659.25, 587.33, 440] : [1046.5, 1318.51, 1567.98, 1975.53]
+    chord.forEach((freq, i) => playTone(context, freq, start + i * 0.055, 0.56, 0.14, 'sine', 0.18))
+    return
+  }
+
+  // 'classic': original WestPlay chime.
+  const notes = variant === 'warning' ? [880, 587] : variant === 'rising' ? [784, 988, 1175, 1568] : [1175, 1568]
+  const step = variant === 'warning' ? 0.16 : variant === 'rising' ? 0.085 : 0.11
+  notes.forEach((frequency, index) => playTone(context, frequency, start + index * step, 0.42, 0.22, 'sine', 0))
+}
+
+/**
+ * A notification's sound, made here (no file to load), honoring the tone chosen in Settings.
+ */
+export function chime(notification: PhoneNotification, sound: NotificationSound = 'tritone'): void {
   const kind = notification.kind
   const warning = isWarning(notification)
   const rising = kind === 'gift' || kind === 'delivered' || kind === 'otherIn'
-  try {
-    audio ??= new AudioContext()
-    const context = audio
-    if (context.state === 'suspended') void context.resume()
-    const notes = warning ? [880, 587] : rising ? [784, 988, 1175, 1568] : [1175, 1568]
-    const step = warning ? 0.16 : rising ? 0.085 : 0.11
-    const start = context.currentTime + 0.02
-    notes.forEach((frequency, index) => {
-      const at = start + index * step
-      const oscillator = context.createOscillator()
-      const gain = context.createGain()
-      oscillator.type = 'sine'
-      oscillator.frequency.value = frequency
-      // A struck bell: there at once, ringing out.
-      gain.gain.setValueAtTime(0.0001, at)
-      gain.gain.exponentialRampToValueAtTime(0.22, at + 0.012)
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.42)
-      oscillator.connect(gain).connect(context.destination)
-      oscillator.start(at)
-      oscillator.stop(at + 0.45)
-    })
-  } catch {
-    // No sound here (a phone's browser before it was touched): the notification still shows.
-  }
+  playNotificationSound(sound, warning ? 'warning' : rising ? 'rising' : 'normal')
 }

@@ -493,12 +493,6 @@ pub unsafe fn on_vs_constant_buffers1(
     if !seen_through_lens(&numbers) {
         return;
     }
-    if miss < 3.0 {
-        let mut near = NEAR_BLOCKS.lock().unwrap_or_else(|e| e.into_inner());
-        if near.len() < READS_PER_FRAME as usize {
-            near.push(numbers);
-        }
-    }
     let follows = miss <= FOLLOW_FARTHEST && follows_last(&numbers);
     let offset = HEAD_OFFSET.each_ref().map(|h| f32::from_bits(h.load(Ordering::Relaxed)));
     if miss > FOLLOW_FARTHEST || (miss > HEAD_NEAR && !follows && !at_offset(&numbers, offset) && !seat_moved()) {
@@ -518,49 +512,40 @@ pub unsafe fn on_vs_constant_buffers1(
 /// stayed still as the cab swayed): the cab's block (its place from the camera, and where it looks), the head's
 /// offset, and the other blocks within 3 m turned as it is (within 0.01), each as where it is from the cab's block in
 /// the cab's own axes. Taken as the cab is, those stay the same as the view turns and the cab sways.
-fn diagnose(cab: &M4, near: &[[f32; 32]], presents: u64) {
-    let offset = HEAD_OFFSET.each_ref().map(|h| f32::from_bits(h.load(Ordering::Relaxed)));
-    let mut parts: Vec<([f32; 3], u32)> = Vec::new();
-    let mut turned_otherwise = 0u32;
-    for numbers in near {
-        let m = rows(numbers, 0);
-        let same = (0..3).all(|r| (0..3).all(|c| (m[r][c] - cab[r][c]).abs() < 0.01));
-        if !same {
-            turned_otherwise += 1;
-            continue;
-        }
-        let d = [m[0][3] - cab[0][3], m[1][3] - cab[1][3], m[2][3] - cab[2][3]];
-        // In the cab's axes: R^T d.
-        let in_cab: [f32; 3] = std::array::from_fn(|c| (0..3).map(|r| cab[r][c] * d[r]).sum());
-        match parts.iter_mut().find(|(p, _)| (0..3).all(|i| (p[i] - in_cab[i]).abs() < 0.005)) {
-            Some(part) => part.1 += 1,
-            None => parts.push((in_cab, 1)),
-        }
+fn diagnose(_cab: &M4, _near: &[[f32; 32]], _presents: u64) {}
+
+/// Maximum 3D distance (metres) from the driver's head at which the camera can still be inside the cab.
+/// Inside the cab (camera 1, including seat adjustment and leaning out the window) distance is under ~0.8 m;
+/// outside cameras (orbit, chase, roof, bumper, wheel) sit farther than this.
+const CAB_CAMERA_MAX_DIST: f64 = 1.4;
+
+/// Whether the game's camera is physically outside the cab (farther than [`CAB_CAMERA_MAX_DIST`] from the driver's
+/// head in world space). Returns `false` if the camera or truck position isn't known yet.
+fn camera_outside_cab() -> bool {
+    let Some(camera) = crate::camera::position() else { return false };
+    let truck = crate::telemetry::truck();
+    if truck.position == [0.0, 0.0, 0.0] {
+        return false;
     }
-    parts.sort_by(|a, b| b.1.cmp(&a.1));
-    let listed: Vec<String> =
-        parts.iter().take(8).map(|(p, n)| format!("[{:.3} {:.3} {:.3}]x{n}", p[0], p[1], p[2])).collect();
-    log!(
-        "tela flutuante: diag {presents}: cab block at [{:.3} {:.3} {:.3}] looking [{:.2} {:.2} {:.2}], head offset [{:.3} {:.3} {:.3}]; same-turned parts {}; turned otherwise {turned_otherwise}",
-        cab[0][3],
-        cab[1][3],
-        cab[2][3],
-        -cab[2][0],
-        -cab[2][1],
-        -cab[2][2],
-        offset[0],
-        offset[1],
-        offset[2],
-        listed.join(" ")
-    );
+    let turn = |t: f32| f64::from(t) * std::f64::consts::TAU;
+    let (heading, pitch, roll) = (turn(truck.heading), turn(truck.pitch), turn(truck.roll));
+    let [mut x, mut y, mut z] = truck.head.map(f64::from);
+    (x, y) = (x * roll.cos() - y * roll.sin(), x * roll.sin() + y * roll.cos());
+    (y, z) = (y * pitch.cos() - z * pitch.sin(), y * pitch.sin() + z * pitch.cos());
+    (x, z) = (x * heading.cos() + z * heading.sin(), -x * heading.sin() + z * heading.cos());
+    let head_world = [x + truck.position[0], y + truck.position[1], z + truck.position[2]];
+    let dist_sq: f64 = camera.iter().zip(head_world).map(|(&c, h)| (f64::from(c) - h).powi(2)).sum();
+    dist_sq > CAB_CAMERA_MAX_DIST * CAB_CAMERA_MAX_DIST
 }
 
-/// Whether the cab was last found away from the head (the seat moved): blocks that far are counted then.
+/// Whether the cab was last found away from the head (the seat moved): blocks that far are counted then,
+/// only while the cab was seen recently (never stale in outside cameras).
 fn seat_moved() -> bool {
-    LAST_CAB
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .is_some_and(|(last, _)| (last[0][3].powi(2) + last[1][3].powi(2) + last[2][3].powi(2)).sqrt() > HEAD_NEAR * 0.7)
+    let presents = PRESENTS.load(Ordering::Relaxed);
+    LAST_CAB.lock().unwrap_or_else(|e| e.into_inner()).is_some_and(|(last, at)| {
+        presents.saturating_sub(at) <= FOLLOW_FOR
+            && (last[0][3].powi(2) + last[1][3].powi(2) + last[2][3].powi(2)).sqrt() > HEAD_NEAR * 0.7
+    })
 }
 
 /// Whether a block's origin is where the head's offset puts the cab's: seen from a head moved by `offset` (the cab's
@@ -658,9 +643,10 @@ fn take_cab() -> Option<(M4, M4)> {
     BUDGET.store(if found_now { READS_FOUND } else { READS_LOOKING }, Ordering::Relaxed);
     drop(votes);
     let presents = PRESENTS.load(Ordering::Relaxed);
-    // On foot (the Modo Personagem), out of the cab: no screen (owner 2026-11-20: it stood in the road in front of
-    // the person, the person's camera taken for the head), and nothing learned or kept for when the cab is back.
-    if crate::character::walking() {
+    // On foot (the Modo Personagem) or camera physically outside the cab: no screen, and nothing kept for when the cab
+    // is back (prevents false positives when orbiting the outside camera near truck/world geometry, which also leaked
+    // cab audio outside by stamping `plugin.cab_frame`).
+    if crate::character::walking() || camera_outside_cab() {
         *LAST_DRAWN.lock().unwrap_or_else(|e| e.into_inner()) = None;
         *LAST_CAB.lock().unwrap_or_else(|e| e.into_inner()) = None;
         NEAR_BLOCKS.lock().unwrap_or_else(|e| e.into_inner()).clear();
@@ -946,7 +932,8 @@ float4 ps(Vertex v) : SV_Target {
     color = color * (1 - mark.a * in_logo) + mark.rgb * in_logo;
     float2 uv = float2(0.5 + p.x / picture.x, 0.5 - p.y / picture.y);
     float4 fg = screen.Sample(smooth, saturate(uv));
-    float3 bg = under.Sample(smooth, saturate(uv)).rgb;
+    float2 bg_uv = float2(saturate(uv.x + 0.13), saturate(uv.y * 0.84));
+    float3 bg = under.Sample(smooth, bg_uv).rgb;
     float3 shown = fg.rgb + bg * (1 - fg.a);
     float inside = rounded(p, picture.xy * 0.5, picture.w);
     float cover = saturate(0.5 - inside / max(fwidth(inside), 1e-5));
@@ -1152,9 +1139,11 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
                     log!("tela flutuante: drawn again");
                 }
                 STATS.lock().unwrap_or_else(|e| e.into_inner()).drawn += u64::from(drawn);
-                // Drawn in the cab: the app's told the screen's in view, so it sends its frames (owner 2026-11-21, old
-                // Actros: its own screen isn't WestPlay's, the app sent none and the floating screen stayed black).
-                if drawn && let Some(bridge) = bridge::get() {
+                // Drawn in the cab: on trucks without WestPlay's dashboard mark (owner 2026-11-21, old Actros), tell
+                // the app the screen's in view so it sends frames. Skip when the truck already has a dashboard cab mark
+                // (screens.rs tracks the cab accurately) or when the camera is physically outside the cab, so orbiting
+                // the outside camera can never unmuffle cab audio.
+                if drawn && !crate::screens::cab_mark_seen() && !camera_outside_cab() && let Some(bridge) = bridge::get() {
                     let plugin = &bridge.plugin;
                     plugin.cab_frame.store(plugin.heartbeat.load(Ordering::Relaxed), Ordering::Release);
                 }

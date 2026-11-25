@@ -696,6 +696,11 @@ fn is_cab_mark(desc: &D3D11_TEXTURE2D_DESC) -> bool {
         && desc.Height == CAB_MARK_HEIGHT
 }
 
+/// Whether the dashboard's cab mark has been seen drawn in the current truck (reset when the truck changes).
+pub fn cab_mark_seen() -> bool {
+    CAB_MARK_SAID.load(Ordering::Acquire)
+}
+
 /// The cab's mark drawn into a dashboard's screen: the camera in the cab, this frame, said for the app.
 fn cab_drawn() {
     let Some(bridge) = bridge::get() else { return };

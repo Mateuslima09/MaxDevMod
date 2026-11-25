@@ -24,6 +24,8 @@ interface ReversingSettings {
   set(choice: Partial<Pick<ReversingSettings, 'camera' | 'beeps' | 'guides' | 'beepVolume'>>): void
 }
 
+const STORAGE_KEY = IS_DEMO ? 'westplay.reversing.demo' : 'westplay.reversing'
+
 export const useReversingSettings = create<ReversingSettings>()(
   persist(
     (set) => ({
@@ -34,7 +36,7 @@ export const useReversingSettings = create<ReversingSettings>()(
       set: (choice) => set(choice),
     }),
     {
-      name: IS_DEMO ? 'westplay.reversing.demo' : 'westplay.reversing',
+      name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
       partialize: ({ camera, beeps, guides, beepVolume }) => ({ camera, beeps, guides, beepVolume }),
       merge: (stored, current) => {
@@ -51,3 +53,23 @@ export const useReversingSettings = create<ReversingSettings>()(
     },
   ),
 )
+
+// Keep phone/iPad CameraApp and cabin ReversingCamera live-synced across WebView2 windows.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEY || !event.newValue) return
+    try {
+      const parsed = JSON.parse(event.newValue) as { state?: Partial<ReversingSettings> }
+      const s = parsed.state
+      if (!s) return
+      useReversingSettings.setState((cur) => ({
+        camera: typeof s.camera === 'boolean' ? s.camera : cur.camera,
+        beeps: typeof s.beeps === 'boolean' ? s.beeps : cur.beeps,
+        guides: typeof s.guides === 'boolean' ? s.guides : cur.guides,
+        beepVolume: s.beepVolume !== undefined ? beepVolumeStep(s.beepVolume) : cur.beepVolume,
+      }))
+    } catch {
+      // Ignore malformed storage updates.
+    }
+  })
+}

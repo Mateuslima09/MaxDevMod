@@ -403,25 +403,58 @@ function AdjustPad({ done }: { done: () => void }) {
   const text = useText()
   const back = useLive((state) => state.telemetry?.cameraBack ?? 0)
   const up = useLive((state) => state.telemetry?.cameraUp ?? 0)
+  const side = useLive((state) => state.telemetry?.cameraSide ?? 0)
+  const roll = useLive((state) => state.telemetry?.cameraRoll ?? 0)
   const press = (action: CameraNudge) => postToHost({ type: 'cameraNudge', action })
   const words = text.reversing
+  const rollText = `${roll > 0 ? '+' : roll < 0 ? '−' : ''}${Math.abs(Math.round(roll * 10) / 10)}°`
   return (
     <div className="reversing-adjust-pad">
       <strong>{words.adjust}</strong>
-      <button type="button" onClick={() => press('back')}>
-        {words.adjustBack}
-      </button>
-      <button type="button" onClick={() => press('forward')}>
-        {words.adjustForward}
-      </button>
+      <div className="reversing-adjust-row">
+        <button type="button" onClick={() => press('back')}>
+          {words.adjustBack}
+        </button>
+        <button type="button" onClick={() => press('backFar')}>
+          +50 cm
+        </button>
+      </div>
+      <div className="reversing-adjust-row">
+        <button type="button" onClick={() => press('forward')}>
+          {words.adjustForward}
+        </button>
+        <button type="button" onClick={() => press('forwardFar')}>
+          −50 cm
+        </button>
+      </div>
       <span className="reversing-adjust-value">{nudgeText(back, text.decimal)}</span>
-      <button type="button" onClick={() => press('up')}>
-        {words.adjustUp}
-      </button>
-      <button type="button" onClick={() => press('down')}>
-        {words.adjustDown}
-      </button>
+      <div className="reversing-adjust-row">
+        <button type="button" onClick={() => press('up')}>
+          {words.adjustUp}
+        </button>
+        <button type="button" onClick={() => press('down')}>
+          {words.adjustDown}
+        </button>
+      </div>
       <span className="reversing-adjust-value">{nudgeText(up, text.decimal)}</span>
+      <div className="reversing-adjust-row">
+        <button type="button" onClick={() => press('left')}>
+          {words.adjustLeft}
+        </button>
+        <button type="button" onClick={() => press('right')}>
+          {words.adjustRight}
+        </button>
+      </div>
+      <span className="reversing-adjust-value">{nudgeText(side, text.decimal)}</span>
+      <div className="reversing-adjust-row">
+        <button type="button" onClick={() => press('rollLeft')}>
+          {words.adjustRollLeft}
+        </button>
+        <button type="button" onClick={() => press('rollRight')}>
+          {words.adjustRollRight}
+        </button>
+      </div>
+      <span className="reversing-adjust-value">{rollText}</span>
       <div className="reversing-adjust-row">
         <button type="button" className="quiet" onClick={() => press('reset')}>
           {words.adjustReset}

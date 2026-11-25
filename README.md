@@ -3,14 +3,13 @@
 <h1 align="center">MaxDevMod</h1>
 
 <p align="center">
-  <b>Uma tela no estilo CarPlay para os caminhões do American Truck Simulator e do Euro Truck Simulator 2.</b><br>
-  Seu mapa, sua música e o YouTube na tela do painel, câmera de ré, um celular dentro do jogo e o Modo Personagem
-  para descer do caminhão.<br>
-  <sub><i>English: Open-source CarPlay-style infotainment screen, in-game phone, rear-view camera and HUD for American Truck Simulator and Euro Truck Simulator 2 on Windows (GPL-3.0-or-later).</i></sub>
+  <b>Uma central multimídia no estilo CarPlay para os caminhões do American Truck Simulator e do Euro Truck Simulator 2.</b><br>
+  Mapa do seu próprio jogo, música e YouTube no painel, câmera de ré, freios com fumaça 3D, celular completo dentro do
+  jogo (com Bolsa de Fretes, Garagem e Nupay ao vivo) e o Modo Personagem para descer do caminhão.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Mateuslima09/MaxDevMod/releases"><img alt="Baixar para Windows" src="https://img.shields.io/badge/baixar-para%20Windows-409c42?style=for-the-badge"></a>
+  <a href="https://github.com/Mateuslima09/MaxDevMod/releases/latest"><img alt="Baixar para Windows" src="https://img.shields.io/badge/baixar-para%20Windows-409c42?style=for-the-badge"></a>
   <img alt="Windows 10 e 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-2b2b2b?style=for-the-badge">
   <img alt="American Truck Simulator 1.61" src="https://img.shields.io/badge/ATS-1.61-2b2b2b?style=for-the-badge">
   <img alt="Euro Truck Simulator 2 1.61" src="https://img.shields.io/badge/ETS2-1.61-2b2b2b?style=for-the-badge">
@@ -21,6 +20,7 @@
   <a href="#recursos">Recursos</a> ·
   <a href="#câmera-de-ré">Câmera de ré</a> ·
   <a href="#o-celular">O celular</a> ·
+  <a href="#freios-e-suspensão">Freios e suspensão</a> ·
   <a href="#modo-personagem-beta">Modo Personagem</a> ·
   <a href="#veículos">Veículos</a> ·
   <a href="#instalação">Instalação</a> ·
@@ -35,9 +35,9 @@
   <img alt="A tela inicial do MaxDevMod: Mapas, Música, Spotify, YouTube e YouTube Music na tela do caminhão" src="docs/images/home-dark.png" width="100%">
 </picture>
 
-O MaxDevMod coloca uma central multimídia no estilo de um carro moderno na tela do painel do seu caminhão, dentro do
-jogo. Ela traz a rota num mapa feito a partir do seu próprio jogo, sua música, o YouTube e o clima da viagem, tudo no
-lugar onde um caminhão de verdade tem a tela. Você usa com o mouse segurando uma tecla (Alt esquerdo, por padrão).
+O **MaxDevMod** coloca uma central multimídia no estilo de um carro moderno na tela do painel do seu caminhão, dentro
+do jogo. Ela traz a rota num mapa feito a partir do seu próprio jogo, sua música, o YouTube e o clima da viagem, tudo
+no lugar onde um caminhão de verdade tem a tela. Você usa com o mouse segurando uma tecla (**Alt esquerdo**, por padrão).
 
 Funciona no **American Truck Simulator** e no **Euro Truck Simulator 2**. Instalado nos dois, o MaxDevMod troca sozinho
 para o jogo que você abrir.
@@ -63,13 +63,14 @@ para o jogo que você abrir.
         <img alt="O Painel: o mapa ao lado do que está tocando" src="docs/images/dashboard-dark.png" width="100%">
       </picture>
       <h3>Um painel para a viagem</h3>
-      O mapa ao lado do que está tocando, do destino e do clima no caminho, tudo numa tela só.
+      O mapa ao lado do que está tocando, do destino e do clima no caminho, tudo numa tela só, com opção de alternar
+      para o mapa original no painel ou na tela virtual.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <img alt="Tocando agora no YouTube Music" src="docs/images/youtube-music.png" width="100%">
-      <h3>Sua música</h3>
+      <h3>Sua música e YouTube</h3>
       Apple Music, Spotify e YouTube Music, com Tocando Agora e letras. O clipe da música passa no próprio Tocando
       Agora, e o YouTube tem canais, playlists, legendas e qualidade. O som sai dos alto-falantes do caminhão.
     </td>
@@ -80,17 +81,16 @@ para o jogo que você abrir.
         <img alt="A tela inicial no outro visual" src="docs/images/looks-light.png" width="100%">
       </picture>
       <h3>Claro, escuro e do seu jeito</h3>
-      Escurece à noite ou quando você liga os faróis, como o sensor de luz de um carro. Use seus próprios papéis de
-      parede e ícones.
+      Visual Light Glassmorphism e modo escuro automático à noite ou ao ligar os faróis, controle de brilho e papéis de
+      parede oficiais do MaxDevMod (ou os seus próprios).
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
       <img alt="Ajustar Tela: bordas, proporção e tamanho do MaxDevMod na tela do veículo" src="docs/images/adjust-screen.png" width="100%">
-      <h3>Ajustar Tela</h3>
+      <h3>Ajustar Tela e Tela Flutuante</h3>
       Bordas, proporção e tamanho do MaxDevMod em cada tela, salvos por veículo, para caminhões de mod com telas de
-      formatos diferentes. Dá para ajustar também pelo celular, se a tela ficar pequena demais para alcançar os
-      Ajustes.
+      formatos diferentes — além de uma tela flutuante configurável direto pelo celular.
     </td>
     <td width="50%" valign="top">
       <img alt="Mapas sem o mapa do perfil: a grade, o rastro e a rota do GPS do jogo" src="docs/images/no-map.png" width="100%">
@@ -120,7 +120,7 @@ ou na do caminhão. Ela some pouco depois de você tirar a ré, ou na hora se o 
 - **Sensores de estacionamento**: o bipe começa lento, fica mais rápido e mais alto conforme a traseira chega perto
   de algo e vira um tom contínuo quando é para parar, com a distância ao lado da imagem.
 - A imagem é desenhada a partir do mapa do seu jogo (ruas na largura real, prédios em 3D e os caminhões dos outros
-  jogadores do TruckersMP), espelhada como numa câmera de verdade. Não é a imagem do próprio jogo.
+  jogadores do TruckersMP), espelhada como numa câmera de verdade.
 - Em **Ajustes → Câmera de Ré**, na tela do caminhão, cada parte liga e desliga sozinha: a câmera ao engatar a ré, o
   bipe dos sensores e as linhas guia.
 
@@ -134,30 +134,36 @@ tela do MaxDevMod no painel.
   <tr>
     <td width="25%" valign="top" align="center">
       <img alt="A tela inicial do celular" src="docs/images/phone-home.png" width="100%"><br>
-      <b>Início</b><br>Hora do jogo, velocidade e combustível, o que está tocando e os apps.
+      <b>Início</b><br>Hora do jogo, velocidade e combustível, o que está tocando e todos os apps.
     </td>
     <td width="25%" valign="top" align="center">
-      <img alt="O Nupay: saldo, entradas, saídas e histórico" src="docs/images/phone-nupay.png" width="100%"><br>
-      <b>Nupay</b><br>O saldo da sua conta no jogo, o que entrou e o que saiu: fretes, multas, pedágios e balsas. Em
-      dólar, real ou euro.
+      <img alt="O Nupay: saldo, entradas, saídas e financiamentos" src="docs/images/phone-nupay.png" width="100%"><br>
+      <b>Nupay</b><br>Saldo em tempo real, extrato de fretes/multas/pedágios e contratação ou quitação de empréstimos ao vivo.
     </td>
     <td width="25%" valign="top" align="center">
       <img alt="Comandos: vidros, suspensão a ar e o caminhão" src="docs/images/phone-commands.png" width="100%"><br>
-      <b>Comandos</b><br>Vidros, suspensão a ar, giroflex, pisca-alerta, eixo, luz da cabine, buzinas, freio de mão e
-      carreta.
+      <b>Comandos</b><br>Vidros, suspensão a ar (manual e automática), giroflex, pisca-alerta, eixo, luz da cabine, buzinas, freio de mão e carreta.
     </td>
     <td width="25%" valign="top" align="center">
       <img alt="Ajustes do celular" src="docs/images/phone-settings.png" width="100%"><br>
-      <b>Ajustes</b><br>Claro ou escuro, milhas ou km, a moeda do Nupay, o papel de parede, o volume e o Ajustar Tela.
+      <b>Ajustes</b><br>Claro ou escuro, milhas ou km, moeda do Nupay, papel de parede, volume, tela flutuante e Ajustar Tela.
     </td>
   </tr>
 </table>
 
-Ele também tem **Frete** (a carga e o peso, de onde para onde, quanto falta e quanto paga), **Caminhão** (velocidade, combustível, autonomia,
-piloto automático, motor, freio de mão e luzes), **Serviços** (abre a janela de serviços do jogo, com guincho e
-oficina, e estaciona rápido), **Personagem**, o **mapa** e a **música**: YouTube Music, Spotify e o que estiver
-tocando. Na segunda página dos apps ficam o Nupay, Serviços, Personagem e TikTok, com setas nos cantos para trocar de
-página. O celular se guarda sozinho no menu do jogo.
+### Apps incluídos no celular
+- **Bolsa de Fretes (ao vivo):** navegue pelo Mercado de Fretes, Mercado de Cargas e Trabalho Rápido direto no celular,
+  com busca, filtros, ordenação, fotos das cargas e aceite ou cancelamento imediato sem precisar abrir o menu do jogo
+  (com tela de transição suave ao aceitar Trabalho Rápido).
+- **Minha Empresa / Garagem (ao vivo):** veja seus caminhões, reboques e garagens com quilometragem, estado e placas;
+  troque de caminhão na hora, engate ou guarde reboques próprios e faça upgrade de garagens (1 → 3 → 5 vagas) com os
+  preços reais do jogo.
+- **Nupay (Banco e Empréstimos ao vivo):** saldo real sincronizado com o jogo, extrato completo (fretes, multas,
+  pedágios e balsas) e aba **Financiamentos** para contratar ou quitar empréstimos na hora.
+- **YouTube no celular / modo iPad:** assista vídeos, pesquise canais e playlists direto pelo celular do jogo.
+- **Freios e Suspensão:** acompanhe a temperatura dos freios em tempo real e configure a suspensão a ar automática.
+- **Frete, Caminhão, Serviços, Personagem, Mapa, Música e TikTok:** tudo acessível no celular, que se guarda sozinho no
+  menu do jogo.
 
 **TikTok e notificações da LIVE.** O app TikTok do celular é o site oficial do TikTok: dá para rolar o feed, curtir,
 seguir e comentar como no site. Entre na sua conta em **Contas → TikTok**, no app do PC. Com a conta conectada, quem
@@ -174,17 +180,26 @@ que está tocando. É a mesma tela do painel, e tudo o que você faz nela vale n
 Para usar pelo celular de verdade, ele precisa estar na mesma rede Wi-Fi do PC. Abra o MaxDevMod no PC, vá em **Tela
 do caminhão** e escaneie um dos QR Codes com a câmera.
 
+## Freios e suspensão
+
+- **Superaquecimento e fadiga de freios (Brake Fade):** simulação realista da temperatura dos discos de freio do cavalo
+  mecânico e das carretas, com avisos sonoros, chiar de freio e HUD dedicado.
+- **Fumaça 3D nas rodas:** quando os freios esquentam demais (Laranja → Vermelho → Superaquecido), fumaça 3D sai
+  naturalmente das rodas do caminhão e de cada carreta (incluindo bitrem e rodotrem), reagindo à velocidade e ao vento.
+- **Suspensão a ar automática:** calibração fina de tempo de atraso e retorno automático da suspensão pelo celular.
+
 ## Modo Personagem (beta)
 
 Pare o caminhão, aperte **F8** e desça. Você anda pelo mundo do jogo em primeira ou terceira pessoa, com um dos
 personagens do MaxDevMod, escolhido pela foto na página **Personagem** do app. Completo no ETS2; no ATS ainda falta
 uma parte.
 
-- Andar, correr (Shift), pular (Espaço), agachar (Ctrl), com passos e a porta do motorista abrindo e fechando.
+- Andar, correr (Shift), pular (Espaço), agachar (Ctrl), com passos, a porta do motorista abrindo e fechando e o
+  **motorista sentado oculto automaticamente na cabine** enquanto você está fora do caminhão.
 - O celular vai na mão quando você está a pé e é guardado quando você corre ou entra no caminhão. A música fica
   abafada fora da cabine.
 - **HUD Liquid Glass:** uma barra de vidro, embaixo e no centro da tela, mostra as teclas que valem naquele momento
-  (descer, entrar, abastecer, assinar...). Ela entra e sai suavemente e a tecla apertada pisca em vermelho.
+  (descer, entrar, abastecer, pagar, assinar...). Ela entra e sai suavemente e a tecla apertada pisca em vermelho.
 - A câmera lembra se você estava em primeira ou terceira pessoa.
 
 Só no single player, e cada uma das partes abaixo liga e desliga nos **Ajustes** do celular do jogo:
@@ -193,9 +208,9 @@ Só no single player, e cada uma das partes abaixo liga e desliga nos **Ajustes*
   aperte **E** nele, assine a nota fiscal com o mouse e colete. Só então a carreta engata, e o engate é feito por
   você: encoste a quinta roda sob o pino, desça e aperte **E** na quinta roda. Na entrega, o destinatário assina e
   carimba o canhoto antes de você finalizar. O frete rápido continua como sempre.
-- **Abastecimento manual.** Na bomba (o ícone verde do galão), o Enter na cabine não abastece mais: desça, vá até o
-  tanque, ao lado do caminhão, e aperte **E**. O tanque enche e para sozinho quando está cheio, e o jogo cobra como
-  sempre.
+- **Abastecimento manual com frentista.** Na bomba (o ícone verde do galão), desça, vá até o tanque ao lado do caminhão
+  e aperte **E** para abastecer. Ao finalizar, um frentista aguarda na frente do caminhão com um **balão 3D Liquid
+  Glass** mostrando o valor a pagar — chegue perto e aperte **E** para pagar.
 
 Para usar, deixe o app do MaxDevMod aberto no PC: sem ele, o F8 não faz nada.
 
@@ -259,21 +274,15 @@ A música sai dos alto-falantes do caminhão, cada um onde fica na cabine. Os ou
 
 ## Instalação
 
-1. Baixe o instalador na [última versão](https://github.com/Mateuslima09/MaxDevMod/releases) e rode, com os
+1. Baixe o instalador na [última versão](https://github.com/Mateuslima09/MaxDevMod/releases/latest) e rode, com os
    jogos fechados.
 2. O app abre e guia você no resto: acha o jogo, instala o plugin e o mod de telas do MaxDevMod e monta o seu mapa.
 3. Para usar também no outro jogo, vá em **Configuração → Outros jogos** e clique em **Instalar**.
 4. Abra o jogo e entre num caminhão.
 
-As novas versões ficam disponíveis na página de [versões](https://github.com/Mateuslima09/MaxDevMod/releases).
-
-## Code Signing Policy
-
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
-- **Maintainers & Approvers**: Mateus Lima (`Mateuslima09`)
-- **Build & Signing**: Official Windows releases are built automatically via GitHub Actions from this public repository.
-- **Privacy**: This software does not collect, store, or transmit personal user data (see [Privacidade](#privacidade)).
+O instalador não é assinado digitalmente. Se o Windows SmartScreen exibir um aviso ao executar, clique em
+**Mais informações → Executar assim mesmo**. As novas versões ficam disponíveis na página de
+[versões](https://github.com/Mateuslima09/MaxDevMod/releases).
 
 **Requisitos:** Windows 10 ou 11 (64 bits), American Truck Simulator e/ou Euro Truck Simulator 2 na versão 1.61 (outras
 podem funcionar; o app avisa quando uma não foi testada) e o Microsoft Edge WebView2 (já vem no Windows 11; o
@@ -300,8 +309,13 @@ npm install      # as ferramentas do app e os pacotes da interface
 npm run dev      # o MaxDevMod, com a interface servida ao vivo
 ```
 
-`cargo test --workspace` e `npm test --prefix ui` rodam os testes. O plugin do jogo é compilado com
-`cargo build --release -p westplay-plugin`.
+`cargo test --workspace` e `npm test --prefix ui` rodam os testes. Para gerar o plugin do jogo e o instalador completo
+de release:
+
+```sh
+cargo build --release -p westplay-plugin
+npm run build:release
+```
 
 </details>
 
@@ -309,8 +323,8 @@ npm run dev      # o MaxDevMod, com a interface servida ao vivo
 
 O MaxDevMod é baseado no [WestPlay](https://github.com/enes-less/WestPlay), de enes-less, feito para o Euro Truck
 Simulator 2. Esta versão traz o American Truck Simulator, os dois jogos juntos, o celular dentro do jogo e pelo QR
-Code, o Nupay, a câmera de ré, o Modo Personagem e o resto descrito acima. Para apoiar o autor do WestPlay original,
-veja o [Kreosus dele](https://kreosus.com/enes-less).
+Code, a Bolsa de Fretes, a Garagem, o Nupay ao vivo, a câmera de ré, os freios com fumaça 3D, o Modo Personagem e o
+resto descrito acima. Para apoiar o autor do WestPlay original, veja o [Kreosus dele](https://kreosus.com/enes-less).
 
 Gostou do MaxDevMod? Deixe uma estrela no repositório:
 

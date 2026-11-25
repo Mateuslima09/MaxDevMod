@@ -266,7 +266,7 @@ html[data-transition='close']::view-transition-new(root) {
 
 :root {
   /* Must match SWITCH_MS in CabinApp.tsx. */
-  --switch-duration: 420ms;
+  --switch-duration: 140ms;
 }
 
 @keyframes slot-to-large {

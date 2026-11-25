@@ -77,13 +77,15 @@ export interface Telemetry {
   mirror: boolean
   /** Whether the plugin's reversing camera is settled and can be shown (the page covers the screen till then). */
   cameraReady?: boolean
-  /** The reversing camera as the player moved it for this truck or trailer (metres: further back, higher). */
+  /** The reversing camera as the player moved it for this truck or trailer (metres: further back, higher, sideways). */
   cameraBack?: number
   cameraUp?: number
-  /** And turned (degrees: further up, to the right, how much wider: rear_camera.rs `nudge`). */
+  cameraSide?: number
+  /** And turned (degrees: further up, to the right, how much wider, lateral roll: rear_camera.rs `nudge`). */
   cameraTilt?: number
   cameraTurn?: number
   cameraWide?: number
+  cameraRoll?: number
   /** MaxDevMod's floating screen (float_screen.rs): switched on, drawn lately (the camera in the cab), and its move in
    * this truck (metres right, up, forward; degrees turned right, tilted up, rolled right). Missing from an older plugin. */
   floatOn?: boolean
@@ -120,11 +122,31 @@ export type GameCurrency = 'USD' | 'EUR'
 /** One sum in or out of the player's account (crates/host wallet.rs `Entry`; an expense negative): what for, about
  * what, and when (the PC's time, ms; the game's, minutes, when known). */
 export interface WalletLoan {
+  index?: number
   amount: number
   originalAmount: number
+  paidAmount?: number
   interestRate: number
   duration: number
+  durationWeeks?: number
   dailyPayment: number
+  dailyPrincipal?: number
+  daysTotal?: number
+  daysPaid?: number
+  daysRemaining?: number
+  totalRepayment?: number
+  canRepay?: boolean
+}
+
+export interface WalletLoanOffer {
+  index: number
+  amount: number
+  interestRate: number
+  durationWeeks: number
+  durationDays: number
+  dailyPayment: number
+  totalRepayment: number
+  canTake: boolean
 }
 
 export interface PendingLoan {
@@ -136,9 +158,97 @@ export interface PendingLoan {
 export interface WalletEntry {
   at: number
   gameTime: number | null
-  kind: 'delivered' | 'cancelled' | 'fined' | 'toll' | 'ferry' | 'train' | 'fuel' | 'other'
+  kind: 'delivered' | 'cancelled' | 'fined' | 'toll' | 'ferry' | 'train' | 'fuel' | 'loan' | 'loanRepay' | 'other'
   amount: number
   detail: string
+}
+
+export type BankAnswer =
+  | 'ok'
+  | 'unsupported'
+  | 'multiplayer'
+  | 'locked'
+  | 'limitExceeded'
+  | 'insufficientFunds'
+  | 'invalidIndex'
+  | 'notReady'
+  | 'failed'
+  | 'noAnswer'
+
+export type FleetAnswer =
+  | 'ok'
+  | 'unsupported'
+  | 'multiplayer'
+  | 'onJob'
+  | 'alreadyActive'
+  | 'insufficientFunds'
+  | 'alreadyMax'
+  | 'notFound'
+  | 'notReady'
+  | 'failed'
+  | 'noAnswer'
+
+export interface FleetGarage {
+  garagePtr: string
+  cityId: string
+  city: string
+  tier: 'tiny' | 'small' | 'large'
+  slots: number
+  usedTrucks: number
+  usedDrivers: number
+  trailersCount: number
+  productivity: number
+  upgradeCost?: number
+  nextSlots?: number
+  canUpgrade: boolean
+  /** Per-bay state: 0 = empty, 1 = AI/parked truck, 2 = player truck. */
+  slotStates: number[]
+}
+
+export interface FleetTruck {
+  truckPtr: string
+  brand: string
+  model: string
+  engine: string
+  chassis: string
+  plate: string
+  plateCountry: string
+  garageCityId: string
+  garageCity: string
+  odometerKm: number
+  wearPct: number
+  slotIndex: number
+  isPlayer: boolean
+  hasAiDriver: boolean
+}
+
+export interface FleetTrailer {
+  trailerPtr: string
+  brand: string
+  model: string
+  body: string
+  bodyType: string
+  chainType: string
+  plate: string
+  plateCountry: string
+  garageCityId: string
+  garageCity: string
+  volume: number
+  grossWeight: number
+  axles: number
+  wearPct: number
+  isAttached: boolean
+}
+
+export interface FleetSnapshot {
+  gameTime: number
+  balance: number
+  onJob: boolean
+  hasTruck: boolean
+  hasAttachedTrailer: boolean
+  garages: FleetGarage[]
+  trucks: FleetTruck[]
+  trailers: FleetTrailer[]
 }
 
 /** The fuel filled by hand at a pump (`westplay_shared::FuelBill`): how much (litres, or gallons), its price and
@@ -196,10 +306,22 @@ export type HostMessage =
       type: 'wallet'
       balance: number | null
       currency?: GameCurrency
+      liveBank?: boolean
+      bankUnlocked?: boolean
+      loanLimit?: number
+      availableCredit?: number
+      minAfterRepay?: number
       entries: WalletEntry[]
       loans?: WalletLoan[]
+      offers?: WalletLoanOffer[]
       pendingLoan?: PendingLoan | null
     }
+  /** Live in-memory Nupay bank RPC result. */
+  | { type: 'bankAnswer'; id: number; action: string; answer: BankAnswer }
+  /** Live in-memory Fleet / Garage snapshot. */
+  | { type: 'fleetSnapshot'; id: number; answer: FleetAnswer; data?: FleetSnapshot }
+  /** Live in-memory Fleet / Garage action result (includes refreshed snapshot on `ok`). */
+  | { type: 'fleetAnswer'; id: number; action: string; answer: FleetAnswer; data?: FleetSnapshot }
   /** `null` until the game has drawn a WestPlay screen. Checked against the known ids on arrival. */
   | { type: 'screen'; layout: string | null }
   /** Adjust Screen from a phone (cabin/state/screenFit.ts), relayed by the host to the cab's page: a change, the fit
@@ -243,6 +365,8 @@ export type HostMessage =
       suspensionAutoDelay?: number
       /** Seconds of smooth road before automatic suspension lowers back down (3..=15). */
       suspensionAutoReturn?: number
+      /** Seconds of hard braking before automatic suspension raises a little (1..=5). */
+      suspensionAutoBrake?: number
       /** Brake fade (the phone's Freios app, owner 2026-11-21). */
       brakeFade?: boolean
       brakeFadeLevel?: BrakeFadeLevel
@@ -252,6 +376,7 @@ export type HostMessage =
       brakeHudCorner?: BrakeHudCorner
       brakeHudSize?: BrakeHudSize
       brakeHudOnFoot?: boolean
+      brakeSmoke?: boolean
       brakeAlarm?: number
       /** How low the front may go (the Suspensão app). */
       suspensionLowFront?: LowFront
@@ -259,6 +384,8 @@ export type HostMessage =
       suspensionDamping?: Damping
       /** How big the mouse's dot is (the phones' Settings). */
       cursorSize?: CursorSize
+      /** Where YouTube & music audio plays (`cabin` = cab speakers + muffled outside, `device` = phone/iPad). */
+      audioOutput?: AudioOutput
     }
   /** The player's own wallpapers and icon sets (shared/customize.ts), their files at `CABIN_FILES`. */
   | { type: 'customize'; wallpapers: CustomWallpaper[]; iconSets: IconSet[] }
@@ -272,6 +399,12 @@ export type HostMessage =
   | { type: 'garages'; owned: string[]; headquarters: string | null }
   /** The game's answer to the page's `route` request `id`. */
   | { type: 'routeAnswer'; id: number; answer: RouteAnswer }
+  /** Live in-memory Job Market snapshot (Bolsa de Fretes) for `jobMarketRefresh` request `id`. */
+  | { type: 'jobMarketSnapshot'; id: number; answer: JobMarketAnswer; data?: JobMarketSnapshot }
+  /** Live in-memory Job Market accept result for `jobMarketAccept` request `id`. */
+  | { type: 'jobMarketAnswer'; id: number; answer: JobMarketAnswer }
+  /** On-demand cargo icon PNG data URL for `jobMarketIcon` request `id`. */
+  | { type: 'jobMarketIcon'; id: number; dataUrl: string | null }
   /** WestPlay's own routes for the page's `routes` request `id` (none: no road graph, or no way there). */
   | { type: 'routes'; id: number; routes: PlannedRoute[] }
   /** Whether the game's GPS follows the route picked (`follow` request `id`): `answer` "ownWay" when the
@@ -361,6 +494,8 @@ export type HostMessage =
   | { type: 'youtubeAccount'; signedIn: boolean; avatar: string | null }
   /** Whether Google's sign-in window is open on the PC's desktop. */
   | { type: 'youtubeSignIn'; open: boolean }
+  /** Whether YouTube's video visual is currently shown inside the in-game iPad/phone (not under the cab). */
+  | { type: 'youtubeHandset'; on: boolean }
   /** The map the cab shows: its folder in WestPlay's maps (served at `https://westplay.maps/`), and when it
    * was built; `null` for none (none built yet). */
   | { type: 'map'; folder: string | null; built: number | null }
@@ -502,6 +637,8 @@ export type PageMessage =
   /** A command for TikTok under the phone in the game's page (`westplay_host::tiktok::Command`): the phone in
    * the game's alone to send. */
   | { type: 'tiktok'; command: TikTokCommand }
+  /** A command for YouTube running in the in-game iPad/phone (shares YouTube's ad-free engine). */
+  | { type: 'handsetYoutube'; command: YouTubeCommand }
   /** Whether a notification is on the phone's screen: put away, its top stays in view meanwhile. */
   | { type: 'phoneBanner'; showing: boolean }
   /** The game's notifications' groups turned off in the phone's Settings. */
@@ -530,6 +667,8 @@ export type PageMessage =
   | { type: 'suspensionAutoDelay'; secs: number }
   /** Seconds of smooth road before automatic suspension lowers back down (3..=15, owner 2026-11-22). */
   | { type: 'suspensionAutoReturn'; secs: number }
+  /** Seconds of hard braking before automatic suspension raises a little (1..=5, owner 2026-11-23). */
+  | { type: 'suspensionAutoBrake'; secs: number }
   /** Brake fade (the Freios app, owner 2026-11-21): on or off, how soon, the sounds' volumes (0 off..100), the HUD. */
   | { type: 'brakeFade'; on: boolean }
   | { type: 'brakeFadeLevel'; which: BrakeFadeLevel }
@@ -539,6 +678,7 @@ export type PageMessage =
   | { type: 'brakeHudCorner'; which: BrakeHudCorner }
   | { type: 'brakeHudSize'; which: BrakeHudSize }
   | { type: 'brakeHudOnFoot'; on: boolean }
+  | { type: 'brakeSmoke'; on: boolean }
   /** When the brake alarm comes (°C on the realistic level). */
   | { type: 'brakeAlarm'; celsius: number }
   /** How low the front may go (the Suspensão app): counts from the game's next start. */
@@ -554,6 +694,28 @@ export type PageMessage =
   | { type: 'cameraNudge'; action: CameraNudge }
   /** MaxDevMod's floating screen in the cab (crates/plugin float_screen.rs): switched on or off, moved, turned. */
   | { type: 'floatScreen'; action: FloatScreenAction }
+  /** Live in-memory Job Market (Bolsa de Fretes): ask the plugin to snapshot live offers. */
+  | { type: 'jobMarketRefresh'; id: number }
+  /** Live in-memory Job Market: ask the plugin to accept an offer directly on the main thread. */
+  | { type: 'jobMarketAccept'; id: number; mode: JobMarketMode; companyPtr: string; offerPtr: string }
+  /** Live in-memory Job Market: ask the plugin to cancel the active job on the main thread. */
+  | { type: 'jobMarketCancel'; id: number }
+  /** On-demand cargo icon image lookup from game/DLC/mod archives. */
+  | { type: 'jobMarketIcon'; id: number; icon: string; cargoId: string }
+  /** Live in-memory Nupay Bank RPCs (zero restart). */
+  | { type: 'bankRefresh'; id: number }
+  | { type: 'bankTakeLoan'; id: number; offerIndex: number }
+  | { type: 'bankRepayLoan'; id: number; loanIndex: number }
+  /** Live in-memory Company / Fleet & Garage RPCs (zero restart). */
+  | { type: 'fleetRefresh'; id: number }
+  | { type: 'fleetDriveTruck'; id: number; truckPtr: string }
+  | { type: 'fleetUseTrailer'; id: number; trailerPtr: string }
+  | { type: 'fleetStoreTrailer'; id: number }
+  | { type: 'fleetUpgradeGarage'; id: number; garagePtr: string }
+  /** Switch the in-game handheld overlay live between iPhone (340x720) and vertical iPad (560x760). */
+  | { type: 'phoneDevice'; device: 'phone' | 'ipad' }
+  /** Switch media audio output live between truck cab speakers (`cabin`) and phone/iPad (`device`). */
+  | { type: 'audioOutput'; which: AudioOutput }
 
 /** What the phone's TikTok app asks of TikTok's own site, run by the host under the phone's page
  * (`westplay_host::tiktok::Command`): `show` places it, in the phone's pixels, where the app cuts the page open. */
@@ -591,13 +753,19 @@ export type FloatScreenAction =
 export type CameraNudge =
   | 'back'
   | 'forward'
+  | 'backFar'
+  | 'forwardFar'
   | 'up'
   | 'down'
+  | 'left'
+  | 'right'
   | 'reset'
   | 'tiltUp'
   | 'tiltDown'
   | 'turnLeft'
   | 'turnRight'
+  | 'rollLeft'
+  | 'rollRight'
   | 'wider'
   | 'narrower'
 
@@ -1334,6 +1502,64 @@ export interface PlannedRoute {
 export type RouteAnswer =
   'done' | 'alreadyThere' | 'onJob' | 'full' | 'noSuchNode' | 'unsupported' | 'unexpected' | 'noAnswer' | 'elevated'
 
+export type JobMarketMode = 'freight' | 'cargo' | 'quick'
+
+export type JobMarketAnswer =
+  | 'ok'
+  | 'unsupported'
+  | 'multiplayer'
+  | 'onJob'
+  | 'noTruck'
+  | 'noTrailer'
+  | 'offerExpired'
+  | 'notReady'
+  | 'failed'
+  | 'noAnswer'
+
+export interface JobMarketOffer {
+  mode: JobMarketMode
+  companyPtr: string
+  offerPtr: string
+  originCompanyId: string
+  originCompany: string
+  originCityId: string
+  originCity: string
+  destCompanyId: string
+  destCompany: string
+  destCityId: string
+  destCity: string
+  cargoId: string
+  cargoName: string
+  cargoIcon?: string
+  distanceKm: number
+  ferryTime: number
+  ferryPrice: number
+  urgency: number
+  expiresInMin: number
+  unitsCount?: number
+  massKg: number
+  reward: number
+  fragile: boolean
+  fragilityPct?: number
+  valuable: boolean
+  adrClass: number
+  overweight: boolean
+  oversize: boolean
+  companyTruck?: string
+  trailerDef?: string
+  distFromPlayerKm?: number
+}
+
+export interface JobMarketSnapshot {
+  gameTime: number
+  onJob: boolean
+  hasOwnTruck: boolean
+  hasOwnTrailer: boolean
+  trailerAttached: boolean
+  quickSupported: boolean
+  offers: JobMarketOffer[]
+}
+
 interface WebViewBridge {
   addEventListener(type: 'message', listener: (event: { data: HostMessage }) => void): void
   removeEventListener(type: 'message', listener: (event: { data: HostMessage }) => void): void
@@ -1420,6 +1646,8 @@ export type LowFront = 'normal' | 'low' | 'lowest'
 export type Damping = 'soft' | 'normal' | 'firm' | 'firmest'
 /** How big the mouse's dot is (the phones' Settings). */
 export type CursorSize = 'small' | 'normal' | 'large' | 'larger'
+/** Where media audio plays (`westplay_host::settings::AudioOutput`). */
+export type AudioOutput = 'cabin' | 'device'
 
 /** How soon the brakes fade (`westplay_host::brake_fade::Level`). */
 export type BrakeFadeLevel = 'light' | 'realistic' | 'hard'

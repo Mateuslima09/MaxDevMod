@@ -217,6 +217,11 @@ impl Layers {
     pub fn remove(&self, view: &OffscreenWebView) -> windows::core::Result<()> {
         self.root.Children()?.Remove(&view.root)
     }
+
+    /// Resizes the composition container (for live iPhone <-> iPad switching).
+    pub fn resize(&self, width: u32, height: u32) -> windows::core::Result<()> {
+        self.root.SetSize(Vector2 { X: width as f32, Y: height as f32 })
+    }
 }
 
 pub struct OffscreenWebView {

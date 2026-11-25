@@ -641,6 +641,10 @@ pub(super) struct Freight {
     unload_prompted: bool,
     /// Which of the game's workers the clerk is (`CLERKS`).
     clerk_name: Option<&'static str>,
+    /// Current paper need for the active clerk (`Pickup` / `Load` / `Delivery` / `None`).
+    need_now: Need,
+    /// Short cargo name for the floating speech bubble above the clerk.
+    cargo_label: String,
     /// What E does now, on foot (the key hints bar's).
     offer: Option<Action>,
     was_use: AtomicBool,
@@ -677,6 +681,8 @@ impl Freight {
             unload_armed: false,
             unload_prompted: false,
             clerk_name: None,
+            need_now: Need::None,
+            cargo_label: String::new(),
             offer: None,
             was_use: AtomicBool::new(false),
             was_attach: AtomicBool::new(false),
@@ -696,6 +702,19 @@ fn papers_file() -> std::path::PathBuf {
 /// What E does now on foot, for the key hints bar.
 pub(super) fn offer(state: &State) -> Option<Action> {
     state.freight.as_ref().and_then(|freight| freight.offer)
+}
+
+/// Active Nota Fiscal clerk bubble info `(world_ground_pos, is_delivery, cargo_label, in_range, distance_m)`
+/// when a clerk is standing and waiting for the player to sign the pickup/load or delivery papers.
+pub(super) fn bubble_target(freight: Option<&Freight>, player: [f64; 3]) -> Option<([f64; 3], bool, String, bool, f32)> {
+    let freight = freight?;
+    if freight.paper.is_some() || freight.coupling.is_some() || freight.need_now == Need::None {
+        return None;
+    }
+    let clerk = freight.clerk.as_ref().filter(|c| c.leaving.is_none())?;
+    let dist = apart(player, clerk.at) as f32;
+    let is_delivery = freight.need_now == Need::Delivery;
+    Some((clerk.at, is_delivery, freight.cargo_label.clone(), f64::from(dist) < CLERK_REACH, dist))
 }
 
 fn on() -> bool {
@@ -734,7 +753,7 @@ fn rest(state: &mut State) {
         bridge.plugin.note_wanted.store(0, Ordering::Release);
     }
     let Some(freight) = state.freight.as_mut() else { return };
-    (freight.paper, freight.coupling, freight.offer) = (None, None, None);
+    (freight.paper, freight.coupling, freight.offer, freight.need_now) = (None, None, None, Need::None);
     if freight.loading.take().is_some() {
         crate::commands::hold(crate::commands::ACTIVATE, false);
         crate::commands::hold(crate::commands::ENGINE_OFF, false);
@@ -1014,6 +1033,19 @@ pub(super) unsafe fn frame(state: &mut State) {
         }
         need = Need::None;
     }
+    freight.need_now = need;
+    freight.cargo_label = job
+        .as_ref()
+        .map(|j| j.cargo.as_str().trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let mut out: String = s.chars().take(24).collect();
+            if s.chars().count() > 24 {
+                out.push('…');
+            }
+            out
+        })
+        .unwrap_or_default();
     // Standing, turning to the player as they come; no longer needed, walking away, then gone.
     let mut gone = false;
     if let Some(clerk) = freight.clerk.as_mut()

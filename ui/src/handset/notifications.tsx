@@ -3,7 +3,7 @@ import { usePhoneNotification } from '../cabin/state/store'
 import { type PhoneNotification, postToHost } from '../shared/host'
 import { AppIcon } from './icons'
 import { chime, isWarning, notificationApp, notificationText, waitingWith } from './notificationText'
-import type { Prefs } from './prefs'
+import type { NotificationSound, Prefs } from './prefs'
 
 /** How long a notification stays on the screen, and how long it takes to leave it (ms). */
 const SHOWN_FOR = 4200
@@ -15,7 +15,15 @@ const LEAVING_FOR = 320
  * phone put away the host shows only its top meanwhile (crates/host, the plugin's handset.rs), so the banner is
  * what's seen; it's told while one is on the screen.
  */
-export function Notifications({ language, currency }: { language: 'en' | 'pt'; currency: Prefs['currency'] }) {
+export function Notifications({
+  language,
+  currency,
+  sound,
+}: {
+  language: 'en' | 'pt'
+  currency: Prefs['currency']
+  sound: NotificationSound
+}) {
   const { latest, count } = usePhoneNotification()
   const waiting = useRef<PhoneNotification[]>([])
   const [shown, setShown] = useState<{ notification: PhoneNotification; id: number; leaving: boolean } | null>(null)
@@ -37,7 +45,7 @@ export function Notifications({ language, currency }: { language: 'en' | 'pt'; c
     const id = ++next.current
     setShown({ notification, id, leaving: false })
     postToHost({ type: 'phoneBanner', showing: true })
-    chime(notification)
+    chime(notification, sound)
     setTimeout(() => setShown((now) => (now?.id === id ? { ...now, leaving: true } : now)), SHOWN_FOR)
     setTimeout(() => showNext.current(), SHOWN_FOR + LEAVING_FOR)
   }

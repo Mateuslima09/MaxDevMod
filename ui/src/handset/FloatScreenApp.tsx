@@ -1,4 +1,4 @@
-import { useLive } from '../cabin/state/store'
+import { useCabin, useLive } from '../cabin/state/store'
 import { type FloatScreenAction, postToHost } from '../shared/host'
 import { List, Row, Segmented } from './ios'
 
@@ -14,6 +14,12 @@ export const FLOAT_SCREEN_WORDS = {
     screen: 'Floating screen',
     on: 'On',
     off: 'Off',
+    mapHeader: 'Multimedia map',
+    mapLabel: 'Map shown',
+    mapMaxDevMod: 'MaxDevMod',
+    mapGameGps: 'Game GPS',
+    mapNote:
+      'Choose MaxDevMod for the built-in map (recommended on the floating screen) or Game GPS to show the truck’s original GPS through the dashboard.',
     status: 'In the cab now',
     seen: 'Showing',
     notSeen: 'Not seen (look from inside the cab)',
@@ -46,6 +52,12 @@ export const FLOAT_SCREEN_WORDS = {
     screen: 'Tela flutuante',
     on: 'Ligada',
     off: 'Desligada',
+    mapHeader: 'Mapa na multimídia',
+    mapLabel: 'Qual mapa exibir',
+    mapMaxDevMod: 'MaxDevMod',
+    mapGameGps: 'GPS do jogo',
+    mapNote:
+      'Escolha MaxDevMod para exibir o mapa próprio (recomendado na tela flutuante) ou GPS do jogo para mostrar o GPS original do caminhão na tela do painel.',
     status: 'Na cabine agora',
     seen: 'Aparecendo',
     notSeen: 'Não aparece (olhe de dentro da cabine)',
@@ -79,7 +91,32 @@ export type FloatScreenWords = (typeof FLOAT_SCREEN_WORDS)['en']
 
 export function FloatScreenApp({ words, language }: { words: FloatScreenWords; language: 'en' | 'pt' }) {
   const t = useLive((state) => state.telemetry)
-  if (!t) return <p className="ios-empty">{words.noGame}</p>
+  const useGameMap = useCabin((state) => state.useGameMap)
+  const setUseGameMap = useCabin((state) => state.setUseGameMap)
+
+  const mapSelector = (
+    <List header={words.mapHeader} footer={words.mapNote}>
+      <Row label={words.mapLabel}>
+        <Segmented
+          options={[
+            ['maxdevmod', words.mapMaxDevMod],
+            ['game', words.mapGameGps],
+          ]}
+          chosen={useGameMap ? 'game' : 'maxdevmod'}
+          choose={(value) => setUseGameMap(value === 'game')}
+        />
+      </Row>
+    </List>
+  )
+
+  if (!t) {
+    return (
+      <>
+        {mapSelector}
+        <p className="ios-empty">{words.noGame}</p>
+      </>
+    )
+  }
   const press = (action: FloatScreenAction) => postToHost({ type: 'floatScreen', action })
   const known = t.floatOn !== undefined
   const on = t.floatOn ?? false
@@ -110,6 +147,7 @@ export function FloatScreenApp({ words, language }: { words: FloatScreenWords; l
         </Row>
         <Row label={words.status} value={!known ? words.oldPlugin : t.floatSeen ? words.seen : words.notSeen} />
       </List>
+      {mapSelector}
       {on && (
         <>
           <article className="ios-hero ios-camera-hero">

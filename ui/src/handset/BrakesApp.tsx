@@ -36,6 +36,9 @@ export const BRAKES_WORDS = {
     hud: 'Brakes in the game',
     hudShown: 'Show',
     hudOnFoot: 'In Character Mode',
+    smoke: 'Brake smoke',
+    smokeNote:
+      'Light smoke rises from overheated wheels in the orange ({orange} °C) and thickens in the red ({red} °C+), separately for the truck and the trailer.',
     hudNote: 'Turn “In Character Mode” off to hide the brake HUD while walking outside the truck.',
     corner: 'Corner',
     bottomLeft: '↙',
@@ -74,6 +77,9 @@ export const BRAKES_WORDS = {
     hud: 'Freios no jogo',
     hudShown: 'Mostrar',
     hudOnFoot: 'No Modo Personagem',
+    smoke: 'Fumaça nos freios',
+    smokeNote:
+      'Solta fumaça leve das rodas quando os freios entram no laranja ({orange} °C) e aumenta no vermelho ({red} °C+), separado entre cavalo e carreta.',
     hudNote: 'Desligue “No Modo Personagem” para esconder o HUD dos freios quando estiver a pé fora do caminhão.',
     corner: 'Canto',
     bottomLeft: '↙',
@@ -114,8 +120,8 @@ function step(volume: number): string {
   return VOLUMES.reduce((best, [key, v]) => (Math.abs(v - volume) < Math.abs(Number(best) - volume) ? key : best), '70')
 }
 
-function Disc({ name, celsius }: { name: string; celsius: number | null }) {
-  const colour = celsius === null ? '#8e8e93' : discColour(celsius)
+function Disc({ name, celsius, shift }: { name: string; celsius: number | null; shift: number }) {
+  const colour = celsius === null ? '#8e8e93' : discColour(celsius - shift)
   return (
     <div className="ios-brake-disc">
       <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden>
@@ -155,8 +161,12 @@ export function BrakesApp({ words }: { words: BrakesWords }) {
       ) : (
         <article className="ios-hero">
           <div className="ios-brake-discs">
-            <Disc name={words.truck} celsius={brakes.truck} />
-            <Disc name={brakes.trailer === null ? words.noTrailer : words.trailer} celsius={brakes.trailer} />
+            <Disc name={words.truck} celsius={brakes.truck} shift={SHIFT[o.brakeFadeLevel]} />
+            <Disc
+              name={brakes.trailer === null ? words.noTrailer : words.trailer}
+              celsius={brakes.trailer}
+              shift={SHIFT[o.brakeFadeLevel]}
+            />
           </div>
           <div className="ios-hero-kicker">
             {words.strength}: <b>{brakes.strength ?? 100}%</b>
@@ -227,6 +237,26 @@ export function BrakesApp({ words }: { words: BrakesWords }) {
             </span>
           }
         />
+      </List>
+      <List
+        footer={words.smokeNote
+          .replace('{orange}', String(300 + SHIFT[o.brakeFadeLevel]))
+          .replace('{red}', String(380 + SHIFT[o.brakeFadeLevel]))}
+      >
+        <Row label={words.smoke}>
+          <Segmented
+            options={[
+              ['on', words.on],
+              ['off', words.off],
+            ]}
+            chosen={o.brakeSmoke ? 'on' : 'off'}
+            choose={(value) => {
+              const on = value === 'on'
+              useCharacterSwitches.setState({ brakeSmoke: on })
+              postToHost({ type: 'brakeSmoke', on })
+            }}
+          />
+        </Row>
       </List>
       <List header={words.hud} footer={words.hudNote}>
         <Row label={words.hudShown}>

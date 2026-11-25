@@ -1,4 +1,4 @@
-import { type LiveState, useCabin, useLive } from '../state/store'
+import { type LiveState, useCabin, useCharacterSwitches, useLive } from '../state/store'
 import { fadeOutAndPause, playAndFadeIn } from './fade'
 import { poweredOff, withGame } from './youtube/withGame'
 
@@ -33,8 +33,10 @@ function isAway(live: LiveState): boolean {
   return ((live.telemetry?.paused ?? false) && !live.menuGone) || !live.gameShown
 }
 
-/** The truck's electrics are off (as seen: not before the first telemetry says so). */
+/** The truck's electrics are off (as seen: not before the first telemetry says so). When audio output is routed
+ * directly to the phone/iPad (`device`), the handheld has its own battery and keeps playing with the truck off! */
 function isOff(): boolean {
+  if (useCharacterSwitches.getState().audioOutput === 'device') return false
   const { power } = useCabin.getState()
   return power.observed && power.phase === 'off'
 }
@@ -57,6 +59,7 @@ export function pauseMusicWithGame(player: MusicPlayer): () => void {
     if (!away) paused = false
   })
   const power = useCabin.subscribe((cabin, before) => {
+    if (useCharacterSwitches.getState().audioOutput === 'device') return
     if (!poweredOff(before.power.phase === 'off', cabin.power.phase === 'off')) return
     // Whatever it's doing, at once (no fade: owner 2026-10-21), and not played on after.
     if (player.playingHere()) player.pauseHere()

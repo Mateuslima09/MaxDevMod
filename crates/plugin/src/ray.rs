@@ -821,21 +821,8 @@ pub fn frame(t: &mut Telemetry) {
     if state.readings.frame + READINGS_FOR >= frame || still {
         t.ray_sensors = state.readings.sensors.map(|s| s.unwrap_or(-1.0));
     }
-    // A line now and then: the game's own rays (whether there's a moment to cast in at all), and the readings.
-    let now = Instant::now();
-    let every = if reversing { 1.0 } else { 30.0 };
-    if state.logged_at.is_none_or(|at| now.duration_since(at).as_secs_f64() >= every) {
-        let since = state.logged_at.map_or(0.0, |at| now.duration_since(at).as_secs_f64());
-        state.logged_at = Some(now);
-        let game_rays = GAME_RAYS.swap(0, Ordering::Relaxed);
-        if since > 0.0 {
-            log!(
-                "ray: the game cast {game_rays} rays in {since:.0} s (thread {}); {}",
-                GAME_THREAD.load(Ordering::Relaxed),
-                if reversing { format!("rear sensors {:?}", t.ray_sensors) } else { format!("status {status}") }
-            );
-        }
-    }
+    let _ = status;
+    let _ = GAME_RAYS.swap(0, Ordering::Relaxed);
 }
 
 /// The plugin unloading (the game closing normally): rays being tested didn't close it, so the guard says ok.

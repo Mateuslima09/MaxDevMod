@@ -610,6 +610,7 @@ unsafe extern "system" fn vs_cb1(
         }
         guarded(|| crate::rear_camera::on_vs_constant_buffers1(this, start, count, buffers, firsts, counts));
         guarded(|| crate::float_screen::on_vs_constant_buffers1(this, start, count, buffers, firsts, counts));
+        guarded(|| crate::brake_smoke::on_vs_constant_buffers1(this, start, count, buffers, firsts, counts));
         let original: VsCb1 = std::mem::transmute(VS_CB1.original(this));
         original(this, start, count, buffers, firsts, counts)
     }

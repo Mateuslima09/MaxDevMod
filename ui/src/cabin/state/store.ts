@@ -28,9 +28,11 @@ import {
   type BrakeHudCorner,
   type BrakeHudSize,
   type CursorSize,
+  type AudioOutput,
   type Damping,
   type PendingLoan,
   type WalletLoan,
+  type WalletLoanOffer,
 } from '../../shared/host'
 import type { Maneuver, TurnKind } from '../maps/guidance'
 import {
@@ -52,6 +54,16 @@ import {
 import { useKeyboard } from '../keyboard/store'
 import { receiveMapFolder } from '../maps/mapData'
 import { receiveDetours, receiveFollowed, receiveRouteAnswer, receiveRoutes } from '../maps/routeChange'
+import {
+  receiveJobMarketAnswer,
+  receiveJobMarketIcon,
+  receiveJobMarketSnapshot,
+} from '../../handset/jobMarketBridge'
+import {
+  receiveBankAnswer,
+  receiveFleetAnswer,
+  receiveFleetSnapshot,
+} from '../../handset/bankFleetBridge'
 import type { Point, RouteNode } from '../maps/route'
 import { DEFAULT_WALLPAPER_ID } from '../wallpapers'
 import { isReleasedApp } from './apps'
@@ -290,6 +302,22 @@ export const useCabin = create<CabinState>()(
   ),
 )
 
+// Keep `useGameMap` live-synced between the handset FloatScreenApp and the cabin Dashboard.
+if (typeof window !== 'undefined') {
+  const cabinKey = IS_DEMO ? 'westplay.cabin.demo' : 'westplay.cabin'
+  window.addEventListener('storage', (event) => {
+    if (event.key !== cabinKey || !event.newValue) return
+    try {
+      const parsed = JSON.parse(event.newValue) as { state?: Partial<Persisted> }
+      if (typeof parsed.state?.useGameMap === 'boolean') {
+        useCabin.setState({ useGameMap: parsed.state.useGameMap })
+      }
+    } catch {
+      // Ignore malformed storage updates.
+    }
+  })
+}
+
 function sanitize(stored: Partial<Persisted> | undefined): Partial<Persisted> {
   if (!stored) return {}
   const result: Partial<Persisted> = {}
@@ -336,8 +364,14 @@ export interface LiveState {
   wallet: {
     balance: number | null
     currency: GameCurrency
+    liveBank: boolean
+    bankUnlocked: boolean
+    loanLimit: number
+    availableCredit: number
+    minAfterRepay: number
     entries: WalletEntry[]
     loans: WalletLoan[]
+    offers: WalletLoanOffer[]
     pendingLoan: PendingLoan | null
   } | null
   /** The kind of screen the game draws WestPlay on; `null` until it has drawn one. */
@@ -420,9 +454,11 @@ export const useCharacterSwitches = create<{
   suspensionAuto: boolean
   suspensionAutoDelay: number
   suspensionAutoReturn: number
+  suspensionAutoBrake: number
   suspensionLowFront: LowFront
   suspensionDamping: Damping
   cursorSize: CursorSize
+  audioOutput: AudioOutput
   brakeFade: boolean
   brakeFadeLevel: BrakeFadeLevel
   brakeSquealVolume: number
@@ -431,6 +467,7 @@ export const useCharacterSwitches = create<{
   brakeHudCorner: BrakeHudCorner
   brakeHudSize: BrakeHudSize
   brakeHudOnFoot: boolean
+  brakeSmoke: boolean
   brakeAlarm: number
   /** Whether the auto reset is in the games' options as chosen (`null`: not said yet). */
   suspensionApplied: boolean | null
@@ -444,9 +481,11 @@ export const useCharacterSwitches = create<{
   suspensionAuto: false,
   suspensionAutoDelay: 3,
   suspensionAutoReturn: 7,
+  suspensionAutoBrake: 2,
   suspensionLowFront: 'normal',
   suspensionDamping: 'normal',
   cursorSize: 'normal',
+  audioOutput: 'cabin',
   brakeFade: true,
   brakeFadeLevel: 'realistic',
   brakeSquealVolume: 70,
@@ -455,6 +494,7 @@ export const useCharacterSwitches = create<{
   brakeHudCorner: 'bottomLeft',
   brakeHudSize: 'small',
   brakeHudOnFoot: false,
+  brakeSmoke: true,
   brakeAlarm: 360,
   suspensionApplied: null,
   keepScreenOn: false,
@@ -594,11 +634,26 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           wallet: {
             balance: message.balance,
             currency: message.currency ?? 'USD',
+            liveBank: message.liveBank ?? false,
+            bankUnlocked: message.bankUnlocked ?? true,
+            loanLimit: message.loanLimit ?? 0,
+            availableCredit: message.availableCredit ?? 0,
+            minAfterRepay: message.minAfterRepay ?? 0,
             entries: message.entries,
             loans: message.loans ?? [],
+            offers: message.offers ?? [],
             pendingLoan: message.pendingLoan ?? null,
           },
         })
+        break
+      case 'bankAnswer':
+        receiveBankAnswer(message.id, message.answer)
+        break
+      case 'fleetSnapshot':
+        receiveFleetSnapshot(message.id, message.answer, message.data)
+        break
+      case 'fleetAnswer':
+        receiveFleetAnswer(message.id, message.answer, message.data)
         break
       case 'job':
         useLive.setState({ job: message.data.active ? message.data : null })
@@ -608,6 +663,15 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'routeAnswer':
         receiveRouteAnswer(message.id, message.answer)
+        break
+      case 'jobMarketSnapshot':
+        receiveJobMarketSnapshot(message.id, message.answer, message.data)
+        break
+      case 'jobMarketAnswer':
+        receiveJobMarketAnswer(message.id, message.answer)
+        break
+      case 'jobMarketIcon':
+        receiveJobMarketIcon(message.id, message.dataUrl)
         break
       case 'routes':
         receiveRoutes(message.id, message.routes)
@@ -728,9 +792,14 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
             typeof message.suspensionAutoReturn === 'number'
               ? Math.min(15, Math.max(3, Math.round(message.suspensionAutoReturn)))
               : was.suspensionAutoReturn,
+          suspensionAutoBrake:
+            typeof message.suspensionAutoBrake === 'number'
+              ? Math.min(5, Math.max(1, Math.round(message.suspensionAutoBrake)))
+              : was.suspensionAutoBrake,
           suspensionLowFront: message.suspensionLowFront ?? was.suspensionLowFront,
           suspensionDamping: message.suspensionDamping ?? was.suspensionDamping,
           cursorSize: message.cursorSize ?? was.cursorSize,
+          audioOutput: message.audioOutput ?? was.audioOutput,
           brakeFade: message.brakeFade ?? was.brakeFade,
           brakeFadeLevel: message.brakeFadeLevel ?? was.brakeFadeLevel,
           brakeSquealVolume: message.brakeSquealVolume ?? was.brakeSquealVolume,
@@ -739,6 +808,7 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
           brakeHudCorner: message.brakeHudCorner ?? was.brakeHudCorner,
           brakeHudSize: message.brakeHudSize ?? was.brakeHudSize,
           brakeHudOnFoot: message.brakeHudOnFoot ?? was.brakeHudOnFoot,
+          brakeSmoke: message.brakeSmoke ?? was.brakeSmoke,
           brakeAlarm: message.brakeAlarm ?? was.brakeAlarm,
           keepScreenOn: message.keepScreenOn ?? was.keepScreenOn,
         }))
@@ -843,6 +913,9 @@ function receiveHostMessage(now: () => number): (message: HostMessage) => void {
         break
       case 'youtubeSignIn':
         useYouTube.setState({ signingIn: message.open })
+        break
+      case 'youtubeHandset':
+        useYouTube.setState({ onHandset: message.on })
         break
       case 'map':
         receiveMapFolder(message.folder, message.built)

@@ -26,11 +26,12 @@ const ASPECT: f32 = 1.9;
 /// Its margin from the screen's edges, of the screen's height (above the game's own bottom bar).
 const MARGIN: f32 = 0.025;
 
-/// What the HUD shows: the discs' °C (rounded to 5; the trailer's `None` without one) and its pixel size.
+/// What the HUD shows: the discs' °C (rounded to 5; the trailer's `None` without one), the fade-level shift, and its pixel size.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Shown {
     truck: i32,
     trailer: Option<i32>,
+    shift: i32,
     width: u32,
     height: u32,
 }
@@ -199,7 +200,7 @@ fn paint(shown: Shown) -> Canvas {
     for (i, (name, celsius)) in [("CAVALO", Some(shown.truck)), ("CARRETA", shown.trailer)].into_iter().enumerate() {
         let cx = w * (0.27 + 0.46 * i as f32);
         let cy = h * 0.36;
-        let colour = celsius.map_or(grey, |c| disc_colour(c as f32));
+        let colour = celsius.map_or(grey, |c| disc_colour((c - shown.shift) as f32));
         disc(&mut canvas, cx, cy, r, colour);
         let label = celsius.map_or("-".to_owned(), |c| format!("{c}°C"));
         canvas.text(&label, cx, h * 0.68, scale, [0xff, 0xff, 0xff]);
@@ -250,9 +251,11 @@ pub unsafe fn on_present(swapchain: *mut c_void) {
         back.GetDesc(&mut desc);
         let (screen_w, screen_h) = (desc.Width as f32, desc.Height as f32);
         let height = (screen_h * HEIGHTS[size]).round().max(24.0);
+        let shift = crate::brake_smoke::level_shift(said).round() as i32;
         let shown = Shown {
             truck: five(truck),
             trailer: trailer.is_finite().then(|| five(trailer)),
+            shift,
             width: (height * ASPECT).round() as u32,
             height: height as u32,
         };
@@ -312,7 +315,7 @@ mod tests {
 
     #[test]
     fn it_paints_its_glass_and_discs() {
-        let canvas = paint(Shown { truck: 320, trailer: None, width: 190, height: 100 });
+        let canvas = paint(Shown { truck: 320, trailer: None, shift: 0, width: 190, height: 100 });
         assert_eq!(canvas.pixels.len(), 190 * 100 * 4);
         // A corner left clear (rounded), the middle of the glass seen.
         assert_eq!(canvas.pixels[3], 0);
@@ -333,7 +336,7 @@ mod tests {
     #[test]
     #[ignore]
     fn brake_hud_picture() {
-        let canvas = paint(Shown { truck: 320, trailer: Some(455), width: 380, height: 200 });
+        let canvas = paint(Shown { truck: 320, trailer: Some(455), shift: 0, width: 380, height: 200 });
         let (w, h) = (canvas.width, canvas.height);
         let mut bmp = Vec::new();
         let size = 54 + w * h * 4;

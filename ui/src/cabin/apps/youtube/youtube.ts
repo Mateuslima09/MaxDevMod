@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import {
+  firstRequestId,
   isInHost,
+  isPhonePage,
   postToHost,
   type YouTubeAnswer,
   type YouTubeChannel,
@@ -61,6 +63,8 @@ interface YouTubeStore {
   /** Where the video shows through the page outside the full-screen player (Now playing's picture): the
    * CarPlay area is cut open there (Shell.tsx), in its own pixels. */
   hole: Hole | null
+  /** True while YouTube's video visual is attached under the in-game iPad/phone (so the cab shows thumbnail). */
+  onHandset: boolean
 }
 
 /** A rounded rectangle of the CarPlay area, in its CSS pixels. */
@@ -128,6 +132,7 @@ export const useYouTube = create<YouTubeStore>()(
       account: isInHost() ? null : { signedIn: false, avatar: null },
       signingIn: false,
       hole: null,
+      onHandset: false,
     }),
     {
       name: 'westplay.youtube',
@@ -170,14 +175,18 @@ export const useYouTube = create<YouTubeStore>()(
 /** Tells YouTube's player, or YouTube, what to do. */
 export function command(command: YouTubeCommand): void {
   if (command.action === 'show') shows++
-  postToHost({ type: 'youtube', command })
+  if (typeof window !== 'undefined' && window.westplayHandset && !window.westplayPhone) {
+    postToHost({ type: 'handsetYoutube', command })
+  } else {
+    postToHost({ type: 'youtube', command })
+  }
 }
 
 /** How many times the picture has been placed (`show`), to tell whether it was placed again since. */
 let shows = 0
 
 // Questions for YouTube, by id, waiting for their answers.
-let questions = 0
+let questions = firstRequestId()
 const waiting = new Map<number, (answer: YouTubeAnswer) => void>()
 /** How long YouTube has to answer, ms. */
 const ANSWER_MS = 20_000
@@ -274,7 +283,8 @@ export function receiveState(state: YouTubeState | null): void {
   if (followed.shown === 'clear') useYouTube.setState({ current: null, open: false, upNext: null, queue: null })
   if (followed.shown === 'restore' && state?.video) restore(state)
   // The page (re)loaded with YouTube running: its picture is under the page until something shows it.
-  if (state && !reported && !open) command({ action: 'hide' })
+  // Never auto-hide from a phone/handset page when it loads while the cab is playing.
+  if (state && !reported && !open && !isPhonePage()) command({ action: 'hide' })
   reported = state !== null
   const { current } = useYouTube.getState()
   // How far the video playing is, for Continue watching (a live stream has no "how far").

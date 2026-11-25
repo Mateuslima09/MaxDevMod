@@ -4,15 +4,19 @@
 //! `scs_telemetry_shutdown` on its main thread, possibly several times per process (`sdk reload`). Under
 //! TruckersMP its client loads it too, as one of its own plugins (`truckersmp_init`: `truckersmp`).
 
+mod bank;
 mod brake_hud;
+mod brake_smoke;
 mod bridge;
 mod camera;
 mod character;
 mod commands;
 mod d3d;
 mod fade;
+mod fleet;
 mod float_screen;
 mod frame;
+mod fuel_bubble;
 mod fuel_meter;
 mod handset;
 mod hints;
@@ -20,6 +24,8 @@ mod hires;
 mod hooks;
 mod hud;
 mod input;
+mod job_market;
+mod job_transition;
 mod keybinds;
 mod keyboard;
 mod log;

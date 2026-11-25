@@ -238,23 +238,27 @@ static MIRROR_SIDE: Mutex<Option<f32>> = Mutex::new(None);
 /// The player's own moves of the camera (owner 2026-11-20: "can I adjust the reversing camera myself?"), each truck's
 /// and trailer's (`nudge_key`): metres further back and higher. Kept in the game's WestPlay folder.
 static NUDGES: Mutex<Option<Nudges>> = Mutex::new(None);
-/// The one in use now (f32 bits: back, up, tilt, turn, wide), for `plan`.
-static NUDGE_NOW: [std::sync::atomic::AtomicU32; 5] = [const { std::sync::atomic::AtomicU32::new(0) }; 5];
-/// One press: this far (metres; owner 2026-11-20: 0.25 m a press was too much, "make it 5"); and the most either way.
+/// The one in use now (f32 bits: back, up, tilt, turn, wide, side, roll), for `plan`.
+static NUDGE_NOW: [std::sync::atomic::AtomicU32; 7] = [const { std::sync::atomic::AtomicU32::new(0) }; 7];
+/// One press: 5 cm fine step (owner 2026-11-20), 50 cm fast step for long trailers (owner 2026-11-24: up to 25 m
+/// back for bitrem / rodotrem), and ±6 m for height and sideways offset.
 const NUDGE_STEP: f32 = 0.05;
+const NUDGE_FAR_STEP: f32 = 0.50;
+const NUDGE_BACK_MOST: f32 = 25.0;
 const NUDGE_MOST: f32 = 6.0;
 /// The camera turned by the player (owner 2026-11-20: "if it looks too far down, turn it up; and to the sides; and a
-/// wider view"): degrees a press and the most either way, looking up (over [`PITCH`] down), to the right (the
-/// screen's right, as the mirrors show it: the truck's right), and wider (over [`WIDE`]).
+/// wider view"; owner 2026-11-24: lateral tilt / roll): degrees a press and the most either way.
 const TILT_STEP: f32 = 1.0;
 const TILT_MOST: f32 = 30.0;
 const TURN_STEP: f32 = 2.0;
 const TURN_MOST: f32 = 45.0;
+const ROLL_STEP: f32 = 1.0;
+const ROLL_MOST: f32 = 45.0;
 const WIDE_STEP: f32 = 5.0;
 const WIDE_LEAST: f32 = -60.0;
 const WIDE_MOST: f32 = 40.0;
-/// What is kept for a truck or trailer: back, up (metres), tilt, turn, wide (degrees).
-type Nudge = [f32; 5];
+/// What is kept for a truck or trailer: back, up (metres), tilt, turn, wide (degrees), side (metres), roll (degrees).
+type Nudge = [f32; 7];
 
 #[derive(Default)]
 struct Nudges {
@@ -267,13 +271,13 @@ fn nudges_file() -> std::path::PathBuf {
     crate::log::game_dir().join("camera-de-re.txt")
 }
 
-/// Each line `key back up tilt turn wide` (before 2026-11-20 only `key back up`: the rest none).
+/// Each line `key back up tilt turn wide side roll` (older 2- and 5-number lines still read cleanly).
 fn read_nudges(text: &str) -> std::collections::BTreeMap<String, Nudge> {
     text.lines()
         .filter_map(|line| {
             let mut words: Vec<&str> = line.trim().split(' ').collect();
             let mut numbers = Vec::new();
-            while numbers.len() < 5 && words.len() > 1 {
+            while numbers.len() < 7 && words.len() > 1 {
                 let Some(number) = words.last().and_then(|w| w.parse::<f32>().ok()).filter(|n| n.is_finite()) else {
                     break;
                 };
@@ -284,7 +288,7 @@ fn read_nudges(text: &str) -> std::collections::BTreeMap<String, Nudge> {
             if key.trim().is_empty() || numbers.len() < 2 {
                 return None;
             }
-            let mut kept = [0.0; 5];
+            let mut kept = [0.0; 7];
             kept[..numbers.len()].copy_from_slice(&numbers);
             Some((key.trim().to_owned(), kept))
         })
@@ -294,7 +298,9 @@ fn read_nudges(text: &str) -> std::collections::BTreeMap<String, Nudge> {
 fn write_nudges(by_key: &std::collections::BTreeMap<String, Nudge>) -> String {
     by_key
         .iter()
-        .map(|(key, [back, up, tilt, turn, wide])| format!("{key} {back} {up} {tilt} {turn} {wide}\n"))
+        .map(|(key, [back, up, tilt, turn, wide, side, roll])| {
+            format!("{key} {back} {up} {tilt} {turn} {wide} {side} {roll}\n")
+        })
         .collect()
 }
 
@@ -311,33 +317,40 @@ fn nudge_key(t: &westplay_shared::Telemetry, truck_id: &str) -> String {
 /// A press on the camera's screen: the move kept for this truck or trailer, after it.
 fn nudge(now: Nudge, press: u32) -> Nudge {
     use westplay_shared::{
-        CAMERA_NUDGE_BACK, CAMERA_NUDGE_DOWN, CAMERA_NUDGE_FORWARD, CAMERA_NUDGE_NARROWER, CAMERA_NUDGE_RESET,
-        CAMERA_NUDGE_TILT_DOWN, CAMERA_NUDGE_TILT_UP, CAMERA_NUDGE_TURN_LEFT, CAMERA_NUDGE_TURN_RIGHT, CAMERA_NUDGE_UP,
-        CAMERA_NUDGE_WIDER,
+        CAMERA_NUDGE_BACK, CAMERA_NUDGE_BACK_FAR, CAMERA_NUDGE_DOWN, CAMERA_NUDGE_FORWARD, CAMERA_NUDGE_FORWARD_FAR,
+        CAMERA_NUDGE_LEFT, CAMERA_NUDGE_NARROWER, CAMERA_NUDGE_RESET, CAMERA_NUDGE_RIGHT, CAMERA_NUDGE_ROLL_LEFT,
+        CAMERA_NUDGE_ROLL_RIGHT, CAMERA_NUDGE_TILT_DOWN, CAMERA_NUDGE_TILT_UP, CAMERA_NUDGE_TURN_LEFT,
+        CAMERA_NUDGE_TURN_RIGHT, CAMERA_NUDGE_UP, CAMERA_NUDGE_WIDER,
     };
-    let [back, up, tilt, turn, wide] = now;
-    let clamp = |v: f32| (v.clamp(-NUDGE_MOST, NUDGE_MOST) * 100.0).round() / 100.0;
+    let [back, up, tilt, turn, wide, side, roll] = now;
+    let clamp = |v: f32, most: f32| (v.clamp(-most, most) * 100.0).round() / 100.0;
     let degrees = |v: f32, least: f32, most: f32| (v.clamp(least, most) * 10.0).round() / 10.0;
     match press {
-        CAMERA_NUDGE_BACK => [clamp(back + NUDGE_STEP), up, tilt, turn, wide],
-        CAMERA_NUDGE_FORWARD => [clamp(back - NUDGE_STEP), up, tilt, turn, wide],
-        CAMERA_NUDGE_UP => [back, clamp(up + NUDGE_STEP), tilt, turn, wide],
-        CAMERA_NUDGE_DOWN => [back, clamp(up - NUDGE_STEP), tilt, turn, wide],
-        CAMERA_NUDGE_TILT_UP => [back, up, degrees(tilt + TILT_STEP, -TILT_MOST, TILT_MOST), turn, wide],
-        CAMERA_NUDGE_TILT_DOWN => [back, up, degrees(tilt - TILT_STEP, -TILT_MOST, TILT_MOST), turn, wide],
-        CAMERA_NUDGE_TURN_RIGHT => [back, up, tilt, degrees(turn + TURN_STEP, -TURN_MOST, TURN_MOST), wide],
-        CAMERA_NUDGE_TURN_LEFT => [back, up, tilt, degrees(turn - TURN_STEP, -TURN_MOST, TURN_MOST), wide],
-        CAMERA_NUDGE_WIDER => [back, up, tilt, turn, degrees(wide + WIDE_STEP, WIDE_LEAST, WIDE_MOST)],
-        CAMERA_NUDGE_NARROWER => [back, up, tilt, turn, degrees(wide - WIDE_STEP, WIDE_LEAST, WIDE_MOST)],
-        CAMERA_NUDGE_RESET => [0.0; 5],
+        CAMERA_NUDGE_BACK => [clamp(back + NUDGE_STEP, NUDGE_BACK_MOST), up, tilt, turn, wide, side, roll],
+        CAMERA_NUDGE_FORWARD => [clamp(back - NUDGE_STEP, NUDGE_BACK_MOST), up, tilt, turn, wide, side, roll],
+        CAMERA_NUDGE_BACK_FAR => [clamp(back + NUDGE_FAR_STEP, NUDGE_BACK_MOST), up, tilt, turn, wide, side, roll],
+        CAMERA_NUDGE_FORWARD_FAR => [clamp(back - NUDGE_FAR_STEP, NUDGE_BACK_MOST), up, tilt, turn, wide, side, roll],
+        CAMERA_NUDGE_UP => [back, clamp(up + NUDGE_STEP, NUDGE_MOST), tilt, turn, wide, side, roll],
+        CAMERA_NUDGE_DOWN => [back, clamp(up - NUDGE_STEP, NUDGE_MOST), tilt, turn, wide, side, roll],
+        CAMERA_NUDGE_LEFT => [back, up, tilt, turn, wide, clamp(side - NUDGE_STEP, NUDGE_MOST), roll],
+        CAMERA_NUDGE_RIGHT => [back, up, tilt, turn, wide, clamp(side + NUDGE_STEP, NUDGE_MOST), roll],
+        CAMERA_NUDGE_TILT_UP => [back, up, degrees(tilt + TILT_STEP, -TILT_MOST, TILT_MOST), turn, wide, side, roll],
+        CAMERA_NUDGE_TILT_DOWN => [back, up, degrees(tilt - TILT_STEP, -TILT_MOST, TILT_MOST), turn, wide, side, roll],
+        CAMERA_NUDGE_TURN_RIGHT => [back, up, tilt, degrees(turn + TURN_STEP, -TURN_MOST, TURN_MOST), wide, side, roll],
+        CAMERA_NUDGE_TURN_LEFT => [back, up, tilt, degrees(turn - TURN_STEP, -TURN_MOST, TURN_MOST), wide, side, roll],
+        CAMERA_NUDGE_ROLL_RIGHT => [back, up, tilt, turn, wide, side, degrees(roll + ROLL_STEP, -ROLL_MOST, ROLL_MOST)],
+        CAMERA_NUDGE_ROLL_LEFT => [back, up, tilt, turn, wide, side, degrees(roll - ROLL_STEP, -ROLL_MOST, ROLL_MOST)],
+        CAMERA_NUDGE_WIDER => [back, up, tilt, turn, degrees(wide + WIDE_STEP, WIDE_LEAST, WIDE_MOST), side, roll],
+        CAMERA_NUDGE_NARROWER => [back, up, tilt, turn, degrees(wide - WIDE_STEP, WIDE_LEAST, WIDE_MOST), side, roll],
+        CAMERA_NUDGE_RESET => [0.0; 7],
         _ => now,
     }
 }
 
 /// Once a frame, as the telemetry's published: the player's presses on the camera's screen taken (the host's
-/// `camera_nudge`), and the move for the truck or trailer the camera's on now (back, up), for `plan` and the page.
+/// `camera_nudge`), and the move for the truck or trailer the camera's on now, for `plan` and the page.
 pub fn nudged(t: &westplay_shared::Telemetry) -> Nudge {
-    let Some(bridge) = crate::bridge::get() else { return [0.0; 5] };
+    let Some(bridge) = crate::bridge::get() else { return [0.0; 7] };
     let truck = bridge.plugin.truck.read().unwrap_or_default();
     let key = nudge_key(t, truck.id.as_str());
     let pressed = bridge.host.camera_nudge.load(Ordering::Acquire);
@@ -346,16 +359,16 @@ pub fn nudged(t: &westplay_shared::Telemetry) -> Nudge {
         seen: None,
         by_key: std::fs::read_to_string(nudges_file()).map(|text| read_nudges(&text)).unwrap_or_default(),
     });
-    let now = nudges.by_key.get(&key).copied().unwrap_or([0.0; 5]);
+    let now = nudges.by_key.get(&key).copied().unwrap_or([0.0; 7]);
     let now = match nudges.seen.replace(pressed) {
         Some(seen) if seen != pressed && pressed != 0 => {
             let moved = nudge(now, pressed & 0xff);
-            if moved == [0.0; 5] {
+            if moved == [0.0; 7] {
                 nudges.by_key.remove(&key);
             } else {
                 nudges.by_key.insert(key.clone(), moved);
             }
-            log!("retrovisor: the camera moved by the player for {key}: {moved:?} (back, up, tilt, turn, wide)");
+            log!("retrovisor: the camera moved by the player for {key}: {moved:?} (back, up, tilt, turn, wide, side, roll)");
             if let Err(e) = std::fs::write(nudges_file(), write_nudges(&nudges.by_key)) {
                 log!("retrovisor: the camera's moves not kept ({e})");
             }
@@ -1112,25 +1125,27 @@ fn plan(mirror: &[[f32; 3]; 3]) -> Move {
         (truck_rear, trailer_rear, vehicles.truck.ground_y, vehicles.trailer.ground_y, vehicles.trailer.rear_z)
     };
     // Where our camera goes, from the truck's origin, and which way is back there.
+    let [n_back, n_up, tilt, turn, _, n_side, roll] = nudge_now();
     let trailer = crate::telemetry::trailer();
-    let (target, looking_back, camera_up, camera_right) = if trailer.connected && trailer.placed {
+    let apart: [f32; 3] = std::array::from_fn(|i| (trailer.position[i] - truck.position[i]) as f32);
+    let apart_sq = apart[0] * apart[0] + apart[1] * apart[1] + apart[2] * apart[2];
+    // Guard against stale/uninitialized trailer telemetry (e.g. after a live truck/trailer swap where
+    // `trailer.position` can be kilometres away or at origin): a coupled trailer is always within 30 m.
+    let trailer_near = trailer.connected && trailer.placed && apart_sq.is_finite() && apart_sq <= 30.0 * 30.0;
+    let (target, looking_back, camera_up, camera_right) = if trailer_near {
         // Tilted as the trailer is (its own pitch and roll, turned the way the truck's parts matched), owner
         // 2026-11-14: "the trailer's too, to be 100%".
         let [r_right, r_up, r_behind] = tilted_axes(trailer.heading, trailer.pitch * pitch_sign, trailer.roll * roll_sign);
-        let apart: [f32; 3] = std::array::from_fn(|i| (trailer.position[i] - truck.position[i]) as f32);
         let end = trailer_camera_end(layout.1, layout.4);
-        let [back, up, ..] = nudge_now();
-        let at = [0.0, layout.3 + HEIGHT_TRAILER + up, end + PAST_REAR - TRAILER_IN + back];
+        let at = [n_side, layout.3 + HEIGHT_TRAILER + n_up, end + PAST_REAR - TRAILER_IN + n_back];
         let rear: [f32; 3] = std::array::from_fn(|i| r_right[i] * at[0] + r_up[i] * at[1] + r_behind[i] * at[2]);
         (std::array::from_fn(|i| apart[i] + rear[i]), r_behind, r_up, r_right)
     } else {
         let hook = crate::telemetry::truck_hook().map_or(1.6, |h| h[2]);
         let end = if layout.0 > 0.5 { layout.0 } else { hook + TRUCK_PAST_HOOK };
-        let [back, up, ..] = nudge_now();
-        (tilted([0.0, layout.2 + HEIGHT_TRUCK + up, end + PAST_REAR + back]), t_behind, t_up, t_right)
+        (tilted([n_side, layout.2 + HEIGHT_TRUCK + n_up, end + PAST_REAR + n_back]), t_behind, t_up, t_right)
     };
     // Turned by the player toward the truck's right (the screen's right) or left, about the camera's up.
-    let [_, _, tilt, turn, _] = nudge_now();
     let looking_back = {
         let (sin, cos) = turn.to_radians().sin_cos();
         normal(std::array::from_fn(|i| looking_back[i] * cos + camera_right[i] * sin))
@@ -1142,7 +1157,17 @@ fn plan(mirror: &[[f32; 3]; 3]) -> Move {
     // Lying on its side in the mirror's picture (rolled a quarter turn): the screen's wide picture along the
     // mirror's tall one, every pixel of it used; the screen turns it back (`mirror::ours_place`).
     let upright = rolled_as(mirror, look.map(|x| -x), camera_up);
-    let ours = [upright[1], upright[0].map(|v| -v), upright[2]];
+    let rolled = if roll.abs() > 1e-4 {
+        let (rs, rc) = roll.to_radians().sin_cos();
+        [
+            std::array::from_fn(|i| upright[0][i] * rc + upright[1][i] * rs),
+            std::array::from_fn(|i| -upright[0][i] * rs + upright[1][i] * rc),
+            upright[2],
+        ]
+    } else {
+        upright
+    };
+    let ours = [rolled[1], rolled[0].map(|v| -v), rolled[2]];
     let turn = mul3(&ours, &transpose(mirror));
     let moved = apply(&ours, step);
     if LOG_PLAN.swap(false, Ordering::Relaxed) {
@@ -1285,23 +1310,44 @@ mod tests {
 
     #[test]
     fn the_players_moves_are_kept_by_truck_and_trailer() {
-        use westplay_shared::{CAMERA_NUDGE_BACK, CAMERA_NUDGE_DOWN, CAMERA_NUDGE_RESET, CAMERA_NUDGE_UP};
-        use westplay_shared::{CAMERA_NUDGE_TILT_UP, CAMERA_NUDGE_TURN_LEFT, CAMERA_NUDGE_WIDER};
-        let moved = nudge(nudge(nudge([0.0; 5], CAMERA_NUDGE_BACK), CAMERA_NUDGE_BACK), CAMERA_NUDGE_UP);
-        assert_eq!(moved, [0.1, 0.05, 0.0, 0.0, 0.0]);
-        assert_eq!(nudge(moved, CAMERA_NUDGE_DOWN), [0.1, 0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(nudge(moved, CAMERA_NUDGE_RESET), [0.0; 5]);
-        assert_eq!(nudge([NUDGE_MOST, 0.0, 0.0, 0.0, 0.0], CAMERA_NUDGE_BACK), [NUDGE_MOST, 0.0, 0.0, 0.0, 0.0]);
+        use westplay_shared::{
+            CAMERA_NUDGE_BACK, CAMERA_NUDGE_BACK_FAR, CAMERA_NUDGE_DOWN, CAMERA_NUDGE_LEFT, CAMERA_NUDGE_RESET,
+            CAMERA_NUDGE_RIGHT, CAMERA_NUDGE_ROLL_LEFT, CAMERA_NUDGE_ROLL_RIGHT, CAMERA_NUDGE_TILT_UP,
+            CAMERA_NUDGE_TURN_LEFT, CAMERA_NUDGE_UP, CAMERA_NUDGE_WIDER,
+        };
+        let moved = nudge(nudge(nudge([0.0; 7], CAMERA_NUDGE_BACK), CAMERA_NUDGE_BACK), CAMERA_NUDGE_UP);
+        assert_eq!(moved, [0.1, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(nudge(moved, CAMERA_NUDGE_DOWN), [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(nudge(moved, CAMERA_NUDGE_RESET), [0.0; 7]);
+        // Long trailers: can move up to 25 m back (including 50 cm quick steps).
+        assert_eq!(nudge([6.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], CAMERA_NUDGE_BACK_FAR)[0], 6.5);
+        assert_eq!(
+            nudge([NUDGE_BACK_MOST, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], CAMERA_NUDGE_BACK),
+            [NUDGE_BACK_MOST, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        // Sideways shift and lateral tilt (roll).
+        let shifted = nudge(nudge(moved, CAMERA_NUDGE_RIGHT), CAMERA_NUDGE_ROLL_LEFT);
+        assert_eq!(shifted[5], NUDGE_STEP);
+        assert_eq!(shifted[6], -ROLL_STEP);
+        assert_eq!(nudge(shifted, CAMERA_NUDGE_LEFT)[5], 0.0);
+        assert_eq!(nudge(shifted, CAMERA_NUDGE_ROLL_RIGHT)[6], 0.0);
         // Turned: up, left, wider; each stops at its most.
         let turned = nudge(nudge(nudge(moved, CAMERA_NUDGE_TILT_UP), CAMERA_NUDGE_TURN_LEFT), CAMERA_NUDGE_WIDER);
-        assert_eq!(turned, [0.1, 0.05, TILT_STEP, -TURN_STEP, WIDE_STEP]);
-        assert_eq!(nudge([0.0, 0.0, 0.0, 0.0, WIDE_MOST], CAMERA_NUDGE_WIDER)[4], WIDE_MOST);
-        // Kept as lines, read back the same; the old lines (back and up only) still read.
+        assert_eq!(turned, [0.1, 0.05, TILT_STEP, -TURN_STEP, WIDE_STEP, 0.0, 0.0]);
+        assert_eq!(nudge([0.0, 0.0, 0.0, 0.0, WIDE_MOST, 0.0, 0.0], CAMERA_NUDGE_WIDER)[4], WIDE_MOST);
+        // Kept as lines, read back the same; the old lines (2 or 5 numbers) still read.
         let mut by_key = std::collections::BTreeMap::new();
-        by_key.insert("trailer:-5.18:3.09:1.12".to_owned(), [0.75, -0.25, 4.0, -6.0, 20.0]);
-        by_key.insert("truck:vehicle.scania.s_2016".to_owned(), [0.25, 0.0, 0.0, 0.0, 0.0]);
+        by_key.insert("trailer:-5.18:3.09:1.12".to_owned(), [12.5, -0.25, 4.0, -6.0, 20.0, 0.35, -3.0]);
+        by_key.insert("truck:vehicle.scania.s_2016".to_owned(), [0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
         assert_eq!(read_nudges(&write_nudges(&by_key)), by_key);
-        assert_eq!(read_nudges("truck:vehicle.daf.xf 0.5 -0.25\n")["truck:vehicle.daf.xf"], [0.5, -0.25, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            read_nudges("truck:vehicle.daf.xf 0.5 -0.25\n")["truck:vehicle.daf.xf"],
+            [0.5, -0.25, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            read_nudges("truck:vehicle.daf.xf 0.5 -0.25 1 2 5\n")["truck:vehicle.daf.xf"],
+            [0.5, -0.25, 1.0, 2.0, 5.0, 0.0, 0.0]
+        );
         assert!(read_nudges("nonsense\n x y z\n").is_empty());
         // A trailer by its layout, the truck alone by its model.
         let t = westplay_shared::Telemetry {

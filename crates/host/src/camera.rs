@@ -20,6 +20,10 @@
 /// or two may pass without it in the cab as well).
 pub const OUTSIDE_AFTER_FRAMES: u64 = 4;
 
+/// Distance (metres) from the driver's head past which the camera is physically outside the cab regardless of whether
+/// a screen or floating screen drew a frame (e.g. seen through the cab windows or an outside-camera false positive).
+pub const OUTSIDE_DISTANCE_M: f64 = 1.4;
+
 /// How long the cab's screen goes undrawn, the game running, before WestPlay's screen counts as out of view
 /// ([`Unseen`]).
 pub const UNSEEN_AFTER: std::time::Duration = std::time::Duration::from_secs(1);
@@ -66,7 +70,23 @@ impl Camera {
     /// cab, and switching between its menus can draw the cab with the camera outside (a player's video,
     /// 2026-10-28: the music came clear for a moment, as if in the cab). So the camera stays where it was as the
     /// game paused (owner 2026-10-26: outside, the music came clear as it paused) until the game runs again.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn outside(&mut self, truck: &str, screen_frame: u64, game_frame: u64, electrics: bool, paused: bool) -> bool {
+        self.outside_or_far(truck, screen_frame, game_frame, electrics, paused, false)
+    }
+
+    /// Same as [`Self::outside`], also treating the camera as outside when `far_from_head` is true (camera world
+    /// position farther than [`OUTSIDE_DISTANCE_M`] from the driver's head), while still preserving the pre-pause
+    /// state while `paused` is true.
+    pub fn outside_or_far(
+        &mut self,
+        truck: &str,
+        screen_frame: u64,
+        game_frame: u64,
+        electrics: bool,
+        paused: bool,
+        far_from_head: bool,
+    ) -> bool {
         if self.truck != truck {
             self.truck = truck.to_owned();
             self.seen = false;
@@ -79,9 +99,17 @@ impl Camera {
         }
         let undrawn = game_frame.saturating_sub(screen_frame) > OUTSIDE_AFTER_FRAMES;
         if !paused {
-            self.outside = self.seen && electrics && undrawn;
+            self.outside = (self.seen && electrics && undrawn) || far_from_head;
         }
         self.outside
+    }
+
+    /// Whether the camera's known world position is farther than [`OUTSIDE_DISTANCE_M`] from the driver's head.
+    pub fn is_far_from_head(telemetry: &westplay_shared::Telemetry) -> bool {
+        if !telemetry.camera_known || (telemetry.x == 0.0 && telemetry.y == 0.0 && telemetry.z == 0.0) {
+            return false;
+        }
+        Self::distance(telemetry, true).is_some_and(|d| d > OUTSIDE_DISTANCE_M)
     }
 
     /// With the camera outside, how far it is from the driver's head (metres); `None` with it inside, or the
@@ -384,5 +412,18 @@ mod tests {
         assert!(camera.outside(S, 2, 500, true, false));
         // Another truck starts over: inside until its screen has been seen.
         assert!(!camera.outside("vehicle.daf.2021", 2, 900, true, false));
+    }
+
+    #[test]
+    fn stays_outside_when_camera_is_far_from_head_even_if_cab_frame_bumps() {
+        let mut camera = Camera::default();
+        // Inside the cab: not far, cab drawn -> inside.
+        assert!(!camera.outside_or_far(S, 10, 10, true, false, false));
+        // Outside camera: far from driver's head, even if floating screen or through-window draw bumps screen_frame -> still outside.
+        assert!(camera.outside_or_far(S, 11, 11, true, false, true));
+        // Back inside the cab: near head, cab drawn -> inside again.
+        assert!(!camera.outside_or_far(S, 12, 12, true, false, false));
+        // Paused while inside: stays inside even if pause menu moves the camera far away.
+        assert!(!camera.outside_or_far(S, 12, 50, true, true, true));
     }
 }

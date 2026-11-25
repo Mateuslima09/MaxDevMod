@@ -18,8 +18,16 @@ const LOOK_UP_DOOR: f32 = 0.1;
 /// at a person's pace, at least this.
 const UP_THE_STEP: f32 = 0.6;
 const THROUGH_THE_DOOR: f32 = 0.6;
-const ONTO_THE_SEAT: f32 = 0.7;
+const ONTO_THE_SEAT: f32 = 0.55;
 const TO_THE_DOOR: f32 = 0.3;
+/// Start the brief dark blink this long before reaching the seat so the screen is black at the exact Camera 0 ->
+/// Camera 1 handoff (hiding the low-detail exterior cab shell until the real interior dashboard & wheel load).
+const BLINK_BEFORE_END: f32 = 0.14;
+/// Post-switch Camera 1 head-movement animation (runs AFTER switching to Camera 1, with the full dashboard visible):
+/// brief delay while Camera 1 settles inside the black peak, then glance + nod + door-shut shudder, returning to 0.
+const CAB_SETTLE_DELAY: f32 = 0.08;
+const CAB_SETTLE_SECS: f32 = 0.90;
+const CAB_DOOR_SHUT_AT: f32 = 0.20;
 
 /// A place on the way: where the eyes are (world metres), where they look (heading and pitch, radians, as the
 /// walking look keeps them), how long getting there from the last takes, and whether a foot lands there.
@@ -38,6 +46,8 @@ pub struct Climb {
     pub time: f32,
     /// Whether it starts behind the person (third person): the camera into their eyes first, the body hidden there.
     pub approach: bool,
+    /// Whether this climb is entering the cab (triggers the Camera 0 -> Camera 1 blink at its end).
+    entering: bool,
 }
 
 /// From behind the person into their eyes (third person, climbing in), quickly: seconds a metre, and at least and
@@ -49,7 +59,7 @@ const APPROACH_MOST: f32 = 0.6;
 impl Climb {
     /// From `from` (where camera 0 is), looking `yaw`, `pitch`, into the truck's cab.
     pub fn new(from: [f64; 3], yaw: f32, pitch: f32, truck: &Truck) -> Self {
-        Climb { keys: path(from, yaw, pitch, truck), time: 0.0, approach: false }
+        Climb { keys: path(from, yaw, pitch, truck), time: 0.0, approach: false, entering: true }
     }
 
     /// From `from` (camera 0, behind the person in third person) into their `eyes` first, then as `new` from
@@ -62,7 +72,7 @@ impl Climb {
             Key { at: eyes, yaw, pitch, secs, step: false },
         ];
         keys.extend(path(eyes, yaw, pitch, truck).into_iter().skip(1));
-        Climb { keys, time: 0.0, approach: true }
+        Climb { keys, time: 0.0, approach: true, entering: true }
     }
 
     /// Whether the camera reached the person's eyes in the last `dt` seconds (`from_behind`).
@@ -78,7 +88,7 @@ impl Climb {
     /// Out of the truck's cab (owner 2026-11-05: "an animation getting out, not all at once"): from the seat, up
     /// into the doorway, down the step, onto the ground by the door, looking out.
     pub fn out(truck: &Truck) -> Self {
-        Climb { keys: path_out(truck), time: 0.0, approach: false }
+        Climb { keys: path_out(truck), time: 0.0, approach: false, entering: false }
     }
 
     /// Where the way ends: the eyes and their look.
@@ -86,10 +96,24 @@ impl Climb {
         self.keys.last().map(|key| (key.at, key.yaw, key.pitch))
     }
 
+    /// Total duration of the climb path (seconds).
+    fn path_secs(&self) -> f32 {
+        self.keys.iter().skip(1).map(|k| k.secs).sum()
+    }
+
     /// Whether the way reached its place `key` (counted from its start) in the last `dt` seconds of `go`.
     pub fn passed(&self, key: usize, dt: f32) -> bool {
         let end: f32 = self.keys.iter().take(key + 1).map(|k| k.secs).sum();
         self.time - dt < end && end <= self.time
+    }
+
+    /// Whether the brief dark blink before switching to Camera 1 should start in the last `dt` seconds.
+    pub fn blink_now(&self, dt: f32) -> bool {
+        if !self.entering {
+            return false;
+        }
+        let cue = (self.path_secs() - BLINK_BEFORE_END).max(0.0);
+        self.time - dt < cue && cue <= self.time
     }
 
     /// Goes on by `dt` seconds: where the eyes are and look (none once on the seat), and whether a foot landed.
@@ -104,6 +128,96 @@ impl Climb {
         }
         (view(&self.keys, self.time), landed)
     }
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Seated head-movement animation driven in Camera 1 (after the full cab interior, steering wheel, and dashboard
+/// have loaded behind the brief blink): emits zero-sum DirectInput mouse deltas `(dx, dy)` for a natural glance
+/// toward the door, settling nod, and damped micro-shudder right as the cab door thuds shut.
+pub struct CabSettle {
+    time: f32,
+    /// `-1.0` for left-hand drive (mouse left looks toward the left door), `+1.0` for right-hand drive.
+    door_x: f32,
+    sent_x: i32,
+    sent_y: i32,
+    door_shut: bool,
+    last: std::time::Instant,
+}
+
+impl CabSettle {
+    pub fn new(truck: &Truck) -> Self {
+        let door_x = if truck.head[0] > 0.0 { 1.0 } else { -1.0 };
+        Self { time: 0.0, door_x, sent_x: 0, sent_y: 0, door_shut: false, last: std::time::Instant::now() }
+    }
+
+    /// Advances by elapsed wall time, returning `(Some((dx, dy)), shut_door_now)` while running, or `(None, false)`
+    /// once settled cleanly back to center `(0, 0)`.
+    pub fn tick(&mut self) -> (Option<(i32, i32)>, bool) {
+        let now = std::time::Instant::now();
+        let dt = now.duration_since(self.last).as_secs_f32().clamp(0.0, 0.05);
+        self.last = now;
+        self.step(dt)
+    }
+
+    pub fn step(&mut self, dt: f32) -> (Option<(i32, i32)>, bool) {
+        let before = self.time;
+        self.time += dt;
+        if self.time < CAB_SETTLE_DELAY {
+            return (Some((0, 0)), false);
+        }
+        let t = self.time - CAB_SETTLE_DELAY;
+        let shut_now = !self.door_shut && before - CAB_SETTLE_DELAY < CAB_DOOR_SHUT_AT && t >= CAB_DOOR_SHUT_AT;
+        if shut_now {
+            self.door_shut = true;
+        }
+        if t >= CAB_SETTLE_SECS {
+            let dx = -self.sent_x;
+            let dy = -self.sent_y;
+            self.sent_x = 0;
+            self.sent_y = 0;
+            if dx != 0 || dy != 0 {
+                return (Some((dx, dy)), shut_now);
+            }
+            return (None, shut_now);
+        }
+        let (tx, ty) = cab_settle_target(t, self.door_x);
+        let ix = tx.round() as i32;
+        let iy = ty.round() as i32;
+        let dx = ix - self.sent_x;
+        let dy = iy - self.sent_y;
+        self.sent_x = ix;
+        self.sent_y = iy;
+        (Some((dx, dy)), shut_now)
+    }
+
+    pub fn door_shut_played(&self) -> bool {
+        self.door_shut
+    }
+}
+
+/// Target head offset `(x, y)` in DirectInput mouse counts (`+x` right, `+y` down) at `t` seconds into Camera 1 settle.
+fn cab_settle_target(t: f32, door_x: f32) -> (f32, f32) {
+    let u = (t / CAB_SETTLE_SECS).clamp(0.0, 1.0);
+    let env = smoothstep(0.0, 0.14, u) * (1.0 - smoothstep(0.72, 1.0, u));
+
+    // Quick glance toward the door as you sit & pull it shut, then gentle return across center to straight ahead.
+    let glance_x = door_x * 68.0 * (std::f32::consts::PI * 1.55 * u).sin() * (-(u * 1.9)).exp() * env;
+    // Slight downward nod settling onto the air-ride seat, then lifting smoothly back to level.
+    let nod_y = 34.0 * (std::f32::consts::PI * u).sin() * (-(u * 2.3)).exp() * env;
+
+    // Crisp damped micro-shudder ("tremidinha") right as the cab door thuds shut at `CAB_DOOR_SHUT_AT`.
+    let (tremor_x, tremor_y) = if t > CAB_DOOR_SHUT_AT {
+        let dt = t - CAB_DOOR_SHUT_AT;
+        let s = (-(dt * 6.8)).exp() * (1.0 - smoothstep(0.72, 1.0, u));
+        (14.0 * (dt * 38.0).sin() * s, 16.0 * (dt * 31.0 + 0.6).sin() * s)
+    } else {
+        (0.0, 0.0)
+    };
+    (glance_x + tremor_x, nod_y + tremor_y)
 }
 
 /// The cab's places on the way in and out (world metres): the ground by the door, the step, the doorway, the
@@ -227,6 +341,38 @@ mod tests {
         // Standing in the doorway over the seated head.
         assert!((highest - 12.9).abs() < 0.01);
         assert!(climb.go(0.05).0.is_none());
+    }
+
+    #[test]
+    fn cab_settle_blinks_moves_head_and_returns_to_zero_sum() {
+        let truck = truck();
+        let mut climb = Climb::new([97.0, 11.8, 199.0], 1.0, 0.0, &truck);
+        let mut blinks = 0usize;
+        while climb.go(0.02).0.is_some() {
+            if climb.blink_now(0.02) {
+                blinks += 1;
+            }
+        }
+        assert_eq!(blinks, 1, "entering climb should trigger the dark blink once before switching to Camera 1");
+
+        let mut settle = CabSettle::new(&truck);
+        let (mut sum_x, mut sum_y) = (0i32, 0i32);
+        let (mut max_x, mut max_y) = (0i32, 0i32);
+        let mut door_shuts = 0usize;
+        while let (Some((dx, dy)), shut) = settle.step(0.02) {
+            sum_x += dx;
+            sum_y += dy;
+            max_x = max_x.max(sum_x.abs());
+            max_y = max_y.max(sum_y.abs());
+            if shut {
+                door_shuts += 1;
+            }
+        }
+        assert_eq!(door_shuts, 1, "door-shut cue should fire once inside Camera 1 settle");
+        assert!(settle.door_shut_played());
+        assert!(max_x >= 20, "head should glance clearly toward the door in Camera 1 (max_x={max_x})");
+        assert!(max_y >= 12, "head should nod/shudder clearly in Camera 1 (max_y={max_y})");
+        assert_eq!((sum_x, sum_y), (0, 0), "Camera 1 settle must return dead-center with exact zero-sum delta");
     }
 
     #[test]

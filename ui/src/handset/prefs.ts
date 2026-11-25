@@ -7,6 +7,8 @@ import type { AlertGroup } from '../shared/host'
  * dark or light", "the game uses miles").
  */
 export interface Prefs {
+  /** In-game handheld form factor: vertical iPhone or vertical iPad (iPadOS). */
+  device: 'phone' | 'ipad'
   /** `auto`: as the cab is (the headlights, the time of day, or the player's choice in the cab). */
   look: 'auto' | 'light' | 'dark'
   units: 'km' | 'mi'
@@ -29,10 +31,13 @@ export interface Prefs {
   /** The game's notifications' groups turned off (owner 2026-11-20: payments, fines, the truck, the job): all on
    * unless the player turns one off. */
   alertsOff: AlertGroup[]
+  /** Notification chime style (iPhone-inspired tones or silent). */
+  notificationSound: NotificationSound
 }
 
 const KEY = 'westplay-handset-prefs'
 const DEFAULTS: Prefs = {
+  device: 'phone',
   look: 'auto',
   units: 'mi',
   wallpaper: 'aurora',
@@ -42,19 +47,22 @@ const DEFAULTS: Prefs = {
   freightPapers: true,
   manualRefuel: true,
   alertsOff: [],
+  notificationSound: 'tritone',
 }
+
+/** Notification sound styles selectable in Settings (iPhone-inspired tones). */
+export const NOTIFICATION_SOUNDS = ['tritone', 'rebound', 'note', 'aurora', 'classic', 'silent'] as const
+export type NotificationSound = (typeof NOTIFICATION_SOUNDS)[number]
 
 export type Currency = 'USD' | 'BRL' | 'EUR'
 
 /**
- * How much of each a dollar is: fixed, roughly as they were in late 2026, not followed live (the phone may have no
- * internet, and the game's money isn't real money anyway). Nupay says it's converted when it is.
+ * Keep monetary amounts 1:1 with the game's live memory values (e.g. R$ 10.000 in-game bank = R$ 10.000 in Nupay).
+ * Choosing a currency in Settings changes only the displayed currency symbol/format so balances, loans, installments
+ * and garage costs match the in-game bank exactly (including Brazilian / custom economy mods).
  */
-const PER_DOLLAR: Record<Currency, number> = { USD: 1, BRL: 5.4, EUR: 0.86 }
-
-/** `amount` of `from` in `to`, at the fixed rates. */
-export function convert(amount: number, from: Currency, to: Currency): number {
-  return from === to ? amount : (amount / PER_DOLLAR[from]) * PER_DOLLAR[to]
+export function convert(amount: number, _from: Currency, _to: Currency): number {
+  return amount
 }
 
 /** The currency the phone shows the game's money in: the one chosen in Nupay, or the game's own (`auto`). */
@@ -86,7 +94,7 @@ export function formatMoney(
 }
 
 /** The home screen's wallpapers to choose from. */
-export const WALLPAPERS = ['aurora', 'ocean', 'sunset'] as const
+export const WALLPAPERS = ['maxdevmod', 'aurora', 'ocean', 'sunset'] as const
 export type Wallpaper = (typeof WALLPAPERS)[number]
 
 let prefs: Prefs = read()

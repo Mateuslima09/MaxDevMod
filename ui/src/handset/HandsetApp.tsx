@@ -25,7 +25,20 @@ import { goFullScreen } from './fullScreen'
 import { Home } from './Home'
 import { type AppId, AppIcon, RowIcon } from './icons'
 import { List, Row, Segmented } from './ios'
-import { distance, formatMoney, type Prefs, setPrefs, speed, speedUnit, usePrefs, WALLPAPERS } from './prefs'
+import {
+  distance,
+  formatMoney,
+  NOTIFICATION_SOUNDS,
+  type Prefs,
+  setPrefs,
+  speed,
+  speedUnit,
+  usePrefs,
+  WALLPAPERS,
+} from './prefs'
+import { playNotificationSound } from './notificationText'
+import { BEEP_VOLUMES, useReversingSettings } from '../cabin/reversing/settings'
+import { beeper } from '../cabin/reversing/beeper'
 import { NupayApp } from './NupayApp'
 import { FuelBill } from './FuelBill'
 import { Paper } from './Paper'
@@ -33,10 +46,14 @@ import { ServicesApp } from './ServicesApp'
 import { SERVICES_WORDS } from './servicesWords'
 import { Notifications } from './notifications'
 import { TikTokApp } from './TikTokApp'
+import { IpadYouTubeApp } from './IpadYouTubeApp'
 import { SideKeys } from './SideKeys'
 import { SuspensionApp, SUSPENSION_WORDS } from './SuspensionApp'
 import { FloatScreenApp, FLOAT_SCREEN_WORDS } from './FloatScreenApp'
 import { BrakesApp, BRAKES_WORDS } from './BrakesApp'
+import { JobMarketApp, JOB_MARKET_WORDS } from './JobMarketApp'
+import { GarageApp } from './GarageApp'
+import { cancelActiveJob } from './jobMarketBridge'
 import { ScrollThumb } from './ScrollThumb'
 import { Scaled } from './Scaled'
 import { ScreenFitList } from './ScreenFitList'
@@ -68,6 +85,10 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   }, [language])
   useLookChanges()
   const prefs = usePrefs()
+  const isIpad = !remote && prefs.device === 'ipad'
+  useEffect(() => {
+    if (!remote) postToHost({ type: 'phoneDevice', device: prefs.device })
+  }, [remote, prefs.device])
   // Light or dark as chosen in its Settings, else as the cab is.
   const cab = useLook().appearance
   const appearance = prefs.look === 'auto' ? cab : prefs.look
@@ -84,6 +105,9 @@ export function HandsetApp({ remote }: { remote: boolean }) {
   const compact = app !== null && CAB_APPS.includes(app)
   // TikTok's own site shows under the page, through its app (the phone in the game's alone).
   const onTikTok = app === 'tiktok' && !remote
+  // YouTube on the in-game iPad/phone shows YouTube's ad-free video layer under the transparent video hole.
+  const onYouTube = app === 'youtube' && !remote
+  const customChrome = onTikTok || app === 'youtube'
   useTikTokNotifications(prefs, remote)
   useGameNotifications(prefs.alertsOff, remote)
   // The cargo's paper to sign, in place of the phone (the phone in the game's alone: the host shows it large).
@@ -115,23 +139,27 @@ export function HandsetApp({ remote }: { remote: boolean }) {
 
   return (
     <main
-      className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : ' with-keys'}${onTikTok ? ' on-tiktok' : ''}`}
+      className={`handset shell appearance-${appearance}${remote ? ' handset-remote' : isIpad ? ' is-ipad' : ' with-keys'}${onTikTok ? ' on-tiktok' : ''}${onYouTube ? ' on-youtube' : ''}`}
     >
-      {!remote && <SideKeys tiktok={onTikTok} />}
+      {!remote && !isIpad && <SideKeys tiktok={onTikTok} />}
       <div
-        className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}${onTikTok ? ' on-tiktok' : ''}`}
+        className={`handset-screen${app === null ? ` at-home wallpaper-${prefs.wallpaper}` : ''}${onTikTok ? ' on-tiktok' : ''}${onYouTube ? ' on-youtube' : ''}`}
       >
-        <StatusBar />
-        <Notifications language={language === 'pt' ? 'pt' : 'en'} currency={prefs.currency} />
+        <StatusBar ipad={isIpad} days={words.days} />
+        <Notifications
+          language={language === 'pt' ? 'pt' : 'en'}
+          currency={prefs.currency}
+          sound={prefs.notificationSound}
+        />
         {app === null ? (
-          <Home words={words} open={setApp} units={prefs.units} remote={remote} />
+          <Home words={words} open={setApp} units={prefs.units} remote={remote} ipad={isIpad} />
         ) : (
           <section
-            className={`ios-app-screen${compact ? ' compact' : ''}${app === 'tiktok' ? ' is-tiktok' : ''}`}
+            className={`ios-app-screen${compact ? ' compact' : ''}${app === 'tiktok' ? ' is-tiktok' : ''}${app === 'youtube' ? ' is-youtube' : ''}`}
             key={app}
           >
-            {/* TikTok's is all TikTok's: home is the indicator under it. */}
-            {!onTikTok && (
+            {/* TikTok and YouTube draw their own top bar; home is the indicator under it. */}
+            {!customChrome && (
               <header className="ios-nav">
                 <button type="button" className="ios-back" onClick={home}>
                   <svg viewBox="0 0 12 20" aria-hidden>
@@ -142,24 +170,26 @@ export function HandsetApp({ remote }: { remote: boolean }) {
                 {compact && <span className="ios-nav-title">{words.apps[app]}</span>}
               </header>
             )}
-            {!onTikTok && <ScrollThumb target={content} />}
+            {!customChrome && <ScrollThumb target={content} />}
             <div className={`ios-content ios-content-${app}`} ref={content}>
-              {/* Nupay has its own head; TikTok in the game is all TikTok's. */}
-              {!compact && app !== 'nupay' && !onTikTok && <h1 className="ios-large-title">{words.apps[app]}</h1>}
+              {/* Nupay, Garage, TikTok and YouTube have their own headers. */}
+              {!compact && app !== 'nupay' && app !== 'garage' && !customChrome && (
+                <h1 className="ios-large-title">{words.apps[app]}</h1>
+              )}
               {app === 'maps' && (
-                <CabScreen scale={MAP_SCALE}>
+                <CabScreen scale={isIpad ? 0.78 : MAP_SCALE}>
                   <section className="app-panel maps-app">
                     <MapView interactive />
                   </section>
                 </CabScreen>
               )}
               {app === 'youtubeMusic' && (
-                <CabScreen scale={MUSIC_SCALE}>
+                <CabScreen scale={isIpad ? 0.72 : MUSIC_SCALE}>
                   <YouTubeMusicApp />
                 </CabScreen>
               )}
               {app === 'spotify' && (
-                <CabScreen scale={MUSIC_SCALE}>
+                <CabScreen scale={isIpad ? 0.72 : MUSIC_SCALE}>
                   <SpotifyApp />
                 </CabScreen>
               )}
@@ -182,6 +212,29 @@ export function HandsetApp({ remote }: { remote: boolean }) {
               {app === 'suspension' && <SuspensionApp words={SUSPENSION_WORDS[language === 'pt' ? 'pt' : 'en']} />}
               {app === 'camera' && <CameraApp words={words} />}
               {app === 'brakes' && <BrakesApp words={BRAKES_WORDS[language === 'pt' ? 'pt' : 'en']} />}
+              {app === 'jobMarket' && (
+                <JobMarketApp
+                  words={JOB_MARKET_WORDS[language === 'pt' ? 'pt' : 'en']}
+                  units={prefs.units}
+                  currency={prefs.currency}
+                  language={language === 'pt' ? 'pt' : 'en'}
+                  remote={remote}
+                />
+              )}
+              {app === 'garage' && (
+                <GarageApp
+                  language={language === 'pt' ? 'pt' : 'en'}
+                  currency={prefs.currency}
+                  units={prefs.units}
+                />
+              )}
+              {app === 'youtube' && (
+                <IpadYouTubeApp
+                  language={language === 'pt' ? 'pt' : 'en'}
+                  remote={remote}
+                  onHome={home}
+                />
+              )}
               {app === 'floatScreen' && (
                 <FloatScreenApp
                   words={FLOAT_SCREEN_WORDS[language === 'pt' ? 'pt' : 'en']}
@@ -189,6 +242,13 @@ export function HandsetApp({ remote }: { remote: boolean }) {
                 />
               )}
             </div>
+            {!compact && !onTikTok && !remote && (
+              <div className="handset-keyboard">
+                <Suspense fallback={null}>
+                  <Keyboard />
+                </Suspense>
+              </div>
+            )}
           </section>
         )}
         <button type="button" className="ios-home-indicator" aria-label={words.home} onClick={home} />
@@ -247,13 +307,18 @@ function CabScreen({ scale, children }: { scale: number; children: ReactNode }) 
   )
 }
 
-/** iOS's status bar: the time in the game, the island, the signal, Wi-Fi and the battery. */
-function StatusBar() {
+/** iOS / iPadOS status bar: time (and weekday on iPad), optional Dynamic Island on iPhone, signal, Wi-Fi and battery. */
+function StatusBar({ ipad = false, days = [] }: { ipad?: boolean; days?: string[] }) {
   const time = useLive((state) => (state.telemetry ? cabClock(state.telemetry, state.clockShift) : null))
+  const dayIndex = time === null ? null : Math.floor((((time / 1440) % 7) + 7) % 7)
+  const dayShort = dayIndex !== null && days[dayIndex] ? days[dayIndex].slice(0, 3) : ''
   return (
-    <header className="ios-status">
-      <span className="ios-status-time">{time === null ? '--:--' : formatGameTime(time)}</span>
-      <span className="ios-island" />
+    <header className={`ios-status${ipad ? ' is-ipad' : ''}`}>
+      <span className="ios-status-time">
+        {time === null ? '--:--' : formatGameTime(time)}
+        {ipad && dayShort ? <span className="ipad-status-day"> {dayShort}</span> : null}
+      </span>
+      {!ipad && <span className="ios-island" />}
       <span className="ios-status-icons" aria-hidden>
         <svg viewBox="0 0 18 12" width="18" height="12">
           <rect x="0" y="8" width="3" height="4" rx="1" />
@@ -276,7 +341,7 @@ function StatusBar() {
   )
 }
 
-/** What plays, larger, its volume, and the music apps to choose it in. */
+/** What plays, larger, its volume, audio output (Cabine vs Celular/iPad), and the music apps to choose it in. */
 function MusicApp({ words, open }: { words: Words; open: (app: AppId) => void }) {
   return (
     <>
@@ -284,6 +349,7 @@ function MusicApp({ words, open }: { words: Words; open: (app: AppId) => void })
         <NowPlayingWidget />
       </div>
       <Volume words={words} />
+      <AudioOutputList words={words} />
       <List header={words.playIn}>
         {(['youtubeMusic', 'spotify'] as const).map((id) => (
           <Row key={id} icon={<AppIcon id={id} small />} label={words.apps[id]} onClick={() => open(id)} />
@@ -312,8 +378,26 @@ function FreightApp({
   const left = useLive((state) => state.telemetry?.navigationDistance ?? 0)
   const time = useLive((state) => state.telemetry?.navigationTime ?? 0)
   const now = useLive((state) => state.telemetry?.gameTime ?? null)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
   if (!job) return <Empty>{words.noJob}</Empty>
   const due = now === null ? null : job.deliveryTime - now
+  const jmWords = JOB_MARKET_WORDS[language]
+  const onCancel = async () => {
+    if (!confirmCancel) {
+      setConfirmCancel(true)
+      setCancelError(null)
+      return
+    }
+    setCancelling(true)
+    const ans = await cancelActiveJob()
+    setCancelling(false)
+    setConfirmCancel(false)
+    if (ans !== 'ok') {
+      setCancelError(ans === 'multiplayer' ? jmWords.toastMultiplayer : jmWords.toastCancelFailed)
+    }
+  }
   return (
     <>
       <article className="ios-hero">
@@ -361,6 +445,41 @@ function FreightApp({
           detail={job.special ? words.to : `${words.to} · ${job.destinationCity}`}
         />
       </List>
+      <div className="freight-cancel-box">
+        {cancelError && <div className="jm-toast err">{cancelError}</div>}
+        {confirmCancel ? (
+          <div className="jm-confirm jm-confirm-danger">
+            <span>{jmWords.cancelConfirm}</span>
+            <div className="jm-confirm-actions">
+              <button
+                type="button"
+                className="jm-btn cancel"
+                disabled={cancelling}
+                onClick={() => setConfirmCancel(false)}
+              >
+                {jmWords.cancelKeep}
+              </button>
+              <button
+                type="button"
+                className="jm-btn danger"
+                disabled={cancelling}
+                onClick={() => void onCancel()}
+              >
+                {cancelling ? jmWords.cancellingJob : jmWords.cancelYes}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="jm-cancel-btn"
+            disabled={cancelling}
+            onClick={() => void onCancel()}
+          >
+            {cancelling ? jmWords.cancellingJob : jmWords.cancelJob}
+          </button>
+        )}
+      </div>
     </>
   )
 }
@@ -425,13 +544,97 @@ function TruckApp({ words, units }: { words: Words; units: Prefs['units'] }) {
  */
 function CameraApp({ words }: { words: Words }) {
   const t = useLive((state) => state.telemetry)
-  if (!t) return <Empty>{words.noGame}</Empty>
+  const rev = useReversingSettings()
+  const beepPct = Math.round((BEEP_VOLUMES[rev.beepVolume] ?? 1) * 100)
+  const stepBeep = (delta: number) => {
+    const next = Math.max(0, Math.min(BEEP_VOLUMES.length - 1, rev.beepVolume + delta))
+    if (next === rev.beepVolume) return
+    rev.set({ beepVolume: next })
+    beeper.setVolume(BEEP_VOLUMES[next] ?? 1)
+    beeper.sample()
+  }
+
+  const controls = (
+    <List header={words.cameraOptions}>
+      <Row
+        label={
+          <span className="ios-alert-row">
+            <span>{words.cameraEnable}</span>
+            <Segmented
+              options={[
+                ['on', words.on],
+                ['off', words.off],
+              ]}
+              chosen={rev.camera ? 'on' : 'off'}
+              choose={(v) => rev.set({ camera: v === 'on' })}
+            />
+          </span>
+        }
+      />
+      <Row
+        label={
+          <span className="ios-alert-row">
+            <span>{words.cameraBeeps}</span>
+            <Segmented
+              options={[
+                ['on', words.on],
+                ['off', words.off],
+              ]}
+              chosen={rev.beeps ? 'on' : 'off'}
+              choose={(v) => {
+                const on = v === 'on'
+                rev.set({ beeps: on })
+                if (on) {
+                  beeper.setVolume(BEEP_VOLUMES[rev.beepVolume] ?? 1)
+                  beeper.sample()
+                }
+              }}
+            />
+          </span>
+        }
+      />
+      {rev.beeps && (
+        <CameraTurnRow
+          name={words.cameraBeepVolume}
+          value={`${beepPct}%`}
+          less={{ label: '−', press: () => stepBeep(-1) }}
+          more={{ label: '+', press: () => stepBeep(1) }}
+        />
+      )}
+      <Row
+        label={
+          <span className="ios-alert-row">
+            <span>{words.cameraGuides}</span>
+            <Segmented
+              options={[
+                ['on', words.on],
+                ['off', words.off],
+              ]}
+              chosen={rev.guides ? 'on' : 'off'}
+              choose={(v) => rev.set({ guides: v === 'on' })}
+            />
+          </span>
+        }
+      />
+    </List>
+  )
+
+  if (!t) {
+    return (
+      <>
+        {controls}
+        <Empty>{words.noGame}</Empty>
+      </>
+    )
+  }
   const press = (action: CameraNudge) => postToHost({ type: 'cameraNudge', action })
   const language = words === WORDS.pt ? 'pt' : 'en'
   const back = t.cameraBack ?? 0
   const up = t.cameraUp ?? 0
+  const side = t.cameraSide ?? 0
   return (
     <>
+      {controls}
       <article className="ios-hero ios-camera-hero">
         <div className="ios-hero-kicker">{t.trailerConnected ? words.cameraForTrailer : words.cameraForTruck}</div>
         <div className="ios-camera-pad">
@@ -450,6 +653,9 @@ function CameraApp({ words }: { words: Words }) {
             <div>
               {words.cameraHeight} <b>{signedMetres(up, language)}</b>
             </div>
+            <div>
+              {words.cameraSide} <b>{signedMetres(side, language)}</b>
+            </div>
           </div>
           <button type="button" className="ios-camera-key back" onClick={() => press('back')}>
             {words.cameraBack}
@@ -461,13 +667,33 @@ function CameraApp({ words }: { words: Words }) {
           </button>
         </div>
       </article>
-      {/* Turned too (owner 2026-11-20: "turn it up if it looks too far down; to the sides; a wider view"). */}
+      <List header={words.cameraPosition}>
+        <CameraTurnRow
+          name={words.cameraDistanceFast}
+          value={signedMetres(back, language)}
+          less={{ label: '−50 cm', press: () => press('forwardFar') }}
+          more={{ label: '+50 cm', press: () => press('backFar') }}
+        />
+        <CameraTurnRow
+          name={words.cameraSide}
+          value={signedMetres(side, language)}
+          less={{ label: words.cameraTurnLeft, press: () => press('left') }}
+          more={{ label: words.cameraTurnRight, press: () => press('right') }}
+        />
+      </List>
+      {/* Turned too (owner 2026-11-20 & 2026-11-24: pitch, lateral roll, yaw, FOV). */}
       <List header={words.cameraTurning}>
         <CameraTurnRow
           name={words.cameraTilt}
           value={signedDegrees(t.cameraTilt ?? 0, language)}
           less={{ label: words.cameraTiltDown, press: () => press('tiltDown') }}
           more={{ label: words.cameraTiltUp, press: () => press('tiltUp') }}
+        />
+        <CameraTurnRow
+          name={words.cameraRoll}
+          value={signedDegrees(t.cameraRoll ?? 0, language)}
+          less={{ label: words.cameraTurnLeft, press: () => press('rollLeft') }}
+          more={{ label: words.cameraTurnRight, press: () => press('rollRight') }}
         />
         <CameraTurnRow
           name={words.cameraTurn}
@@ -541,6 +767,23 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
   const switches = useCharacterSwitches()
   return (
     <>
+      {!remote && (
+        <List header={words.device} footer={words.deviceHint}>
+          <Row
+            icon={<RowIcon tone="#5856d6">{GLYPH_DEVICE}</RowIcon>}
+            label={
+              <Segmented
+                options={[
+                  ['phone', words.devicePhone],
+                  ['ipad', words.deviceIpad],
+                ]}
+                chosen={prefs.device}
+                choose={(device) => setPrefs({ device: device as Prefs['device'] })}
+              />
+            }
+          />
+        </List>
+      )}
       {/* Each choice as wide as its row: its header names it. */}
       <List header={words.look}>
         <Row
@@ -605,6 +848,28 @@ function SettingsApp({ words, prefs, remote }: { words: Words; prefs: Prefs; rem
         </div>
       </List>
       <Volume words={words} />
+      <AudioOutputList words={words} />
+      <List header={words.notificationSound} footer={words.notificationSoundHint}>
+        {NOTIFICATION_SOUNDS.map((tone) => {
+          const active = prefs.notificationSound === tone
+          return (
+            <button
+              key={tone}
+              type="button"
+              className={`ios-row ios-tone-row${active ? ' on' : ''}`}
+              onClick={() => {
+                setPrefs({ notificationSound: tone })
+                playNotificationSound(tone)
+              }}
+            >
+              <span>{words.notificationSounds[tone]}</span>
+              <span className="ios-tone-check" aria-hidden>
+                {active ? '✓' : ''}
+              </span>
+            </button>
+          )
+        })}
+      </List>
       {/* The account's TikTok LIVE as notifications: the phone in the game's (it's the PC that watches it). */}
       {!remote && (
         <List header={words.tiktokNotifications} footer={words.tiktokNotificationsHint}>
@@ -810,6 +1075,12 @@ const ALERT_ICONS: Record<AlertGroup, ReactNode> = {
   job: <RowIcon tone="#ff9500">{GLYPH_PAPER}</RowIcon>,
 }
 const GLYPH_LOOK = <path d="M12 3a9 9 0 1 0 0 18Zm0 2v14a7 7 0 0 1 0-14Z" fillRule="evenodd" />
+const GLYPH_DEVICE = (
+  <>
+    <rect x="4.5" y="2.5" width="15" height="19" rx="2.4" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path d="M10.5 18.5h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </>
+)
 const GLYPH_SCREEN = (
   <>
     <rect x="3" y="5" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -839,6 +1110,9 @@ const WORDS = {
       camera: 'Rear Camera',
       floatScreen: 'Screen',
       brakes: 'Brakes',
+      jobMarket: 'Jobs',
+      garage: 'Company',
+      youtube: 'YouTube',
     } satisfies Record<AppId, string>,
     days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     noJob: 'No job right now',
@@ -858,9 +1132,17 @@ const WORDS = {
     gear: 'Gear',
     camera: 'Reversing camera',
     cameraNote:
-      'Moves and turns the camera for the trailer coupled now (or the truck alone): 5 cm, 1° up or down, 2° to the side or 5° of view a press. Kept for it; best tried in reverse, watching the cab screen.',
+      'Moves and turns the camera for the trailer coupled now (or the truck alone): 5 cm or 50 cm (up to 25 m back for long trailers), 1° tilt or roll, 2° turn, or 5° field of view. Kept for it; best tried in reverse, watching the cab screen.',
     cameraDistance: 'Distance',
+    cameraDistanceFast: 'Distance (fast)',
     cameraHeight: 'Height',
+    cameraSide: 'Sideways',
+    cameraOptions: 'Reversing camera',
+    cameraEnable: 'Camera on reverse',
+    cameraBeeps: 'Sensor beeps',
+    cameraBeepVolume: 'Beep volume',
+    cameraGuides: 'Guide lines',
+    cameraPosition: 'Position',
     cameraForward: 'Forward',
     cameraBack: 'Back',
     cameraDown: 'Lower',
@@ -872,6 +1154,7 @@ const WORDS = {
     cameraTilt: 'Tilt',
     cameraTiltUp: 'Up',
     cameraTiltDown: 'Down',
+    cameraRoll: 'Side tilt',
     cameraTurn: 'Turn',
     cameraTurnLeft: 'Left',
     cameraTurnRight: 'Right',
@@ -893,6 +1176,15 @@ const WORDS = {
     nothingPlays: 'Nothing is playing',
     noRoute: 'No route',
     look: 'Appearance',
+    device: 'Device',
+    devicePhone: 'iPhone',
+    deviceIpad: 'iPad',
+    deviceHint: 'Choose between the vertical iPhone or a larger vertical iPad on the same Alt+4 key — switches live.',
+    audioOutput: 'Sound output',
+    audioOutputCabin: 'Cab',
+    audioOutputDevice: 'Phone / iPad',
+    audioOutputHint:
+      'Choose whether YouTube & music play through the truck cab speakers (muffled outside in Modo Personagem) or directly on your phone/iPad in clear stereo even on foot.',
     lookAuto: 'Auto',
     lookLight: 'Light',
     lookDark: 'Dark',
@@ -944,7 +1236,17 @@ const WORDS = {
     keepScreenOn: 'Screen on with truck off',
     keepScreenOnHint:
       'Keeps the dashboard multimedia screen powered on and interactive even when the truck is turned off. Toggle off anytime to turn it back off.',
-    wallpapers: { aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
+    wallpapers: { maxdevmod: 'MaxDevMod', aurora: 'Aurora', ocean: 'Ocean', sunset: 'Sunset' },
+    notificationSound: 'Notification sound',
+    notificationSoundHint: 'Tap a tone to preview it. Used for phone, game, Nupay and TikTok alerts.',
+    notificationSounds: {
+      tritone: 'Tri-tone (iPhone)',
+      rebound: 'Rebound (iOS)',
+      note: 'Note (iOS)',
+      aurora: 'Aurora (iOS)',
+      classic: 'Classic',
+      silent: 'Silent',
+    },
     miles: 'Miles',
     kilometres: 'Km',
     howTo: 'How to use',
@@ -994,6 +1296,9 @@ const WORDS = {
       camera: 'Câmera de Ré',
       floatScreen: 'Tela',
       brakes: 'Freios',
+      jobMarket: 'Cargas',
+      garage: 'Empresa',
+      youtube: 'YouTube',
     } satisfies Record<AppId, string>,
     days: ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'],
     noJob: 'Nenhum frete agora',
@@ -1013,9 +1318,17 @@ const WORDS = {
     gear: 'Marcha',
     camera: 'Câmera de ré',
     cameraNote:
-      'Move e gira a câmera da carreta engatada agora (ou do caminhão sozinho): 5 cm, 1° para cima ou para baixo, 2° para o lado ou 5° de visão por toque. Fica guardado para ela; melhor ajustar de ré, olhando a tela da cabine.',
+      'Move e gira a câmera da carreta engatada agora (ou do caminhão sozinho): 5 cm ou 50 cm (até 25 m para trás em carretas grandes), 1° de inclinação vertical ou lateral, 2° de giro ou 5° de visão por toque. Fica guardado para ela; melhor ajustar de ré, olhando a tela da cabine.',
     cameraDistance: 'Distância',
+    cameraDistanceFast: 'Distância (rápido)',
     cameraHeight: 'Altura',
+    cameraSide: 'Lado',
+    cameraOptions: 'Câmera de ré',
+    cameraEnable: 'Ligar câmera na ré',
+    cameraBeeps: 'Bip dos sensores',
+    cameraBeepVolume: 'Volume do bip',
+    cameraGuides: 'Linhas-guia',
+    cameraPosition: 'Posição',
     cameraForward: 'Para frente',
     cameraBack: 'Para trás',
     cameraDown: 'Descer',
@@ -1027,6 +1340,7 @@ const WORDS = {
     cameraTilt: 'Inclinação',
     cameraTiltUp: 'Para cima',
     cameraTiltDown: 'Para baixo',
+    cameraRoll: 'Inclinação lateral',
     cameraTurn: 'Girar',
     cameraTurnLeft: 'Esquerda',
     cameraTurnRight: 'Direita',
@@ -1048,6 +1362,15 @@ const WORDS = {
     nothingPlays: 'Nada tocando',
     noRoute: 'Sem rota',
     look: 'Aparência',
+    device: 'Dispositivo (Celular / iPad)',
+    devicePhone: 'Celular',
+    deviceIpad: 'iPad',
+    deviceHint: 'Alterne ao vivo entre o celular (iPhone) ou o tablet em pé (iPad) na tecla Alt+4, sem reiniciar o jogo.',
+    audioOutput: 'Saída de som',
+    audioOutputCabin: 'Cabine',
+    audioOutputDevice: 'Celular / iPad',
+    audioOutputHint:
+      'Escolha se o áudio do YouTube e das músicas sai nos alto-falantes da cabine (abafado fora do caminhão) ou direto no celular/iPad (som limpo no Modo Personagem, mesmo com o caminhão desligado).',
     lookAuto: 'Auto',
     lookLight: 'Claro',
     lookDark: 'Escuro',
@@ -1099,7 +1422,17 @@ const WORDS = {
     keepScreenOn: 'Tela ligada (caminhão desligado)',
     keepScreenOnHint:
       'Mantém a central multimídia ligada e funcionando mesmo com o caminhão desligado. Desative quando quiser desligar a tela junto com o caminhão.',
-    wallpapers: { aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
+    wallpapers: { maxdevmod: 'MaxDevMod', aurora: 'Aurora', ocean: 'Oceano', sunset: 'Pôr do sol' },
+    notificationSound: 'Som de notificação',
+    notificationSoundHint: 'Toque em um som para ouvir a prévia. Usado nos alertas do celular, jogo, Nupay e TikTok.',
+    notificationSounds: {
+      tritone: 'Tri-tone (iPhone)',
+      rebound: 'Rebote (iOS)',
+      note: 'Nota (iOS)',
+      aurora: 'Aurora (iOS)',
+      classic: 'Clássico',
+      silent: 'Silencioso',
+    },
     miles: 'Milhas',
     kilometres: 'Km',
     howTo: 'Como usar',
@@ -1145,6 +1478,38 @@ function Volume({ words }: { words: Words }) {
     </List>
   )
 }
+
+/** Sound output selector: truck cab speakers (`cabin`) vs handheld phone/iPad (`device`). */
+function AudioOutputList({ words }: { words: Words }) {
+  const audioOutput = useCharacterSwitches((s) => s.audioOutput)
+  return (
+    <List header={words.audioOutput} footer={words.audioOutputHint}>
+      <Row
+        icon={<RowIcon tone="#0a84ff">{GLYPH_SPEAKER}</RowIcon>}
+        label={
+          <Segmented
+            options={[
+              ['cabin', words.audioOutputCabin],
+              ['device', words.audioOutputDevice],
+            ]}
+            chosen={audioOutput}
+            choose={(which) => {
+              useCharacterSwitches.setState({ audioOutput: which })
+              postToHost({ type: 'audioOutput', which })
+            }}
+          />
+        }
+      />
+    </List>
+  )
+}
+
+const GLYPH_SPEAKER = (
+  <>
+    <path d="M11 5 6 9H3v6h3l5 4V5Z" fill="currentColor" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+  </>
+)
 
 /** A Modo Personagem switch in Settings: on or off, as the app's settings have it (`useCharacterSwitches`). */
 function SwitchList({

@@ -357,7 +357,9 @@ unsafe extern "system" fn om_set_render_targets_hook(
         guarded(|| crate::mirror_camera_probe::hook_context(this));
         guarded(|| crate::mirror_camera_probe::on_set_render_targets(this, count, views));
         guarded(|| crate::float_screen::on_set_render_targets(this, count, views, depth_stencil));
-        original(this, count, views, depth_stencil)
+        guarded(|| crate::brake_smoke::on_set_render_targets(this, count, views, depth_stencil));
+        original(this, count, views, depth_stencil);
+        guarded(|| crate::brake_smoke::after_set_render_targets(this));
     }
 }
 
@@ -390,8 +392,12 @@ unsafe extern "system" fn om_set_render_targets_and_uavs_hook(
             guarded(|| crate::mirror::on_set_render_targets(this, rtv_count, views));
             guarded(|| crate::hide_virtual::on_set_render_targets(this, rtv_count, views));
             guarded(|| crate::float_screen::on_set_render_targets(this, rtv_count, views, depth_stencil));
+            guarded(|| crate::brake_smoke::on_set_render_targets(this, rtv_count, views, depth_stencil));
         }
-        original(this, rtv_count, views, depth_stencil, uav_start, uav_count, uavs, uav_initial_counts)
+        original(this, rtv_count, views, depth_stencil, uav_start, uav_count, uavs, uav_initial_counts);
+        if rtv_count != u32::MAX {
+            guarded(|| crate::brake_smoke::after_set_render_targets(this));
+        }
     }
 }
 
@@ -466,14 +472,18 @@ unsafe fn on_present(swapchain: *mut c_void) {
         // The interaction key's toggle, then the keybinds (which may need it).
         crate::input::on_frame();
         crate::keybinds::on_frame();
+        // 3D brake smoke in the scene, behind UI overlays (floating screen, phone, HUD).
+        crate::brake_smoke::on_present(swapchain);
         // The floating screen under the phone and the hints (they're over the cab, it's in it).
         crate::float_screen::on_present(swapchain);
         crate::handset::on_present(swapchain);
         crate::hints::on_present(swapchain);
         crate::fuel_meter::on_present(swapchain);
+        crate::fuel_bubble::on_present(swapchain);
         crate::brake_hud::on_present(swapchain);
         crate::mirror_probe::on_present(swapchain, frame);
         crate::mirror::on_present(swapchain);
+        crate::job_transition::on_present(swapchain);
         crate::hires::on_present(swapchain);
         // Last, over everything: the screen faded to black and back (run over on foot: `character`).
         crate::fade::on_present(swapchain);

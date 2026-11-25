@@ -137,6 +137,7 @@ export function SuspensionApp({ words }: { words: SuspensionWords }) {
   const auto = useCharacterSwitches((state) => state.suspensionAuto)
   const autoDelay = useCharacterSwitches((state) => state.suspensionAutoDelay)
   const autoReturn = useCharacterSwitches((state) => state.suspensionAutoReturn)
+  const autoBrake = useCharacterSwitches((state) => state.suspensionAutoBrake)
   const applied = useCharacterSwitches((state) => state.suspensionApplied)
   const lowFront = useCharacterSwitches((state) => state.suspensionLowFront)
   const damping = useCharacterSwitches((state) => state.suspensionDamping)
@@ -341,6 +342,30 @@ export function SuspensionApp({ words }: { words: SuspensionWords }) {
                     const secs = Number(chosen)
                     useCharacterSwitches.setState({ suspensionAutoReturn: secs })
                     postToHost({ type: 'suspensionAutoReturn', secs })
+                  }}
+                />
+              </div>
+            }
+          />
+        )}
+        {auto && (
+          <Row
+            label={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                <span className="ios-row-detail">{words.autoBrake}</span>
+                <Segmented
+                  options={[
+                    ['1', '1s'],
+                    ['2', '2s'],
+                    ['3', '3s'],
+                    ['4', '4s'],
+                    ['5', '5s'],
+                  ]}
+                  chosen={String(autoBrake)}
+                  choose={(chosen) => {
+                    const secs = Number(chosen)
+                    useCharacterSwitches.setState({ suspensionAutoBrake: secs })
+                    postToHost({ type: 'suspensionAutoBrake', secs })
                   }}
                 />
               </div>
@@ -823,6 +848,7 @@ export interface SuspensionWords {
   autoHint: string
   autoDelay: string
   autoReturn: string
+  autoBrake: string
   autoReset: string
   autoResetHint: string
   autoResetPending: string
@@ -866,6 +892,7 @@ export const SUSPENSION_WORDS: Record<'en' | 'pt', SuspensionWords> = {
       'As real trucks do: a while over 80 km/h it lowers a little; under 60 km/h, back to normal. On a rough road it goes up and stays up until the road has been smooth for a while. Braking hard for a while, it rises a little from where it is, and goes back once you let go. Coupling a heavy trailer standing still, it raises the rear back to where it was. Only with the engine running; moving it yourself here pauses it for a minute. Works best with "Back to normal by itself" off.',
     autoDelay: 'Raise delay (rough road)',
     autoReturn: 'Return delay (smooth road)',
+    autoBrake: 'Raise delay (braking)',
     autoReset: 'Back to normal by itself',
     autoResetHint:
       'On, the game sets the suspension back to its normal height as you drive off. Off, it stays where you leave it.',
@@ -911,6 +938,7 @@ export const SUSPENSION_WORDS: Record<'en' | 'pt', SuspensionWords> = {
       'Como nos caminhões de verdade: um tempo acima de 80 km/h ela baixa um pouco; abaixo de 60 km/h, volta ao normal. Em estrada ruim ela sobe e fica em cima até a estrada ficar lisa um bom tempo. Freando forte por um tempo, ela sobe um pouquinho de onde estiver e volta quando você solta o freio. Engatando uma carreta pesada parado, ela sobe a traseira de volta para onde estava. Só com o motor ligado; mexer você mesmo aqui pausa ela por 1 minuto. Funciona melhor com "Voltar ao normal sozinha" desligado.',
     autoDelay: 'Tempo para subir (terreno ruim)',
     autoReturn: 'Tempo para voltar (asfalto liso)',
+    autoBrake: 'Tempo para subir (frenagem)',
     autoReset: 'Voltar ao normal sozinha',
     autoResetHint:
       'Ligado, o jogo volta a suspensão para a altura normal quando você anda. Desligado, ela fica onde você deixar.',

@@ -102,6 +102,7 @@ export const words: CompanionWords = {
     phone: 'Celular',
     character: 'Personagem (no celular)',
     hideBar: 'Esconder a barra de teclas',
+    roughRoad: 'Subir suspensão (terreno ruim)',
     pressKey: 'Pressione uma tecla…',
     keybindsNote:
       'Clique em um atalho e pressione a nova tecla. Se segurar {key} ao pressioná-la, ele só funciona enquanto você usa a tela. Esc cancela.',

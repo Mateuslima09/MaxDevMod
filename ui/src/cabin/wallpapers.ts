@@ -24,6 +24,11 @@ function plain(colour: string): string {
  * adds their own in the companion's Customize. */
 export const BUILT_IN_WALLPAPERS: Wallpaper[] = [
   { id: 'silk', name: 'Silk', variants: { dark: '/wallpapers/silk.dark.jpg', light: '/wallpapers/silk.jpg' } },
+  {
+    id: 'maxdevmod',
+    name: 'MaxDevMod',
+    variants: { dark: '/wallpapers/maxdevmod.dark.png', light: '/wallpapers/maxdevmod.light.png' },
+  },
   { id: 'plain', name: 'Plain', variants: { dark: plain('#0b0b0d'), light: plain('#eceef2') } },
 ]
 

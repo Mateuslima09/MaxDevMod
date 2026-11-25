@@ -48,6 +48,7 @@ use crate::log;
 use crate::navigation::Image;
 
 mod climb;
+mod driver;
 mod freight;
 mod meter;
 mod notice;
@@ -346,11 +347,16 @@ struct Walking {
     descend: Option<climb::Climb>,
     /// The flashlight in the player's hand, while it's on.
     flashlight: Option<person::Person>,
-    /// Filling the tank on foot (`refuel`): the pump's nozzle in the hand at the tank, where it stands, and the view
-    /// as it was before (third person or not), to go back to.
+    /// Filling the tank on foot (`refuel`): the pump's nozzle in the hand at the tank, where it stands, the view
+    /// as it was before (third person or not), saved look angles for smooth ease-in/out, and animation timers.
     nozzle: Option<person::Person>,
     nozzle_at: Option<Placement>,
     nozzle_was_third: Option<bool>,
+    nozzle_saved_look: Option<(f32, f32)>,
+    nozzle_exit_look: Option<(f32, f32, f32)>,
+    nozzle_blend: f32,
+    nozzle_phase: f32,
+    nozzle_body_mode: bool,
 }
 
 // SAFETY: game objects, used only on its main thread.
@@ -370,6 +376,8 @@ struct State {
     freight: Option<freight::Freight>,
     /// Refuelling by hand (`refuel`), once the game has run a frame with it on.
     refuel: Option<refuel::Refuel>,
+    /// Post-climb head-movement & shudder animation running in Camera 1 (after the cab interior has loaded).
+    cab_settle: Option<climb::CabSettle>,
 }
 
 // SAFETY: game objects (the clerk's person), used only on its main thread.
@@ -383,6 +391,7 @@ static STATE: Mutex<State> = Mutex::new(State {
     held_since: None,
     freight: None,
     refuel: None,
+    cab_settle: None,
 });
 /// On foot, held where they stand (signing the cargo's papers, coupling the trailer): the walking keys as let go.
 static HELD_STILL: AtomicBool = AtomicBool::new(false);
@@ -625,8 +634,38 @@ pub fn on_frame_end() {
     if let Some(bridge) = crate::bridge::get() {
         bridge.plugin.on_foot.store(u32::from(state.walking.is_some()), Ordering::Release);
     }
+    if state.walking.is_none() {
+        crate::fuel_bubble::set(None);
+    }
     if let Some(key) = state.release.take() {
         key.send(false);
+    }
+    if state.cab_settle.is_some() {
+        if paused || state.walking.is_some() || CAB_SETTLE_CANCEL.swap(false, Ordering::AcqRel) {
+            if let Some(settle) = state.cab_settle.take()
+                && !settle.door_shut_played()
+            {
+                steps::door(steps::Door::Shut, 0.0);
+            }
+            CAB_LOOK_DX.store(0, Ordering::Release);
+            CAB_LOOK_DY.store(0, Ordering::Release);
+        } else if let Some(settle) = state.cab_settle.as_mut() {
+            let (delta, shut) = settle.tick();
+            if shut {
+                steps::door(steps::Door::Shut, 0.0);
+            }
+            match delta {
+                Some((dx, dy)) => {
+                    if dx != 0 {
+                        CAB_LOOK_DX.fetch_add(dx, Ordering::AcqRel);
+                    }
+                    if dy != 0 {
+                        CAB_LOOK_DY.fetch_add(dy, Ordering::AcqRel);
+                    }
+                }
+                None => state.cab_settle = None,
+            }
+        }
     }
     if let Some(walking) = state.walking.as_mut()
         && walking.climb.is_some()
@@ -655,9 +694,16 @@ pub fn on_frame_end() {
             }
         };
         if let Some(why) = done {
-            // Sat down, the door pulled shut (`steps::door`).
-            steps::door(steps::Door::Shut, 0.0);
             stop(state, why, true);
+            if why == "climbed in" {
+                // Play the head-movement & door-shut shudder in Camera 1 once the full interior & dashboard load!
+                CAB_SETTLE_CANCEL.store(false, Ordering::Release);
+                CAB_LOOK_DX.store(0, Ordering::Release);
+                CAB_LOOK_DY.store(0, Ordering::Release);
+                state.cab_settle = Some(climb::CabSettle::new(&crate::telemetry::truck()));
+            } else {
+                steps::door(steps::Door::Shut, 0.0);
+            }
         }
         return;
     }
@@ -847,8 +893,14 @@ fn publish_hints(state: &State) {
             if from_door(walking, &truck).is_some_and(|d| d <= DOOR_REACH) {
                 hints.push(Hint::single(walk, walk_vk, Action::GetIn));
             }
-            // By the clerk, at the fifth wheel (`freight`), or at a pump (`refuel`): E interacts.
-            if let Some(action) = freight::offer(state).or_else(|| refuel::offer(state)) {
+            // By the clerk, at the fifth wheel (`freight`), or at a pump (`refuel`):
+            // inside 2-stage Refuelling Mode show both [Enter] Hold to refuel and [E] Exit refuel mode.
+            if refuel::in_mode(state) {
+                let pump_vk = refuel::activate_vk(state);
+                hints.push(Hint::single(key_name(pump_vk), pump_vk, Action::PumpFuel));
+                let interact_vk = u32::from(virtual_key((b'E' as u16, 0x12)));
+                hints.push(Hint::single(key_name(interact_vk), interact_vk, Action::StopRefuel));
+            } else if let Some(action) = freight::offer(state).or_else(|| refuel::offer(state)) {
                 let interact_vk = u32::from(virtual_key((b'E' as u16, 0x12)));
                 hints.push(Hint::single(key_name(interact_vk), interact_vk, action));
             }
@@ -1158,6 +1210,11 @@ unsafe fn start(game: &Game, truck: &crate::telemetry::Truck) -> Result<Walking,
             nozzle: None,
             nozzle_at: None,
             nozzle_was_third: None,
+            nozzle_saved_look: None,
+            nozzle_exit_look: None,
+            nozzle_blend: 0.0,
+            nozzle_phase: 0.0,
+            nozzle_body_mode: false,
             camera_reach: 0.0,
             pushed_for: 0.0,
             skip_descend: false,
@@ -1528,6 +1585,56 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
         // radians 0..2π), so it keeps the plugin's.
         (walking.debug.add(CAMERA_ANGLES) as *mut [f32; 2])
             .write_unaligned([walking.look_yaw, walking.look_pitch.rem_euclid(std::f32::consts::TAU)]);
+        // Update floating 3D speech bubble above the fuel attendant (payment) or freight clerk (Nota Fiscal).
+        if let Some((world, total, gallons, in_range, distance_m)) =
+            refuel::bubble_target(state.refuel.as_ref(), placement.world())
+        {
+            let lang = notice::language();
+            let sign = crate::fuel_meter::money_sign(lang, gallons);
+            let num = format!("{total:.2}");
+            let num = if matches!(lang, "pt" | "es") { num.replace('.', ",") } else { num };
+            crate::fuel_bubble::set(Some(crate::fuel_bubble::BubbleState {
+                kind: crate::fuel_bubble::BubbleKind::FuelPayment,
+                world,
+                cam_pos: drawn_from.world(),
+                cam_yaw: walking.look_yaw,
+                cam_pitch: walking.look_pitch,
+                detail_text: format!("{sign} {num}"),
+                language: lang.to_owned(),
+                in_range,
+                distance_m,
+            }));
+        } else if let Some((world, is_delivery, cargo_label, in_range, distance_m)) =
+            freight::bubble_target(state.freight.as_ref(), placement.world())
+        {
+            let lang = notice::language();
+            let fallback = match (is_delivery, lang) {
+                (false, "pt") => "Retirar nota fiscal",
+                (false, "es") => "Recoger factura",
+                (false, _) => "Collect papers",
+                (true, "pt") => "Entregar nota fiscal",
+                (true, "es") => "Entregar factura",
+                (true, _) => "Hand in papers",
+            };
+            let detail_text = if cargo_label.is_empty() { fallback.to_owned() } else { cargo_label };
+            crate::fuel_bubble::set(Some(crate::fuel_bubble::BubbleState {
+                kind: if is_delivery {
+                    crate::fuel_bubble::BubbleKind::FreightDelivery
+                } else {
+                    crate::fuel_bubble::BubbleKind::FreightPickup
+                },
+                world,
+                cam_pos: drawn_from.world(),
+                cam_yaw: walking.look_yaw,
+                cam_pitch: walking.look_pitch,
+                detail_text,
+                language: lang.to_owned(),
+                in_range,
+                distance_m,
+            }));
+        } else {
+            crate::fuel_bubble::set(None);
+        }
         // Where the player went this frame (along the ground): the body turns that way, walks, and steps.
         let at = placement.world();
         let went = walking.last_at.map_or((0.0, 0.0), |before| (at[0] - before[0], at[2] - before[2]));
@@ -1647,30 +1754,36 @@ unsafe fn step(state: &mut State) -> Result<(), &'static str> {
         {
             person::place_thing(people, flashlight, &in_hand(&placement, walking.look_yaw, walking.look_pitch));
         }
-        nozzle_frame(state.game.as_ref().and_then(Option::as_ref), walking, &first_person_eyes);
+        nozzle_frame(state.game.as_ref().and_then(Option::as_ref), walking, &first_person_eyes, dt);
     }
     Ok(())
 }
 
-/// Filling the tank on foot (`refuel::nozzle`; owner 2026-11-12: "only the arm holding the nozzle, in first
-/// person"): as it begins, first person without the body, the view turned to the tank and down, and the pump's
-/// nozzle (WestPlay's mod: `westplay_setup::nozzle`) in the hand by it, staying there as the player looks about; as
-/// it ends, the nozzle gone and the view as it was.
+/// Filling the tank on foot (`refuel::nozzle`; 2-stage Refuelling Mode):
+/// - On entering mode (tap E): smoothly eases first-person camera onto the tank without jarring snap and places the
+///   nozzle in hand (or full holding body).
+/// - While in mode: stays locked cleanly on the tank even when Enter is released, allows subtle mouse glancing around
+///   the tank, adds subtle breathing sway while ready, and animates trigger squeeze + realistic hose micro-vibration
+///   while pumping (`pumping == true`).
+/// - On exiting mode (tap E): hides nozzle, restores first/third-person view, and smoothly eases camera back.
 ///
 /// # Safety
 /// On the game's main thread, `walking` as `start` made it.
-unsafe fn nozzle_frame(game: Option<&Game>, walking: &mut Walking, eyes: &Placement) {
+unsafe fn nozzle_frame(game: Option<&Game>, walking: &mut Walking, eyes: &Placement, dt: f32) {
+    const EASE_SECS: f32 = 0.24;
     let people = game.and_then(|game| game.people.as_ref());
     // SAFETY: on the game's main thread, with what `person::locate` found.
     unsafe {
         match (refuel::nozzle(), walking.nozzle_was_third) {
-            (Some((yaw, ahead)), None) => {
+            (Some((yaw, ahead, _pumping)), None) => {
                 walking.nozzle_was_third = Some(walking.third_person);
+                walking.nozzle_saved_look = Some((walking.look_yaw, walking.look_pitch));
+                walking.nozzle_exit_look = None;
+                walking.nozzle_blend = 0.0;
+                walking.nozzle_phase = 0.0;
                 if let Some(game) = game {
                     set_third_person(game, walking, false, false);
                 }
-                walking.look_yaw = yaw;
-                walking.look_pitch = -NOZZLE_LOOK_DOWN;
                 // The person's own body holding the nozzle (owner 2026-11-12: "a real arm, not a blocky one"), where
                 // the first-person body stands: a little behind the eyes, facing the tank. Without it in the mod (a
                 // person exported before), the plain nozzle with its own arm.
@@ -1687,10 +1800,12 @@ unsafe fn nozzle_frame(game: Option<&Game>, walking: &mut Walking, eyes: &Placem
                 if let Some(body) = shown {
                     walking.nozzle = Some(body);
                     walking.nozzle_at = Some(feet);
+                    walking.nozzle_body_mode = true;
                     log!("character: the body holding the nozzle ({})", holding.as_deref().unwrap_or_default());
                 } else {
-                    let at = nozzle_held(eyes, yaw, ahead);
+                    let at = nozzle_held_animated(eyes, yaw, ahead, false, 0.0);
                     walking.nozzle_at = Some(at);
+                    walking.nozzle_body_mode = false;
                     match people.map(|people| person::show_thing(people, &at, NOZZLE)) {
                         Some(Ok(nozzle)) => {
                             walking.nozzle = Some(nozzle);
@@ -1701,23 +1816,80 @@ unsafe fn nozzle_frame(game: Option<&Game>, walking: &mut Walking, eyes: &Placem
                     }
                 }
             }
-            (Some(_), Some(_)) => {
-                if let (Some(people), Some(nozzle), Some(at)) = (people, walking.nozzle.as_mut(), walking.nozzle_at) {
-                    person::place_thing(people, nozzle, &at);
+            (Some((yaw, ahead, pumping)), Some(_)) => {
+                walking.nozzle_phase += dt;
+                // Smooth camera ease-in onto the tank on entry; once blended, allow comfortable glancing within bounds.
+                let target_pitch = -NOZZLE_LOOK_DOWN - if pumping { 0.025 } else { 0.0 };
+                if walking.nozzle_blend < 1.0 {
+                    walking.nozzle_blend = (walking.nozzle_blend + dt / EASE_SECS).min(1.0);
+                    let rate = (dt / EASE_SECS) * 3.8;
+                    walking.look_yaw = turn_toward(walking.look_yaw, yaw, rate.max(0.08));
+                    let dp = target_pitch - walking.look_pitch;
+                    walking.look_pitch += dp * (dt * 12.0).min(1.0);
+                } else {
+                    // Gently clamp look angles around the tank so the player can glance at the pump/meter without
+                    // spinning away from the nozzle.
+                    use std::f32::consts::{PI, TAU};
+                    let yaw_off = (walking.look_yaw - yaw + PI).rem_euclid(TAU) - PI;
+                    let clamped_yaw = yaw_off.clamp(-0.65, 0.65);
+                    if (yaw_off - clamped_yaw).abs() > 1e-4 {
+                        walking.look_yaw = (yaw + clamped_yaw).rem_euclid(TAU);
+                    }
+                    walking.look_pitch = walking.look_pitch.clamp(-1.05, 0.20);
+                }
+                if let (Some(people), Some(nozzle)) = (people, walking.nozzle.as_mut()) {
+                    let placed = if walking.nozzle_body_mode {
+                        // Subtle breathing & pumping tremor on the holding body.
+                        let mut base = walking.nozzle_at.unwrap_or_default();
+                        let [bx, by, bz] = base.world();
+                        let vib = if pumping {
+                            f64::from((walking.nozzle_phase * 28.0).sin()) * 0.0022
+                        } else {
+                            f64::from((walking.nozzle_phase * 1.7).sin()) * 0.0018
+                        };
+                        let fwd = if pumping { 0.008 } else { 0.0 };
+                        let shift = ahead_of(yaw, fwd);
+                        base = Placement {
+                            rotation: base.rotation,
+                            ..Placement::at([bx + shift[0], by + vib, bz + shift[1]], 0.0)
+                        };
+                        base
+                    } else {
+                        nozzle_held_animated(eyes, yaw, ahead, pumping, walking.nozzle_phase)
+                    };
+                    person::place_thing(people, nozzle, &placed);
                 }
             }
             (None, Some(was_third)) => {
                 walking.nozzle_was_third = None;
                 walking.nozzle_at = None;
+                walking.nozzle_body_mode = false;
+                walking.nozzle_blend = 0.0;
                 if let (Some(people), Some(nozzle)) = (people, walking.nozzle.take()) {
                     person::hide_thing(people, nozzle);
                 }
                 if let Some(game) = game {
                     set_third_person(game, walking, was_third, true);
                 }
+                if let Some((sy, sp)) = walking.nozzle_saved_look.take() {
+                    walking.nozzle_exit_look = Some((sy, sp, EASE_SECS));
+                }
                 log!("character: the nozzle put back");
             }
-            (None, None) => {}
+            (None, None) => {
+                // Smoothly ease camera back to pre-refuel look angles after exiting Refuelling Mode.
+                if let Some((target_yaw, target_pitch, rem)) = walking.nozzle_exit_look {
+                    let next_rem = rem - dt;
+                    let step_rate = (dt * 10.0).min(1.0);
+                    walking.look_yaw = turn_toward(walking.look_yaw, target_yaw, (dt * 6.5).max(0.05));
+                    walking.look_pitch += (target_pitch - walking.look_pitch) * step_rate;
+                    if next_rem <= 0.0 {
+                        walking.nozzle_exit_look = None;
+                    } else {
+                        walking.nozzle_exit_look = Some((target_yaw, target_pitch, next_rem));
+                    }
+                }
+            }
         }
     }
 }
@@ -1730,14 +1902,32 @@ const NOZZLE_LOOK_DOWN: f32 = 0.55;
 const NOZZLE_HELD: [f64; 2] = [0.12, -0.42];
 const NOZZLE_PITCH: f32 = -0.12;
 
-/// The nozzle by the tank: `ahead` metres ahead of the eyes toward it (heading `yaw`), in the right hand.
-fn nozzle_held(eyes: &Placement, yaw: f32, ahead: f64) -> Placement {
+/// The nozzle by the tank with idle breathing sway and active pumping trigger squeeze + hose micro-vibration.
+fn nozzle_held_animated(eyes: &Placement, yaw: f32, ahead: f64, pumping: bool, phase: f32) -> Placement {
     let [x, y, z] = eyes.world();
     let ([right, down], turn) = (NOZZLE_HELD, f64::from(yaw));
     // A heading of θ looks along (-sin θ, -cos θ); its right is (cos θ, -sin θ).
     let (forward, side) = ([-turn.sin(), -turn.cos()], [turn.cos(), -turn.sin()]);
-    let at = [x + side[0] * right + forward[0] * ahead, y + down, z + side[1] * right + forward[1] * ahead];
-    Placement { rotation: look_rotation(yaw, NOZZLE_PITCH), ..Placement::at(at, 0.0) }
+    let breathe = f64::from((phase * 1.9).sin()) * 0.004;
+    let (push, vib_y, vib_x, pitch_extra) = if pumping {
+        (
+            0.020,
+            f64::from((phase * 34.0).sin()) * 0.0028,
+            f64::from((phase * 27.0).cos()) * 0.0016,
+            -0.055 + (phase * 30.0).sin() * 0.006,
+        )
+    } else {
+        (0.0, breathe, f64::from((phase * 1.1).cos()) * 0.002, (phase * 1.9).sin() * 0.008)
+    };
+    let eff_ahead = ahead + push;
+    let eff_right = right + vib_x;
+    let eff_down = down + vib_y;
+    let at = [
+        x + side[0] * eff_right + forward[0] * eff_ahead,
+        y + eff_down,
+        z + side[1] * eff_right + forward[1] * eff_ahead,
+    ];
+    Placement { rotation: look_rotation(yaw, NOZZLE_PITCH + pitch_extra), ..Placement::at(at, 0.0) }
 }
 
 /// A person's pace on foot, walking and running (m/s). The game has no running person (`INVESTIGACAO.md` §7.2):
@@ -1906,6 +2096,22 @@ const START_PITCH: f32 = -0.17;
 /// The mouse's movement while walking, kept from the game (counts, x and y), until the next frame's look.
 static LOOK_DX: AtomicI32 = AtomicI32::new(0);
 static LOOK_DY: AtomicI32 = AtomicI32::new(0);
+/// Synthetic mouse deltas injected into Camera 1 right after climbing in (`CabSettle`: head glance + door shudder).
+static CAB_LOOK_DX: AtomicI32 = AtomicI32::new(0);
+static CAB_LOOK_DY: AtomicI32 = AtomicI32::new(0);
+static CAB_SETTLE_CANCEL: AtomicBool = AtomicBool::new(false);
+
+/// Takes any pending Camera 1 head-settle mouse deltas `(dx, dy)` for DirectInput injection (`input.rs`).
+pub fn take_cab_look() -> (i32, i32) {
+    (CAB_LOOK_DX.swap(0, Ordering::AcqRel), CAB_LOOK_DY.swap(0, Ordering::AcqRel))
+}
+
+/// Cancels the Camera 1 settle head animation immediately if the player moves the mouse intentionally.
+pub fn cancel_cab_settle() {
+    CAB_SETTLE_CANCEL.store(true, Ordering::Release);
+    CAB_LOOK_DX.store(0, Ordering::Release);
+    CAB_LOOK_DY.store(0, Ordering::Release);
+}
 
 /// Where a camera keeps its angles: heading and pitch (radians, 0..2π), then roll (`core_camera` + 0x10, read
 /// in the game: camera 0's heading there matched its rotation's).
@@ -2113,6 +2319,9 @@ unsafe fn begin_climb(state: &mut State, truck: &crate::telemetry::Truck) -> boo
             person::hide_thing(people, nozzle);
         }
         walking.nozzle_was_third = None;
+        walking.nozzle_saved_look = None;
+        walking.nozzle_exit_look = None;
+        crate::fuel_bubble::set(None);
         walking.climb = Some(match eyes {
             Some(eyes) => climb::Climb::from_behind(from.world(), eyes.world(), walking.look_yaw, walking.look_pitch, truck),
             None => climb::Climb::new(from.world(), walking.look_yaw, walking.look_pitch, truck),
@@ -2145,6 +2354,10 @@ unsafe fn climb_frame(walking: &mut Walking, out: bool) -> Result<bool, &'static
     if !out && climb.passed(climb.door_key(), dt) {
         steps::door(steps::Door::Open, 0.0);
     }
+    // Right before reaching the seat, start a quick dark blink so Camera 1 loads the full dashboard behind it.
+    if !out && climb.blink_now(dt) {
+        crate::fade::blink();
+    }
     // From behind the person, the camera now in their eyes: the body goes (`climbing`'s caller hides it).
     if !out && climb.reached_eyes(dt) {
         walking.hide_body = true;
@@ -2164,6 +2377,7 @@ unsafe fn climb_frame(walking: &mut Walking, out: bool) -> Result<bool, &'static
 /// Gives the input back as it was and lets the walking camera go; back to the cab (the game's camera 1 key)
 /// if `to_cab`.
 fn stop(state: &mut State, why: &str, to_cab: bool) {
+    crate::fuel_bubble::set(None);
     let Some(walking) = state.walking.take() else { return };
     WALKING.store(false, Ordering::Release);
     // The press that got back in isn't held into the next walk (it ended that one at once: owner 2026-11-04, F8
@@ -2329,6 +2543,8 @@ unsafe fn locate() -> Option<Game> {
             return missing("the walking camera's pieces (outside the game's image)");
         }
         let people = person::locate(&image, base);
+        // SAFETY: `image` is the game's live mapped executable at `base`.
+        unsafe { driver::install(&image, base) };
         let notices = notice::locate(&image, core);
         let physics = physics_of(&image, start);
         if physics.is_none() {

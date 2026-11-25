@@ -41,6 +41,9 @@ use crate::{bridge, log};
 /// screen's height.
 const HEIGHT_OF_SCREEN: f32 = 0.62;
 const RIGHT_GAP_OF_SCREEN: f32 = 0.04;
+/// Vertical iPad mode: slightly taller and tucked cleanly near the right edge for crisp readability.
+const HEIGHT_OF_SCREEN_IPAD: f32 = 0.78;
+const RIGHT_GAP_OF_SCREEN_IPAD: f32 = 0.03;
 /// How much of the phone shows while it peeks, of its height (its status bar and a notification under it); and
 /// how long it takes to slide there, or away.
 /// (A fifth showed half the banner, the gift's words cut: owner 2026-11-12, "the phone is too low".)
@@ -329,8 +332,15 @@ impl Drawing {
                 self.view = Some((frame.clone(), format, view.ok_or_else(windows::core::Error::empty)?));
             }
             let Some((_, _, view)) = &self.view else { return Ok(()) };
+            let mut tex_desc = D3D11_TEXTURE2D_DESC::default();
+            frame.GetDesc(&mut tex_desc);
+            let (tex_w, tex_h) = (tex_desc.Width.max(1), tex_desc.Height.max(1));
             let (width, height) = (back_desc.Width as f32, back_desc.Height as f32);
-            let rect = if paper { paper_on(width, height) } else { place_on(width, height, position) };
+            let rect = if paper {
+                paper_on(width, height, tex_w, tex_h)
+            } else {
+                place_on(width, height, position, tex_w, tex_h)
+            };
             self.quad.draw(&self.device, &context, swapchain, view, rect)
         }
     }
@@ -373,13 +383,14 @@ unsafe fn draw_quad(
     }
 }
 
-/// Where the phone goes on a `width` x `height` screen, in clip space: left, top, right, bottom. `position`:
+/// Where the phone/iPad goes on a `width` x `height` screen, in clip space: left, top, right, bottom. `position`:
 /// whole ([`WHOLE`]), only its top showing at the screen's bottom ([`PEEKING`]), under it ([`AWAY`]), or on its
 /// way between.
-fn place_on(width: f32, height: f32, position: f32) -> [f32; 4] {
-    let tall = (height * HEIGHT_OF_SCREEN).round();
-    let wide = (tall * PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).round();
-    let right = width - (height * RIGHT_GAP_OF_SCREEN).round();
+fn place_on(width: f32, height: f32, position: f32, tex_w: u32, tex_h: u32) -> [f32; 4] {
+    let is_ipad = tex_w > PHONE_WIDTH;
+    let tall = (height * if is_ipad { HEIGHT_OF_SCREEN_IPAD } else { HEIGHT_OF_SCREEN }).round();
+    let wide = (tall * tex_w as f32 / tex_h as f32).round();
+    let right = width - (height * if is_ipad { RIGHT_GAP_OF_SCREEN_IPAD } else { RIGHT_GAP_OF_SCREEN }).round();
     let left = right - wide;
     let whole = (height - tall) / 2.0;
     let peeking = height - tall * PEEK_OF_PHONE;
@@ -395,9 +406,9 @@ fn place_on(width: f32, height: f32, position: f32) -> [f32; 4] {
 
 /// Where a paper goes on a `width` x `height` screen, in clip space (left, top, right, bottom): the frame's own
 /// shape, in the middle.
-fn paper_on(width: f32, height: f32) -> [f32; 4] {
+fn paper_on(width: f32, height: f32, tex_w: u32, tex_h: u32) -> [f32; 4] {
     let tall = (height * PAPER_OF_SCREEN).round();
-    let wide = (tall * PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).round();
+    let wide = (tall * tex_w as f32 / tex_h as f32).round();
     let left = ((width - wide) / 2.0).round();
     let top = ((height - tall) / 2.0).round();
     let (right, bottom) = (left + wide, top + tall);
@@ -458,17 +469,23 @@ mod tests {
 
     #[test]
     fn the_phone_stands_on_the_right_in_its_own_shape() {
-        let [left, top, right, bottom] = place_on(1920.0, 1080.0, WHOLE);
+        let [left, top, right, bottom] = place_on(1920.0, 1080.0, WHOLE, PHONE_WIDTH, PHONE_HEIGHT);
         assert!(right < 1.0 && right > 0.8);
         assert!(top > 0.0 && top < 1.0 && bottom < 0.0 && bottom > -1.0);
         let wide = (right - left) / 2.0 * 1920.0;
         let tall = (top - bottom) / 2.0 * 1080.0;
         assert!((wide / tall - PHONE_WIDTH as f32 / PHONE_HEIGHT as f32).abs() < 0.01);
+
+        let [il, it, ir, ib] = place_on(1920.0, 1080.0, WHOLE, westplay_shared::IPAD_WIDTH, westplay_shared::IPAD_HEIGHT);
+        let iw = (ir - il) / 2.0 * 1920.0;
+        let ih = (it - ib) / 2.0 * 1080.0;
+        assert!((iw / ih - westplay_shared::IPAD_WIDTH as f32 / westplay_shared::IPAD_HEIGHT as f32).abs() < 0.01);
+        assert!(ih > tall);
     }
 
     #[test]
     fn a_paper_is_in_the_middle_of_the_screen_in_the_frames_shape() {
-        let [left, top, right, bottom] = paper_on(1920.0, 1080.0);
+        let [left, top, right, bottom] = paper_on(1920.0, 1080.0, PHONE_WIDTH, PHONE_HEIGHT);
         assert!((left + right).abs() < 0.01 && (top + bottom).abs() < 0.01);
         let wide = (right - left) / 2.0 * 1920.0;
         let tall = (top - bottom) / 2.0 * 1080.0;
@@ -479,14 +496,14 @@ mod tests {
     /// Peeking, only the phone's top is on the screen, at its bottom, where it stands when it's out; away, none.
     #[test]
     fn only_its_top_shows_while_it_peeks() {
-        let whole = place_on(1920.0, 1080.0, WHOLE);
-        let [left, top, right, bottom] = place_on(1920.0, 1080.0, PEEKING);
+        let whole = place_on(1920.0, 1080.0, WHOLE, PHONE_WIDTH, PHONE_HEIGHT);
+        let [left, top, right, bottom] = place_on(1920.0, 1080.0, PEEKING, PHONE_WIDTH, PHONE_HEIGHT);
         assert_eq!((left, right), (whole[0], whole[2]));
         let seen = (top + 1.0) / 2.0 * 1080.0;
         let tall = (top - bottom) / 2.0 * 1080.0;
         assert!((seen / tall - PEEK_OF_PHONE).abs() < 0.01, "{seen} of {tall}");
         assert!(bottom < -1.0);
-        let [_, top, _, _] = place_on(1920.0, 1080.0, AWAY);
+        let [_, top, _, _] = place_on(1920.0, 1080.0, AWAY, PHONE_WIDTH, PHONE_HEIGHT);
         assert!(top <= -1.0);
     }
 

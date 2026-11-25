@@ -450,7 +450,10 @@ float4 ps(Vertex v) : SV_Target {
         float3 blur = (n + s + e + w) * 0.25;
         fg = saturate(c.rgb + (c.rgb - blur) * params.z);
     }
-    float3 bg = under.SampleLevel(smooth, v.uv, 0).rgb;
+    // Center the game's GPS map (truck arrow at u=0.50, map area v=0.0..0.84 above status bar)
+    // inside the Dashboard map card (u=0.14..0.60, center u=0.37).
+    float2 bg_uv = float2(saturate(v.uv.x + 0.13), saturate(v.uv.y * 0.84));
+    float3 bg = under.SampleLevel(smooth, bg_uv, 0).rgb;
     return float4(fg + bg * (1.0 - c.a), 1.0);
 }
 ";

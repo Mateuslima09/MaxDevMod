@@ -1,61 +1,107 @@
 import { type ReactNode, useEffect, useState } from 'react'
-import { postToHost, type WalletEntry } from '../shared/host'
+import { type BankAnswer, postToHost, type WalletEntry } from '../shared/host'
 import { useLive } from '../cabin/state/store'
+import { refreshLiveBank, repayLiveLoan, takeLiveLoan } from './bankFleetBridge'
 import { Segmented } from './ios'
 import { OFFENCES } from './offences'
 import { formatMoney, type Prefs, shownCurrency } from './prefs'
 
-const LOAN_OFFERS = [
-  { amount: 10_000, rate: 0.18, days: 35 },
-  { amount: 50_000, rate: 0.15, days: 35 },
-  { amount: 100_000, rate: 0.12, days: 70 },
-  { amount: 400_000, rate: 0.12, days: 70 },
-] as const
-
 /**
- * Nupay (owner 2026-11-03 / 2026-11-22): balance, statement, and in-game bank loans (`bank_loan` units from
- * `game.sii`) with optional queued new loan applied when the game restarts.
+ * Nupay (live in-memory bank mirror + instant loans):
+ * - Mirrors `bank_u->money_account` live from memory so balance matches ETS2/ATS 1:1 in real time.
+ * - Reads active `bank_loan_u`s with exact daily installments, paid amount, installments paid & remaining,
+ *   and allows instant repayment without restarting.
+ * - Reads live `bank_data_u->loan_offers` directly from the game's bank (matching ETS2/ATS & economy mods)
+ *   and credits loans instantly into the player's account without restarting.
  */
 export function NupayApp({ language, currency }: { language: 'en' | 'pt'; currency: Prefs['currency'] }) {
   const wallet = useLive((state) => state.wallet)
   const [hidden, setHidden] = useState(false)
   const [tab, setTab] = useState<'history' | 'loans'>('history')
-  // Clearing the history asked, waiting for its yes.
   const [confirming, setConfirming] = useState(false)
-  // Optimistic pending loan so clicking an offer immediately shows as selected even before host round-trip.
-  const [optimisticLoan, setOptimisticLoan] = useState<{ amount: number; days: number; rate: number } | null | undefined>(
-    undefined,
-  )
+  const [busyKey, setBusyKey] = useState<string | null>(null)
+  const [confirmRepay, setConfirmRepay] = useState<number | null>(null)
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+
   const words = WORDS[language]
-  // The game's money, in the currency chosen (its own, `auto`).
   const from = wallet?.currency ?? 'USD'
   const shown = shownCurrency(currency, from)
   const money = (amount: number, signed = false) => formatMoney(amount, from, currency, language, signed)
+
   const entries = wallet?.entries ?? []
   const loans = wallet?.loans ?? []
-  const serverPendingLoan = wallet?.pendingLoan ?? null
+  const offers = wallet?.offers ?? []
+  const liveBank = wallet?.liveBank ?? false
+  const bankUnlocked = wallet?.bankUnlocked ?? true
+  const loanLimit = wallet?.loanLimit ?? 0
+  const availableCredit = wallet?.availableCredit ?? 0
+
   useEffect(() => {
-    setOptimisticLoan(undefined)
-  }, [serverPendingLoan?.amount, serverPendingLoan?.days, serverPendingLoan?.rate])
-  const pendingLoan = optimisticLoan === undefined ? serverPendingLoan : optimisticLoan
+    void refreshLiveBank()
+  }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(null), 4200)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
   const income = entries.filter((entry) => entry.amount > 0).reduce((sum, entry) => sum + entry.amount, 0)
   const spent = entries.filter((entry) => entry.amount < 0).reduce((sum, entry) => sum + entry.amount, 0)
   const totalDebt = loans.reduce((sum, loan) => sum + loan.amount, 0)
   const totalDaily = loans.reduce((sum, loan) => sum + loan.dailyPayment, 0)
+  const creditUsedPct = loanLimit > 0 ? Math.min(100, Math.round((totalDebt / loanLimit) * 100)) : 0
 
-  const requestLoan = (offer: (typeof LOAN_OFFERS)[number]) => {
-    setOptimisticLoan({ amount: offer.amount, days: offer.days, rate: offer.rate })
-    postToHost({ type: 'walletLoan', amount: offer.amount, days: offer.days, rate: offer.rate })
+  const handleTakeLoan = async (offerIndex: number, amount: number) => {
+    if (busyKey) return
+    setBusyKey(`take-${offerIndex}`)
+    const ans = await takeLiveLoan(offerIndex)
+    setBusyKey(null)
+    if (ans === 'ok') {
+      setToast({
+        kind: 'ok',
+        text:
+          language === 'pt'
+            ? `Empréstimo de ${money(amount)} creditado na hora!`
+            : `Loan of ${money(amount)} credited immediately!`,
+      })
+    } else {
+      setToast({ kind: 'err', text: bankErrorText(ans, language) })
+    }
   }
-  const cancelLoan = () => {
-    setOptimisticLoan(null)
-    postToHost({ type: 'walletLoanCancel' })
+
+  const handleRepayLoan = async (loanIndex: number) => {
+    if (busyKey) return
+    setBusyKey(`repay-${loanIndex}`)
+    setConfirmRepay(null)
+    const ans = await repayLiveLoan(loanIndex)
+    setBusyKey(null)
+    if (ans === 'ok') {
+      setToast({
+        kind: 'ok',
+        text: language === 'pt' ? 'Financiamento quitado com sucesso!' : 'Loan repaid in full!',
+      })
+    } else {
+      setToast({ kind: 'err', text: bankErrorText(ans, language) })
+    }
   }
 
   return (
     <div className="nupay">
       <header className="nupay-head">
-        <div className="nupay-hello">{words.account}</div>
+        <div className="nupay-head-row">
+          <div className="nupay-hello">{words.account}</div>
+          <span className={`nupay-live-pill${liveBank ? ' on' : ''}`}>
+            <span className="nupay-live-dot" />
+            {liveBank
+              ? language === 'pt'
+                ? 'Sincronizado'
+                : 'Live sync'
+              : language === 'pt'
+                ? 'Offline'
+                : 'Offline'}
+          </span>
+        </div>
         <button type="button" className="nupay-balance" onClick={() => setHidden(!hidden)}>
           <span className="nupay-balance-value">
             {wallet?.balance == null ? '—' : hidden ? '••••••' : money(wallet.balance)}
@@ -78,6 +124,12 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
         />
       </div>
 
+      {toast && (
+        <div className={`nupay-toast ${toast.kind}`} role="status">
+          {toast.text}
+        </div>
+      )}
+
       {tab === 'loans' ? (
         <div className="nupay-section">
           <div className="nupay-summary">
@@ -91,57 +143,145 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
             </article>
           </div>
 
-          {pendingLoan && (
+          {liveBank && loanLimit > 0 && (
+            <div className="nupay-credit-card">
+              <div className="nupay-credit-head">
+                <span>{language === 'pt' ? 'Crédito disponível' : 'Available credit'}</span>
+                <strong>{hidden ? '••••' : money(availableCredit)}</strong>
+              </div>
+              <div className="nupay-loan-bar">
+                <div className="nupay-loan-bar-fill credit" style={{ width: `${100 - creditUsedPct}%` }} />
+              </div>
+              <div className="nupay-credit-sub">
+                <span>
+                  {language === 'pt' ? 'Limite do banco' : 'Bank limit'}: {hidden ? '••••' : money(loanLimit)}
+                </span>
+                <span>{100 - creditUsedPct}%</span>
+              </div>
+            </div>
+          )}
+
+          {liveBank && !bankUnlocked && (
             <div className="nupay-pending" role="status">
               <div className="nupay-pending-info">
-                <strong>
-                  {language === 'pt' ? 'Solicitação agendada' : 'Loan queued'}: {money(pendingLoan.amount)}
-                </strong>
+                <strong>{language === 'pt' ? 'Banco ainda bloqueado' : 'Bank not unlocked yet'}</strong>
                 <span>
                   {language === 'pt'
-                    ? `${Math.round(pendingLoan.rate * 100)}% juros · ${pendingLoan.days} dias — feche e reabra o jogo para creditar.`
-                    : `${Math.round(pendingLoan.rate * 100)}% APR · ${pendingLoan.days} days — close and restart the game to apply.`}
+                    ? 'Complete mais entregas para liberar financiamentos no banco do jogo.'
+                    : 'Complete more deliveries to unlock bank loans in-game.'}
                 </span>
               </div>
-              <button type="button" className="nupay-pending-cancel" onClick={cancelLoan}>
-                {words.cancel}
-              </button>
             </div>
           )}
 
           <div className="nupay-block">
             <div className="nupay-history-head">
-              <h2 className="nupay-title">{language === 'pt' ? 'Empréstimos ativos' : 'Active loans'}</h2>
+              <h2 className="nupay-title">
+                {language === 'pt' ? 'Financiamentos ativos' : 'Active loans'}
+                {loans.length > 0 ? ` (${loans.length})` : ''}
+              </h2>
             </div>
             {loans.length === 0 ? (
               <p className="nupay-empty">
-                {language === 'pt' ? 'Nenhum financiamento ativo no save atual.' : 'No active bank loans in your save.'}
+                {language === 'pt' ? 'Nenhum financiamento ativo no momento.' : 'No active bank loans right now.'}
               </p>
             ) : (
               <div className="ios-list">
-                {loans.map((loan, index) => {
+                {loans.map((loan, idx) => {
+                  const loanIndex = loan.index ?? idx
+                  const paidAmount = loan.paidAmount ?? Math.max(0, loan.originalAmount - loan.amount)
+                  const daysTotal = loan.daysTotal ?? loan.duration
+                  const daysRemaining = loan.daysRemaining ?? Math.max(0, daysTotal)
+                  const daysPaid = loan.daysPaid ?? Math.max(0, daysTotal - daysRemaining)
                   const paidPct = Math.max(
                     0,
-                    Math.min(100, Math.round(((loan.originalAmount - loan.amount) / Math.max(1, loan.originalAmount)) * 100)),
+                    Math.min(100, Math.round((paidAmount / Math.max(1, loan.originalAmount)) * 100)),
                   )
+                  const isBusy = busyKey === `repay-${loanIndex}`
+                  const askRepay = confirmRepay === loanIndex
+
                   return (
-                    <div key={index} className="ios-row nupay-loan-card">
+                    <div key={`${loanIndex}-${loan.originalAmount}`} className="ios-row nupay-loan-card">
                       <div className="nupay-loan-top">
-                        <span className="ios-row-label">{hidden ? '••••' : money(loan.amount)}</span>
+                        <div className="nupay-loan-main">
+                          <span className="ios-row-label">{hidden ? '••••' : money(loan.amount)}</span>
+                          <span className="nupay-loan-sub-label">
+                            {language === 'pt' ? 'restante de ' : 'left of '}
+                            {hidden ? '••••' : money(loan.originalAmount)}
+                          </span>
+                        </div>
                         <span className="nupay-loan-rate">
                           {language === 'pt'
                             ? `${money(loan.dailyPayment)}/dia · ${Math.round(loan.interestRate * 100)}%`
                             : `${money(loan.dailyPayment)}/day · ${Math.round(loan.interestRate * 100)}%`}
                         </span>
                       </div>
+
                       <div className="nupay-loan-bar">
                         <div className="nupay-loan-bar-fill" style={{ width: `${paidPct}%` }} />
                       </div>
-                      <span className="ios-row-detail">
-                        {language === 'pt'
-                          ? `Original: ${money(loan.originalAmount)} · ${paidPct}% pago (${loan.duration} dias)`
-                          : `Original: ${money(loan.originalAmount)} · ${paidPct}% paid (${loan.duration} days)`}
-                      </span>
+
+                      <div className="nupay-loan-metrics">
+                        <span>
+                          {language === 'pt' ? 'Pago' : 'Paid'}: <strong>{hidden ? '••••' : money(paidAmount)}</strong> (
+                          {paidPct}%)
+                        </span>
+                        <span>
+                          {language === 'pt'
+                            ? `Parcelas: ${daysPaid}/${daysTotal} · faltam ${daysRemaining}`
+                            : `Installments: ${daysPaid}/${daysTotal} · ${daysRemaining} left`}
+                        </span>
+                      </div>
+
+                      {liveBank && (
+                        <div className="nupay-loan-actions">
+                          {askRepay ? (
+                            <div className="nupay-repay-confirm">
+                              <span>
+                                {language === 'pt'
+                                  ? `Quitar ${money(loan.amount)} agora?`
+                                  : `Pay off ${money(loan.amount)} now?`}
+                              </span>
+                              <div className="nupay-repay-btns">
+                                <button type="button" onClick={() => setConfirmRepay(null)}>
+                                  {words.cancel}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  disabled={isBusy}
+                                  onClick={() => void handleRepayLoan(loanIndex)}
+                                >
+                                  {isBusy
+                                    ? '...'
+                                    : language === 'pt'
+                                      ? 'Confirmar'
+                                      : 'Confirm'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="nupay-repay-btn"
+                              disabled={!loan.canRepay || busyKey !== null}
+                              onClick={() => setConfirmRepay(loanIndex)}
+                            >
+                              {isBusy
+                                ? language === 'pt'
+                                  ? 'Quitando...'
+                                  : 'Repaying...'
+                                : loan.canRepay
+                                  ? language === 'pt'
+                                    ? `Quitar agora (${money(loan.amount)})`
+                                    : `Pay off now (${money(loan.amount)})`
+                                  : language === 'pt'
+                                    ? 'Saldo insuficiente p/ quitar'
+                                    : 'Insufficient balance to pay off'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -151,47 +291,68 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
 
           <div className="nupay-block">
             <div className="nupay-history-head">
-              <h2 className="nupay-title">{language === 'pt' ? 'Novo empréstimo' : 'Request loan'}</h2>
+              <h2 className="nupay-title">
+                {language === 'pt' ? 'Financiamentos do banco' : 'Available bank loans'}
+              </h2>
             </div>
-            <div className="ios-list">
-              {LOAN_OFFERS.map((offer) => {
-                const daily = Math.round((offer.amount * (1 + offer.rate)) / offer.days)
-                const selected = pendingLoan?.amount === offer.amount && pendingLoan?.days === offer.days
-                return (
-                  <button
-                    key={offer.amount}
-                    type="button"
-                    aria-pressed={selected}
-                    className={`ios-row ios-row-button nupay-offer${selected ? ' selected' : ''}`}
-                    onClick={() => (selected ? cancelLoan() : requestLoan(offer))}
-                  >
-                    <span className="ios-row-text">
-                      <span className="ios-row-label">{money(offer.amount)}</span>
-                      <span className="ios-row-detail">
-                        {language === 'pt'
-                          ? `${Math.round(offer.rate * 100)}% juros · ${offer.days} dias · ${money(daily)}/dia`
-                          : `${Math.round(offer.rate * 100)}% APR · ${offer.days} days · ${money(daily)}/day`}
+            {!liveBank ? (
+              <p className="nupay-empty">
+                {language === 'pt'
+                  ? 'Abra o jogo (ETS2 ou ATS) para contratar financiamentos na hora sem reiniciar.'
+                  : 'Launch ETS2 or ATS to take bank loans live without restarting.'}
+              </p>
+            ) : offers.length === 0 ? (
+              <p className="nupay-empty">
+                {language === 'pt'
+                  ? 'Nenhuma oferta encontrada no banco do jogo.'
+                  : 'No loan offers found in the game bank.'}
+              </p>
+            ) : (
+              <div className="ios-list">
+                {offers.map((offer) => {
+                  const isBusy = busyKey === `take-${offer.index}`
+                  const disabled = !offer.canTake || busyKey !== null
+                  return (
+                    <button
+                      key={`${offer.index}-${offer.amount}-${offer.durationDays}`}
+                      type="button"
+                      disabled={disabled}
+                      className={`ios-row ios-row-button nupay-offer${!offer.canTake ? ' locked' : ''}`}
+                      onClick={() => void handleTakeLoan(offer.index, offer.amount)}
+                    >
+                      <span className="ios-row-text">
+                        <span className="ios-row-label">{money(offer.amount)}</span>
+                        <span className="ios-row-detail">
+                          {language === 'pt'
+                            ? `${money(offer.dailyPayment)}/dia · ${offer.durationDays} parcelas · ${Math.round(offer.interestRate * 100)}% juros`
+                            : `${money(offer.dailyPayment)}/day · ${offer.durationDays} days · ${Math.round(offer.interestRate * 100)}% APR`}
+                        </span>
+                        <span className="ios-row-detail nupay-offer-total">
+                          {language === 'pt' ? 'Total a pagar' : 'Total repayment'}: {money(offer.totalRepayment)}
+                        </span>
                       </span>
-                    </span>
-                    <span className={`nupay-offer-pill${selected ? ' selected' : ''}`}>
-                      {selected
-                        ? language === 'pt'
-                          ? 'Solicitado ✓'
-                          : 'Requested ✓'
-                        : language === 'pt'
-                          ? 'Solicitar'
-                          : 'Request'}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+                      <span className={`nupay-offer-pill${!offer.canTake ? ' disabled' : ''}`}>
+                        {isBusy
+                          ? '...'
+                          : offer.canTake
+                            ? language === 'pt'
+                              ? 'Contratar'
+                              : 'Take'
+                            : language === 'pt'
+                              ? 'Sem limite'
+                              : 'Over limit'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           <p className="nupay-foot">
             {language === 'pt'
-              ? 'Solicitações são gravadas no seu save (com backup .bak) assim que o jogo fechar.'
-              : 'Loan requests are written to your save (with a .bak backup) as soon as the game closes.'}
+              ? 'Conectado diretamente ao banco do jogo em tempo real: empréstimos e quitações entram na conta na hora, sem reiniciar.'
+              : 'Connected live to the in-game bank: loans and repayments apply immediately without restarting.'}
           </p>
         </div>
       ) : (
@@ -214,7 +375,6 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
               </button>
             )}
           </div>
-          {/* Asked once more before it goes: it can't come back (owner 2026-11-03). */}
           {confirming && entries.length > 0 && (
             <div className="nupay-confirm" role="alertdialog" aria-label={words.clearAsk}>
               <p>
@@ -248,7 +408,7 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
                   {list.map((entry, index) => (
                     <div key={`${entry.at}-${index}`} className="ios-row nupay-row">
                       <span className={`nupay-kind nupay-kind-${entry.kind}`} aria-hidden>
-                        <svg viewBox="0 0 24 24">{KIND_GLYPHS[entry.kind]}</svg>
+                        <svg viewBox="0 0 24 24">{KIND_GLYPHS[entry.kind] ?? KIND_GLYPHS.other}</svg>
                       </span>
                       <span className="ios-row-text">
                         <span className="ios-row-label">{kindName(entry, words)}</span>
@@ -264,7 +424,7 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
             ))
           )}
           <p className="nupay-foot">
-            {words.foot}
+            {liveBank ? words.footLive : words.foot}
             {shown !== from && ` ${words.converted}`}
           </p>
         </div>
@@ -273,9 +433,27 @@ export function NupayApp({ language, currency }: { language: 'en' | 'pt'; curren
   )
 }
 
+function bankErrorText(ans: BankAnswer, language: 'en' | 'pt'): string {
+  const pt = language === 'pt'
+  switch (ans) {
+    case 'multiplayer':
+      return pt ? 'Indisponível no TruckersMP.' : 'Unavailable in TruckersMP.'
+    case 'locked':
+      return pt ? 'Banco ainda bloqueado neste perfil.' : 'Bank is still locked on this profile.'
+    case 'limitExceeded':
+      return pt ? 'Limite de crédito insuficiente no banco.' : 'Not enough bank credit limit.'
+    case 'insufficientFunds':
+      return pt ? 'Saldo insuficiente para quitar este empréstimo.' : 'Insufficient balance to repay this loan.'
+    case 'notReady':
+    case 'noAnswer':
+      return pt ? 'Jogo não está pronto. Entre no caminhão e tente novamente.' : 'Game not ready. Enter the world and try again.'
+    default:
+      return pt ? 'Não foi possível concluir a operação no banco.' : 'Could not complete the bank operation.'
+  }
+}
+
 type Words = (typeof WORDS)['en']
 
-/** The entries by the day they came (the PC's), the newest first: "Today", "Yesterday", or the date. */
 function byDay(entries: WalletEntry[], language: 'en' | 'pt'): [string, WalletEntry[]][] {
   const words = WORDS[language]
   const days = new Map<string, WalletEntry[]>()
@@ -297,10 +475,9 @@ function byDay(entries: WalletEntry[], language: 'en' | 'pt'): [string, WalletEn
 
 function kindName(entry: WalletEntry, words: Words): string {
   if (entry.kind === 'other') return entry.amount < 0 ? words.otherOut : words.otherIn
-  return words.kinds[entry.kind]
+  return words.kinds[entry.kind] ?? words.otherIn
 }
 
-/** What an entry was about: the cargo and where to, the offence, the crossing; for `other`, what it may be. */
 function detailOf(entry: WalletEntry, words: Words): string {
   if (entry.kind === 'fined') return words.offences[entry.detail as keyof Words['offences']] ?? entry.detail
   if (entry.kind === 'other') return entry.amount < 0 ? words.otherOutDetail : words.otherInDetail
@@ -352,6 +529,25 @@ const KIND_GLYPHS: Record<WalletEntry['kind'], ReactNode> = {
   fuel: (
     <path d="M5 3h8a1 1 0 0 1 1 1v7h1a2 2 0 0 1 2 2v4a1 1 0 0 0 2 0V9l-2-2 1.4-1.4L21 8.2V17a3 3 0 0 1-6 0v-4h-1v8H4V4a1 1 0 0 1 1-1Zm1 2v5h6V5Z" />
   ),
+  loan: (
+    <path
+      d="M3 10h18M5 10v8M9.5 10v8M14.5 10v8M19 10v8M2 20h20M12 3 3 8h18Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinejoin="round"
+    />
+  ),
+  loanRepay: (
+    <path
+      d="M4 12.5 9.5 18 20 6.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
   other: (
     <path d="M4 6h16v12H4Zm0 4h16M7 14h4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
   ),
@@ -362,7 +558,7 @@ const WORDS = {
     account: 'Account',
     show: 'Show balance',
     hide: 'Hide balance',
-    noSave: 'The balance shows once the game saves (an autosave too).',
+    noSave: 'Enter the game to sync your live bank balance.',
     income: 'Money in',
     spent: 'Money out',
     history: 'History',
@@ -371,7 +567,7 @@ const WORDS = {
     clearNote: 'The balance stays as it is. This can’t be undone.',
     clearYes: 'Clear history',
     cancel: 'Cancel',
-    empty: 'Nothing yet: deliveries, fines, tolls and ferries show here as they happen.',
+    empty: 'Nothing yet: deliveries, fines, tolls, loans and ferries show here as they happen.',
     today: 'Today',
     yesterday: 'Yesterday',
     kinds: {
@@ -382,6 +578,8 @@ const WORDS = {
       ferry: 'Ferry',
       train: 'Train',
       fuel: 'Fuel station',
+      loan: 'Bank loan',
+      loanRepay: 'Loan paid off',
     },
     otherOut: 'Other expenses',
     otherIn: 'Other income',
@@ -389,14 +587,15 @@ const WORDS = {
     otherInDetail: 'Seen at the save',
     tollDetail: 'Toll gate',
     offences: OFFENCES.en,
-    foot: 'Balance from the game’s latest save, plus what happened since. Fuel, repairs and purchases show at the next save.',
+    foot: 'Balance from the game’s latest save, plus what happened since.',
+    footLive: 'Live balance synced directly from the game’s bank in real time.',
     converted: 'Converted from the game’s currency at a fixed, approximate rate.',
   },
   pt: {
-    account: 'Conta',
+    account: 'Conta Nupay',
     show: 'Mostrar saldo',
     hide: 'Esconder saldo',
-    noSave: 'O saldo aparece assim que o jogo salvar (o salvamento automático também conta).',
+    noSave: 'Entre no jogo para sincronizar o saldo real em tempo real.',
     income: 'Entradas',
     spent: 'Saídas',
     history: 'Histórico',
@@ -405,7 +604,7 @@ const WORDS = {
     clearNote: 'O saldo continua como está. Não dá pra desfazer.',
     clearYes: 'Apagar histórico',
     cancel: 'Cancelar',
-    empty: 'Nada ainda: entregas, multas, pedágios e balsas aparecem aqui na hora.',
+    empty: 'Nada ainda: entregas, empréstimos, multas, pedágios e balsas aparecem aqui na hora.',
     today: 'Hoje',
     yesterday: 'Ontem',
     kinds: {
@@ -416,6 +615,8 @@ const WORDS = {
       ferry: 'Balsa',
       train: 'Trem',
       fuel: 'Posto de combustível',
+      loan: 'Empréstimo bancário',
+      loanRepay: 'Quitação de financiamento',
     },
     otherOut: 'Outros gastos',
     otherIn: 'Outras entradas',
@@ -423,7 +624,8 @@ const WORDS = {
     otherInDetail: 'Visto no save',
     tollDetail: 'Praça de pedágio',
     offences: OFFENCES.pt,
-    foot: 'Saldo do último save do jogo, mais o que aconteceu depois. Diesel, oficina e compras aparecem no próximo save.',
+    foot: 'Saldo do último save do jogo, mais o que aconteceu depois.',
+    footLive: 'Saldo sincronizado ao vivo diretamente com a conta bancária do jogo.',
     converted: 'Convertido da moeda do jogo por um câmbio fixo e aproximado.',
   },
 }

@@ -3,6 +3,15 @@
 // No console window in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Release builds must never ship with Tauri's `dev` cfg (which tries to load http://localhost:5173 instead of
+// the embedded `ui/dist`). Always build release binaries through the Tauri CLI (`--no-bundle` or `build:release`).
+#[cfg(all(not(debug_assertions), dev))]
+compile_error!(
+    "westplay-app release build cannot use Tauri dev mode (localhost:5173). \
+     Use `npx @tauri-apps/cli build --no-bundle --config app/tauri.release.conf.json` \
+     or `npm run build:release`."
+);
+
 mod customize;
 mod maps;
 mod people;

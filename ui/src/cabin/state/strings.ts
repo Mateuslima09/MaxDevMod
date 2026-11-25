@@ -462,6 +462,10 @@ export interface Strings {
     adjustForward: string
     adjustUp: string
     adjustDown: string
+    adjustLeft: string
+    adjustRight: string
+    adjustRollLeft: string
+    adjustRollRight: string
     adjustReset: string
     adjustDone: string
     adjustNote: string
@@ -1003,6 +1007,10 @@ export const STRINGS: Record<Language, Strings> = {
       adjustForward: 'Further forward',
       adjustUp: 'Higher',
       adjustDown: 'Lower',
+      adjustLeft: 'Left',
+      adjustRight: 'Right',
+      adjustRollLeft: 'Tilt left',
+      adjustRollRight: 'Tilt right',
       adjustReset: 'Default',
       adjustDone: 'Done',
       adjustNote: 'Kept for this truck or trailer.',
@@ -1550,6 +1558,10 @@ export const STRINGS: Record<Language, Strings> = {
       adjustForward: 'Mais para frente',
       adjustUp: 'Subir',
       adjustDown: 'Descer',
+      adjustLeft: 'Esquerda',
+      adjustRight: 'Direita',
+      adjustRollLeft: 'Inclinar esq.',
+      adjustRollRight: 'Inclinar dir.',
       adjustReset: 'Padrão',
       adjustDone: 'Pronto',
       adjustNote: 'Fica guardado para este caminhão ou carreta.',
@@ -2098,6 +2110,10 @@ export const STRINGS: Record<Language, Strings> = {
       adjustForward: 'Daha ileri',
       adjustUp: 'Yukarı',
       adjustDown: 'Aşağı',
+      adjustLeft: 'Sol',
+      adjustRight: 'Sağ',
+      adjustRollLeft: 'Sola eğ',
+      adjustRollRight: 'Sağa eğ',
       adjustReset: 'Varsayılan',
       adjustDone: 'Tamam',
       adjustNote: 'Bu kamyon veya dorse için saklanır.',

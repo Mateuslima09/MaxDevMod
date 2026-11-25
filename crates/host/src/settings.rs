@@ -64,6 +64,9 @@ pub struct Settings {
     /// Seconds of smooth road before automatic suspension lowers back down (3..=15, 0 = default 7 s; owner 2026-11-22).
     #[serde(deserialize_with = "lenient")]
     pub suspension_auto_return: u8,
+    /// Seconds of hard braking before automatic suspension raises a little (1..=5, 0 = default 2 s; owner 2026-11-23).
+    #[serde(deserialize_with = "lenient")]
+    pub suspension_auto_brake: u8,
     /// Brake fade (owner 2026-11-21, brake_fade.rs): the brakes heat up and, overheated, lose force. On at first.
     #[serde(deserialize_with = "lenient")]
     pub brake_fade: Shown,
@@ -86,10 +89,38 @@ pub struct Settings {
     pub brake_hud_size: BrakeHudSize,
     #[serde(deserialize_with = "lenient")]
     pub brake_hud_on_foot: bool,
+    /// 3D smoke rising from overheated brake hubs (owner 2026-11-23; separate truck and trailer wheels). On at first.
+    #[serde(deserialize_with = "lenient")]
+    pub brake_smoke: Shown,
     /// At what temperature the dashboard's warning and the phone's "no brakes" come (°C on the realistic level; the
     /// light and hard ones move it with the fade); 0, the usual 360.
     #[serde(deserialize_with = "lenient")]
     pub brake_alarm_c: u16,
+    /// Where media audio plays (`cabin` = truck cab speakers + muffled outside/on foot; `device` = directly on the
+    /// phone/iPad in clean stereo even in Modo Personagem).
+    #[serde(deserialize_with = "lenient")]
+    pub audio_output: AudioOutput,
+}
+
+/// Where YouTube / music audio is routed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AudioOutput {
+    /// Through the truck's 3D cab speakers (muffled when outside the cab / on foot).
+    #[default]
+    Cabin,
+    /// Directly on the handheld phone/iPad (clear stereo even on foot in Modo Personagem).
+    Device,
+}
+
+impl AudioOutput {
+    pub fn from_word(word: &str) -> Option<Self> {
+        match word {
+            "cabin" => Some(Self::Cabin),
+            "device" => Some(Self::Device),
+            _ => None,
+        }
+    }
 }
 
 /// Rough-road activation delay in seconds (1..=5, default 3 when unset/0).
@@ -105,6 +136,14 @@ pub fn suspension_auto_return(settings: &Settings) -> u8 {
     match settings.suspension_auto_return {
         0 => 7,
         secs => secs.clamp(3, 15),
+    }
+}
+
+/// Hard-braking raise delay in seconds (1..=5, default 2 when unset/0).
+pub fn suspension_auto_brake(settings: &Settings) -> u8 {
+    match settings.suspension_auto_brake {
+        0 => 2,
+        secs => secs.clamp(1, 5),
     }
 }
 
@@ -674,6 +713,8 @@ pub struct Keybinds {
     pub character: Binding,
     /// Hides the key hints bar over the game, or shows it again (owner 2026-11-07).
     pub hints: Binding,
+    /// Emergency rough-road suspension trigger (owner 2026-11-22).
+    pub rough_road: Binding,
 }
 
 impl<'de> Deserialize<'de> for Keybinds {
@@ -692,6 +733,7 @@ impl<'de> Deserialize<'de> for Keybinds {
             phone: binding("phone", defaults.phone),
             character: binding("character", defaults.character),
             hints: binding("hints", defaults.hints),
+            rough_road: binding("roughRoad", defaults.rough_road),
         })
     }
 }
@@ -699,7 +741,8 @@ impl<'de> Deserialize<'de> for Keybinds {
 impl Default for Keybinds {
     /// The interaction key with 1, 2 and 3 (as promised to the players who asked: Alt+1, Alt+2, Alt+3), in a
     /// row as on a stereo (owner 2026-10-21): volume down, play/pause between, volume up; the phone next, with 4;
-    /// then the phone's Personagem with 5 and the key hints bar with 6 (owner 2026-11-07).
+    /// then the phone's Personagem with 5, the key hints bar with 6 (owner 2026-11-07), and emergency rough-road
+    /// suspension with 7 (owner 2026-11-22).
     fn default() -> Self {
         let with_key = |code| Binding { key: KeyCode(code), with_interaction_key: true };
         Self {
@@ -709,6 +752,7 @@ impl Default for Keybinds {
             phone: with_key(0x34),
             character: with_key(0x35),
             hints: with_key(0x36),
+            rough_road: with_key(0x37),
         }
     }
 }
@@ -724,6 +768,7 @@ impl Keybinds {
                 Keybind::Phone => self.phone,
                 Keybind::Character => self.character,
                 Keybind::Hints => self.hints,
+                Keybind::RoughRoad => self.rough_road,
             };
             keybind_value(binding.key.virtual_key(), binding.with_interaction_key)
         })

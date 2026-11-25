@@ -130,6 +130,9 @@ pub struct Vehicles {
     pub front: [bool; MOST_WHEELS],
     pub truck_wheels: usize,
     pub trailer_wheels: usize,
+    /// Exact wheel hub positions (`wheel.position`, local x right, y up, z back) for truck and trailer (brake smoke).
+    pub truck_wheel_at: [[f32; 3]; MOST_WHEELS],
+    pub trailer_wheel_at: [[f32; 3]; MOST_WHEELS],
     pub deflection: [f32; MOST_WHEELS],
     pub trailer_deflection: [f32; MOST_WHEELS],
 }
@@ -142,6 +145,8 @@ pub static VEHICLES: Mutex<Vehicles> = Mutex::new(Vehicles {
     front: [false; MOST_WHEELS],
     truck_wheels: 0,
     trailer_wheels: 0,
+    truck_wheel_at: [[0.0; 3]; MOST_WHEELS],
+    trailer_wheel_at: [[0.0; 3]; MOST_WHEELS],
     deflection: [0.0; MOST_WHEELS],
     trailer_deflection: [0.0; MOST_WHEELS],
 });
@@ -189,6 +194,7 @@ pub fn truck_configured(configured: &Configured) {
     for at in 0..MOST_WHEELS {
         let wheel = configured.wheels[at];
         vehicles.front[at] = at < configured.count && (wheel.at[2] - front).abs() < (wheel.at[2] - rear).abs();
+        vehicles.truck_wheel_at[at] = if at < configured.count { wheel.at } else { [0.0; 3] };
     }
     crate::log!("reversing: truck laid out as {:?}", vehicles.truck);
 }
@@ -198,6 +204,9 @@ pub fn trailer_configured(configured: &Configured) {
     let mut vehicles = VEHICLES.lock().unwrap_or_else(|e| e.into_inner());
     vehicles.trailer = configured.layout(true).unwrap_or_default();
     vehicles.trailer_wheels = configured.count;
+    for at in 0..MOST_WHEELS {
+        vehicles.trailer_wheel_at[at] = if at < configured.count { configured.wheels[at].at } else { [0.0; 3] };
+    }
     crate::log!("reversing: trailer laid out as {:?}", vehicles.trailer);
 }
 

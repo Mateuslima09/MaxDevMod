@@ -7,8 +7,7 @@
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use westplay_shared::{
-    FRAME_KEY, HostBlock, PHONE_HEIGHT, PHONE_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, frame_texture_name,
-    phone_texture_name,
+    FRAME_KEY, HostBlock, SCREEN_HEIGHT, SCREEN_WIDTH, frame_texture_name, phone_size, phone_texture_name,
 };
 use windows::Win32::Foundation::E_INVALIDARG;
 use windows::Win32::Graphics::Direct3D11::{
@@ -53,10 +52,10 @@ impl FrameKind {
         }
     }
 
-    fn size(self) -> (u32, u32) {
+    fn size(self, host: &HostBlock) -> (u32, u32) {
         match self {
             Self::Screen => (SCREEN_WIDTH, SCREEN_HEIGHT),
-            Self::Phone => (PHONE_WIDTH, PHONE_HEIGHT),
+            Self::Phone => phone_size(host),
         }
     }
 }
@@ -101,7 +100,7 @@ impl FrameSource {
                 return None;
             }
             if generation != self.generation {
-                self.open(device, generation);
+                self.open(device, generation, host);
             }
 
             let (shared, mutex) = self.shared.as_ref()?;
@@ -124,7 +123,7 @@ impl FrameSource {
 
     /// # Safety
     /// As [`Self::update`]: the game's live device, on its render thread.
-    unsafe fn open(&mut self, device: &ID3D11Device, generation: u32) {
+    unsafe fn open(&mut self, device: &ID3D11Device, generation: u32, host: &HostBlock) {
         // SAFETY: the game's live device (the caller's contract).
         unsafe {
             self.generation = generation;
@@ -132,7 +131,7 @@ impl FrameSource {
             self.local = None;
             self.has_frame = false;
             self.last_sequence = 0;
-            match self.try_open(device, generation) {
+            match self.try_open(device, generation, host) {
                 Ok(()) => log!("frame: opened shared texture generation {generation}"),
                 Err(e) => log!("frame: cannot open shared texture generation {generation}: {e}"),
             }
@@ -141,7 +140,7 @@ impl FrameSource {
 
     /// # Safety
     /// As [`Self::update`]: the game's live device, on its render thread.
-    unsafe fn try_open(&mut self, device: &ID3D11Device, generation: u32) -> windows::core::Result<()> {
+    unsafe fn try_open(&mut self, device: &ID3D11Device, generation: u32, host: &HostBlock) -> windows::core::Result<()> {
         // SAFETY: the game's live device (the caller's contract); the descriptions are locals, and the shared texture
         // is refused unless it's the frame the screens are made for.
         unsafe {
@@ -154,7 +153,7 @@ impl FrameSource {
             shared.GetDesc(&mut desc);
             // The screens copy it whole, into the game's own textures: only the frame they're made for.
             if let Err(problem) =
-                frame_fits(self.kind.size(), desc.Width, desc.Height, desc.Format, desc.SampleDesc.Count)
+                frame_fits(self.kind.size(host), desc.Width, desc.Height, desc.Format, desc.SampleDesc.Count)
             {
                 return Err(windows::core::Error::new(E_INVALIDARG, format!("refused: {problem}")));
             }

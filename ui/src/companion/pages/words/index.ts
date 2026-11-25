@@ -112,6 +112,7 @@ export interface CompanionWords {
      * yet, English where one hasn't them). */
     character?: string
     hideBar?: string
+    roughRoad?: string
     /** A keybind listening for its new key. */
     pressKey: string
     /** `{key}`: the screen's key. */
